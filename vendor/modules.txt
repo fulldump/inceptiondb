@@ -1,3 +1,6 @@
+# github.com/fulldump/biff v1.3.0
+## explicit; go 1.14
+github.com/fulldump/biff
 # github.com/fulldump/box v0.1.3
 ## explicit
 github.com/fulldump/box
