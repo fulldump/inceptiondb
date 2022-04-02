@@ -1,9 +1,15 @@
 package collection
 
 import (
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"reflect"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	. "github.com/fulldump/biff"
 )
@@ -175,26 +181,28 @@ func TestCollection_Index_Collision(t *testing.T) {
 
 func TestDoThings(t *testing.T) {
 
-	//c := OpenCollection("users")
+	c := OpenCollection("users")
+	defer c.Close()
+
 	//c.Drop()
+	//c.Index("id")
+	c.Insert(map[string]interface{}{"id": "1", "name": "Gerardo", "email": []string{"gerardo@email.com", "gerardo@hotmail.com"}})
+	c.Insert(map[string]interface{}{"id": "2", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
 
-	//c.Insert(map[string]interface{}{"id": "1", "name": "Gerardo", "email": []string{"gerardo@email.com", "gerardo@hotmail.com"}})
-	//c.Insert(map[string]interface{}{"id": "2", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+	c.Traverse(func(data []byte) {
+		u := struct {
+			Id    string
+			Email []string
+		}{}
 
-	//c.Traverse(func(data []byte) {
-	//	u := struct {
-	//		Id    string
-	//		Email string
-	//	}{}
-	//
-	//	json.Unmarshal(data, &u)
-	//
-	//	if u.Id != "2" {
-	//		return
-	//	}
-	//
-	//	fmt.Println(u)
-	//})
+		json.Unmarshal(data, &u)
+
+		if u.Id != "2" {
+			return
+		}
+
+		fmt.Println(u)
+	})
 
 	//err := c.Index("email")
 	//AssertNil(err)
@@ -206,4 +214,67 @@ func TestDoThings(t *testing.T) {
 	//}{}
 	//
 	//fmt.Println(c.FindBy("email", "gerardo@email.com", &u), u)
+}
+
+func TestConcurrentInsertions(t *testing.T) {
+
+	c := OpenCollection("data/concurrency")
+
+	longstring := strings.Repeat("a", 4*1024)
+
+	wg := &sync.WaitGroup{}
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100000; j++ {
+				c.Insert(map[string]interface{}{
+					"hello": longstring,
+					"n":     j,
+				})
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	c.Close()
+}
+
+func TestConcurrentInsertions2(t *testing.T) {
+
+	t0 := time.Now()
+	c := OpenCollection("data/concurrency")
+	fmt.Println("Load time:", time.Since(t0))
+
+	t1 := time.Now()
+	s := int64(0)
+	q := make(chan []byte, 320)
+	wg := sync.WaitGroup{}
+	for w := 0; w < 32; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for data := range q {
+				v := struct {
+					N int `json:"n"`
+				}{}
+				json.Unmarshal(data, &v)
+
+				atomic.AddInt64(&s, int64(v.N))
+			}
+		}()
+	}
+	i := 0
+	c.Traverse(func(data []byte) {
+		q <- data
+		i++
+	})
+	close(q)
+
+	wg.Wait()
+
+	fmt.Println("Traverse time:", time.Since(t1))
+	fmt.Println("records:", i)
+	fmt.Println("sum:", s)
 }

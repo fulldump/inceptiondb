@@ -1,32 +1,54 @@
 package collection
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"sync"
 )
 
 type Collection struct {
 	file *os.File
 	//buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
-	rows     []json.RawMessage
-	filename string // Just informative...
-	indexes  map[string]Index
+	zipWriter      io.WriteCloser
+	zipWriterMutex sync.Mutex
+	rows           []json.RawMessage
+	filename       string // Just informative...
+	indexes        map[string]Index
 }
 
 type Index map[string]json.RawMessage
 
-func OpenCollection(filename string) *Collection {
+func loadRows(filename string) ([]json.RawMessage, error) {
 
 	// TODO: initialize, read all file and apply its changes into memory
 	f, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
-		panic(err)
+		return nil, err
+	}
+	defer f.Close()
+
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if fileInfo.Size() == 0 {
+		return nil, nil
 	}
 
+	zipReader, err := gzip.NewReader(f)
+	if err != nil {
+		panic(err)
+	}
+	defer zipReader.Close()
+
+	//b, _ := io.ReadAll(zipReader)
+	//fmt.Println("b", string(b))
+
 	rows := []json.RawMessage{}
-	j := json.NewDecoder(f)
+	j := json.NewDecoder(zipReader)
 	for {
 		row := json.RawMessage{}
 		err := j.Decode(&row)
@@ -39,19 +61,29 @@ func OpenCollection(filename string) *Collection {
 		rows = append(rows, row)
 	}
 
+	return rows, nil
+}
+
+func OpenCollection(filename string) *Collection { // todo: return also error
+
+	rows, err := loadRows(filename)
+
 	// Open file for append only
 	// todo: investigate O_SYNC
-	f, err = os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	if err != nil {
 		// TODO: handle or return error
 		panic(err)
 	}
 
+	zipWriter := gzip.NewWriter(f)
+
 	return &Collection{
-		file:     f,
-		rows:     rows,
-		filename: filename,
-		indexes:  map[string]Index{},
+		file:      f,
+		zipWriter: zipWriter,
+		rows:      rows,
+		filename:  filename,
+		indexes:   map[string]Index{},
 	}
 }
 
@@ -70,8 +102,11 @@ func (c *Collection) Insert(item interface{}) error {
 	indexInsert(c.indexes, data)
 
 	c.rows = append(c.rows, data)
-	c.file.Write(data)
-	c.file.WriteString("\n")
+
+	c.zipWriterMutex.Lock()
+	defer c.zipWriterMutex.Unlock()
+	c.zipWriter.Write(data)
+	c.zipWriter.Write([]byte("\n"))
 
 	return nil
 }
@@ -175,9 +210,20 @@ func (c *Collection) FindBy(field string, value string, data interface{}) error 
 }
 
 func (c *Collection) Close() error {
-	err := c.file.Close()
-	c.file = nil
-	return err
+
+	defer func() { c.file = nil }()
+
+	err := c.zipWriter.Close()
+	if err != nil {
+		return err
+	}
+
+	err = c.file.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *Collection) Drop() error {
