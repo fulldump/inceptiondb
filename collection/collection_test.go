@@ -2,76 +2,72 @@ package collection
 
 import (
 	"io/ioutil"
-	"reflect"
 	"testing"
 
 	. "github.com/fulldump/biff"
 )
 
 func TestInsert(t *testing.T) {
-
 	Environment(func(filename string) {
 
-		c := OpenCollection(filename)
+		// Setup
+		c, _ := OpenCollection(filename)
+		defer c.Close()
+
+		// Run
 		c.Insert(map[string]interface{}{
 			"hello": "world",
 		})
-		c.Close()
 
+		// Check
 		fileContent, readFileErr := ioutil.ReadFile(filename)
 		AssertNil(readFileErr)
 		AssertEqual(fileContent, []byte(`{"hello":"world"}`+"\n"))
-
 	})
-
 }
 
 func TestFindOne(t *testing.T) {
-
 	Environment(func(filename string) {
 
+		// Setup
 		ioutil.WriteFile(filename, []byte("{\"name\":\"Fulanez\"}\n"), 0666)
 
-		c := OpenCollection(filename)
+		// Run
+		c, _ := OpenCollection(filename)
+		defer c.Close()
 
+		// Check
 		r := map[string]interface{}{}
 		c.FindOne(&r)
-
-		c.Close()
-
-		if !reflect.DeepEqual(r, map[string]interface{}{"name": "Fulanez"}) {
-			t.Error("Unexpected retrieved information")
-		}
-
+		AssertEqualJson(r, map[string]interface{}{"name": "Fulanez"})
 	})
 }
 
 func TestInsert100K(t *testing.T) {
-
 	Environment(func(filename string) {
+		// Setup
+		c, _ := OpenCollection(filename)
+		defer c.Close()
 
-		c := OpenCollection(filename)
+		// Run
 		n := 100 * 1000
 		for i := 0; i < n; i++ {
 			c.Insert(map[string]interface{}{"hello": "world", "n": i})
 		}
-		c.Close()
 
+		// Check
+		AssertEqual(len(c.rows), n)
 	})
-
 }
 
 func TestIndex(t *testing.T) {
-
 	type User struct {
 		Id   string `json:"id"`
 		Name string `json:"name"`
 	}
-
 	Environment(func(filename string) {
-
 		// Setup
-		c := OpenCollection(filename)
+		c, _ := OpenCollection(filename)
 		c.Insert(&User{"1", "Pablo"})
 		c.Insert(&User{"2", "Sara"})
 
@@ -87,16 +83,14 @@ func TestIndex(t *testing.T) {
 }
 
 func TestInsertAfterIndex(t *testing.T) {
-
 	type User struct {
 		Id   string `json:"id"`
 		Name string `json:"name"`
 	}
-
 	Environment(func(filename string) {
 
 		// Setup
-		c := OpenCollection(filename)
+		c, _ := OpenCollection(filename)
 
 		// Run
 		c.Index("id")
@@ -111,26 +105,25 @@ func TestInsertAfterIndex(t *testing.T) {
 }
 
 func TestIndexMultiValue(t *testing.T) {
-
 	type User struct {
 		Id    string   `json:"id"`
 		Email []string `json:"email"`
 	}
-
 	Environment(func(filename string) {
 
 		// Setup
-		c := OpenCollection(filename)
-		c.Insert(&User{"1", []string{"pablo@hotmail.com", "p18@yahoo.com"}})
+		newUser := &User{"1", []string{"pablo@hotmail.com", "p18@yahoo.com"}}
+		c, _ := OpenCollection(filename)
+		c.Insert(newUser)
 
 		// Run
-		c.Index("email")
+		indexErr := c.Index("email")
 
 		// Check
+		AssertNil(indexErr)
 		u := &User{}
-		errFindBy := c.FindBy("email", "p18@yahoo.com", u)
-		AssertNil(errFindBy)
-		AssertEqual(u.Id, "1")
+		c.FindBy("email", "p18@yahoo.com", u)
+		AssertEqual(u.Id, newUser.Id)
 	})
 }
 
@@ -139,7 +132,7 @@ func TestIndexSparse(t *testing.T) {
 	Environment(func(filename string) {
 
 		// Setup
-		c := OpenCollection(filename)
+		c, _ := OpenCollection(filename)
 		c.Insert(map[string]interface{}{"id": "1"})
 
 		// Run
@@ -152,16 +145,14 @@ func TestIndexSparse(t *testing.T) {
 }
 
 func TestCollection_Index_Collision(t *testing.T) {
-
 	type User struct {
 		Id   string `json:"id"`
 		Name string `json:"name"`
 	}
-
 	Environment(func(filename string) {
 
 		// Setup
-		c := OpenCollection(filename)
+		c, _ := OpenCollection(filename)
 		c.Insert(&User{"1", "Pablo"})
 		c.Insert(&User{"1", "Sara"})
 
@@ -175,7 +166,7 @@ func TestCollection_Index_Collision(t *testing.T) {
 
 func TestDoThings(t *testing.T) {
 
-	//c := OpenCollection("users")
+	//c, _ := OpenCollection("users")
 	//c.Drop()
 
 	//c.Insert(map[string]interface{}{"id": "1", "name": "Gerardo", "email": []string{"gerardo@email.com", "gerardo@hotmail.com"}})

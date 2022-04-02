@@ -17,12 +17,12 @@ type Collection struct {
 
 type Index map[string]json.RawMessage
 
-func OpenCollection(filename string) *Collection {
+func OpenCollection(filename string) (*Collection, error) {
 
 	// TODO: initialize, read all file and apply its changes into memory
 	f, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("open file for read: %w", err)
 	}
 
 	rows := []json.RawMessage{}
@@ -34,7 +34,8 @@ func OpenCollection(filename string) *Collection {
 			break
 		}
 		if err != nil {
-			panic(err)
+			// todo: try a best effort?
+			return nil, fmt.Errorf("decode json: %w", err)
 		}
 		rows = append(rows, row)
 	}
@@ -43,8 +44,7 @@ func OpenCollection(filename string) *Collection {
 	// todo: investigate O_SYNC
 	f, err = os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	if err != nil {
-		// TODO: handle or return error
-		panic(err)
+		return nil, fmt.Errorf("open file for write: %w", err)
 	}
 
 	return &Collection{
@@ -52,7 +52,7 @@ func OpenCollection(filename string) *Collection {
 		rows:     rows,
 		filename: filename,
 		indexes:  map[string]Index{},
-	}
+	}, nil
 }
 
 // TODO: test concurrency
