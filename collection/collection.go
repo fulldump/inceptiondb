@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type Collection struct {
@@ -15,8 +18,6 @@ type Collection struct {
 	indexes  map[string]Index
 }
 
-type Index map[string]json.RawMessage
-
 func OpenCollection(filename string) (*Collection, error) {
 
 	// TODO: initialize, read all file and apply its changes into memory
@@ -25,11 +26,16 @@ func OpenCollection(filename string) (*Collection, error) {
 		return nil, fmt.Errorf("open file for read: %w", err)
 	}
 
-	rows := []json.RawMessage{}
+	collection := &Collection{
+		rows:     []json.RawMessage{},
+		filename: filename,
+		indexes:  map[string]Index{},
+	}
+
 	j := json.NewDecoder(f)
 	for {
-		row := json.RawMessage{}
-		err := j.Decode(&row)
+		command := &Command{}
+		err := j.Decode(&command)
 		if err == io.EOF {
 			break
 		}
@@ -37,22 +43,30 @@ func OpenCollection(filename string) (*Collection, error) {
 			// todo: try a best effort?
 			return nil, fmt.Errorf("decode json: %w", err)
 		}
-		rows = append(rows, row)
+
+		switch command.Name {
+		case "insert":
+			collection.addRow(command.Payload)
+		case "index":
+			options := &IndexOptions{}
+			json.Unmarshal(command.Payload, options)
+			collection.indexRows(options)
+		}
 	}
 
 	// Open file for append only
 	// todo: investigate O_SYNC
-	f, err = os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	collection.file, err = os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	if err != nil {
 		return nil, fmt.Errorf("open file for write: %w", err)
 	}
 
-	return &Collection{
-		file:     f,
-		rows:     rows,
-		filename: filename,
-		indexes:  map[string]Index{},
-	}, nil
+	return collection, nil
+}
+
+func (c *Collection) addRow(payload json.RawMessage) {
+	indexInsert(c.indexes, payload)
+	c.rows = append(c.rows, payload)
 }
 
 // TODO: test concurrency
@@ -61,17 +75,27 @@ func (c *Collection) Insert(item interface{}) error {
 		return fmt.Errorf("collection is closed")
 	}
 
-	data, err := json.Marshal(item)
+	payload, err := json.Marshal(item)
 	if err != nil {
-		return fmt.Errorf("json encode: %w", err)
+		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	// update indexes
-	indexInsert(c.indexes, data)
+	// Add row
+	c.addRow(payload)
 
-	c.rows = append(c.rows, data)
-	c.file.Write(data)
-	c.file.WriteString("\n")
+	// Persist
+	command := &Command{
+		Name:      "insert",
+		Uuid:      uuid.New().String(),
+		Timestamp: time.Now().UnixNano(),
+		StartByte: 0,
+		Payload:   payload,
+	}
+
+	err = json.NewEncoder(c.file).Encode(command)
+	if err != nil {
+		return fmt.Errorf("json encode command: %w", err)
+	}
 
 	return nil
 }
@@ -90,19 +114,46 @@ func (c *Collection) Traverse(f func(data []byte)) {
 	}
 }
 
-// Index create a unique index with a name
-// Constraints: values can be only scalar strings or array of strings
-func (c *Collection) Index(field string) error {
+func (c *Collection) indexRows(options *IndexOptions) error {
 
 	index := Index{}
 	for _, rowData := range c.rows {
-		err := indexRow(index, field, rowData)
+		err := indexRow(index, options.Field, rowData)
 		if err != nil {
 			return fmt.Errorf("index row: %w, data: %s", err, string(rowData))
 		}
 	}
+	c.indexes[options.Field] = index
 
-	c.indexes[field] = index
+	return nil
+}
+
+// Index create a unique index with a name
+// Constraints: values can be only scalar strings or array of strings
+func (c *Collection) Index(options *IndexOptions) error {
+
+	err := c.indexRows(options)
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(options)
+	if err != nil {
+		return fmt.Errorf("json encode payload: %w", err)
+	}
+
+	command := &Command{
+		Name:      "index",
+		Uuid:      uuid.New().String(),
+		Timestamp: time.Now().UnixNano(),
+		StartByte: 0,
+		Payload:   payload,
+	}
+
+	err = json.NewEncoder(c.file).Encode(command)
+	if err != nil {
+		return fmt.Errorf("json encode command: %w", err)
+	}
 
 	return nil
 }

@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"testing"
 
@@ -20,9 +21,10 @@ func TestInsert(t *testing.T) {
 		})
 
 		// Check
-		fileContent, readFileErr := ioutil.ReadFile(filename)
-		AssertNil(readFileErr)
-		AssertEqual(fileContent, []byte(`{"hello":"world"}`+"\n"))
+		fileContent, _ := ioutil.ReadFile(filename)
+		command := &Command{}
+		json.Unmarshal(fileContent, command)
+		AssertEqual(string(command.Payload), `{"hello":"world"}`)
 	})
 }
 
@@ -30,16 +32,16 @@ func TestFindOne(t *testing.T) {
 	Environment(func(filename string) {
 
 		// Setup
-		ioutil.WriteFile(filename, []byte("{\"name\":\"Fulanez\"}\n"), 0666)
+		ioutil.WriteFile(filename, []byte(`{"name":"insert","uuid":"ec59a0e6-8fcb-4c1c-91e5-3dd7df6a0b80","timestamp":1648937091073939741,"start_byte":0,"payload":{"name": "Fulanez"}}`), 0666)
 
 		// Run
 		c, _ := OpenCollection(filename)
 		defer c.Close()
 
 		// Check
-		r := map[string]interface{}{}
-		c.FindOne(&r)
-		AssertEqualJson(r, map[string]interface{}{"name": "Fulanez"})
+		row := map[string]interface{}{}
+		c.FindOne(&row)
+		AssertEqualJson(row, map[string]interface{}{"name": "Fulanez"})
 	})
 }
 
@@ -72,7 +74,7 @@ func TestIndex(t *testing.T) {
 		c.Insert(&User{"2", "Sara"})
 
 		// Run
-		c.Index("id")
+		c.Index(&IndexOptions{Field: "id"})
 
 		// Check
 		user := &User{}
@@ -93,7 +95,7 @@ func TestInsertAfterIndex(t *testing.T) {
 		c, _ := OpenCollection(filename)
 
 		// Run
-		c.Index("id")
+		c.Index(&IndexOptions{Field: "id"})
 		c.Insert(&User{"1", "Pablo"})
 
 		// Check
@@ -117,7 +119,7 @@ func TestIndexMultiValue(t *testing.T) {
 		c.Insert(newUser)
 
 		// Run
-		indexErr := c.Index("email")
+		indexErr := c.Index(&IndexOptions{Field: "email"})
 
 		// Check
 		AssertNil(indexErr)
@@ -136,7 +138,7 @@ func TestIndexSparse(t *testing.T) {
 		c.Insert(map[string]interface{}{"id": "1"})
 
 		// Run
-		errIndex := c.Index("email")
+		errIndex := c.Index(&IndexOptions{Field: "email"})
 
 		// Check
 		AssertNil(errIndex)
@@ -157,44 +159,35 @@ func TestCollection_Index_Collision(t *testing.T) {
 		c.Insert(&User{"1", "Sara"})
 
 		// Run
-		err := c.Index("id")
+		err := c.Index(&IndexOptions{Field: "id"})
 
 		// Check
 		AssertNotNil(err)
 	})
 }
 
-func TestDoThings(t *testing.T) {
+func TestPersistence(t *testing.T) {
+	Environment(func(filename string) {
 
-	//c, _ := OpenCollection("users")
-	//c.Drop()
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+		c.Index(&IndexOptions{Field: "email"})
+		c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
+		c.Close()
 
-	//c.Insert(map[string]interface{}{"id": "1", "name": "Gerardo", "email": []string{"gerardo@email.com", "gerardo@hotmail.com"}})
-	//c.Insert(map[string]interface{}{"id": "2", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+		// Run
+		c, _ = OpenCollection(filename)
+		user := struct {
+			Id    string
+			Name  string
+			Email []string
+		}{}
+		findByErr := c.FindBy("email", "sara@email.com", &user)
 
-	//c.Traverse(func(data []byte) {
-	//	u := struct {
-	//		Id    string
-	//		Email string
-	//	}{}
-	//
-	//	json.Unmarshal(data, &u)
-	//
-	//	if u.Id != "2" {
-	//		return
-	//	}
-	//
-	//	fmt.Println(u)
-	//})
+		// Check
+		AssertNil(findByErr)
+		AssertEqual(user.Id, "2")
 
-	//err := c.Index("email")
-	//AssertNil(err)
-	//
-	//u := struct {
-	//	Id    string
-	//	Name  string
-	//	Email []string
-	//}{}
-	//
-	//fmt.Println(c.FindBy("email", "gerardo@email.com", &u), u)
+	})
 }
