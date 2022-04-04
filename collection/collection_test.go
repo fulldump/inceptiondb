@@ -3,9 +3,11 @@ package collection
 import (
 	"encoding/json"
 	"io/ioutil"
+	"strconv"
 	"testing"
 
 	. "github.com/fulldump/biff"
+	"github.com/google/uuid"
 )
 
 func TestInsert(t *testing.T) {
@@ -58,7 +60,7 @@ func TestInsert100K(t *testing.T) {
 		}
 
 		// Check
-		AssertEqual(len(c.rows), n)
+		AssertEqual(len(c.Rows), n)
 	})
 }
 
@@ -142,7 +144,7 @@ func TestIndexSparse(t *testing.T) {
 
 		// Check
 		AssertNil(errIndex)
-		AssertEqual(len(c.indexes["email"]), 0)
+		AssertEqual(len(c.Indexes["email"]), 0)
 	})
 }
 
@@ -190,4 +192,30 @@ func TestPersistence(t *testing.T) {
 		AssertEqual(user.Id, "2")
 
 	})
+}
+
+func TestInsert100Kssss(t *testing.T) {
+
+	t.Skip()
+
+	// Setup
+	c, _ := OpenCollection("../data/mongodb")
+	defer c.Close()
+
+	c.Index(&IndexOptions{
+		Field: "uuid",
+	})
+	c.Index(&IndexOptions{
+		Field: "i",
+	})
+
+	// Run
+	n := 1000 * 1000
+	for i := 0; i < n; i++ {
+		c.Insert(map[string]interface{}{"uuid": uuid.New().String(), "hello": "world", "i": strconv.Itoa(i)})
+	}
+
+	// Check
+	AssertEqual(len(c.Rows), n)
+
 }

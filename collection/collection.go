@@ -11,11 +11,11 @@ import (
 )
 
 type Collection struct {
-	file *os.File
-	//buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
-	rows     []json.RawMessage
 	filename string // Just informative...
-	indexes  map[string]Index
+	file     *os.File
+	//buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
+	Rows    []json.RawMessage
+	Indexes map[string]Index
 }
 
 func OpenCollection(filename string) (*Collection, error) {
@@ -27,9 +27,9 @@ func OpenCollection(filename string) (*Collection, error) {
 	}
 
 	collection := &Collection{
-		rows:     []json.RawMessage{},
+		Rows:     []json.RawMessage{},
 		filename: filename,
-		indexes:  map[string]Index{},
+		Indexes:  map[string]Index{},
 	}
 
 	j := json.NewDecoder(f)
@@ -46,11 +46,17 @@ func OpenCollection(filename string) (*Collection, error) {
 
 		switch command.Name {
 		case "insert":
-			collection.addRow(command.Payload)
+			err := collection.addRow(command.Payload)
+			if err != nil {
+				return nil, err
+			}
 		case "index":
 			options := &IndexOptions{}
 			json.Unmarshal(command.Payload, options)
-			collection.indexRows(options)
+			err := collection.indexRows(options)
+			if err != nil {
+				fmt.Printf("WARNING: create index '%s': %s", options.Field, err.Error())
+			}
 		}
 	}
 
@@ -64,9 +70,16 @@ func OpenCollection(filename string) (*Collection, error) {
 	return collection, nil
 }
 
-func (c *Collection) addRow(payload json.RawMessage) {
-	indexInsert(c.indexes, payload)
-	c.rows = append(c.rows, payload)
+func (c *Collection) addRow(payload json.RawMessage) error {
+
+	err := indexInsert(c.Indexes, payload)
+	if err != nil {
+		return err
+	}
+
+	c.Rows = append(c.Rows, payload)
+
+	return nil
 }
 
 // TODO: test concurrency
@@ -81,7 +94,10 @@ func (c *Collection) Insert(item interface{}) error {
 	}
 
 	// Add row
-	c.addRow(payload)
+	err = c.addRow(payload)
+	if err != nil {
+		return err
+	}
 
 	// Persist
 	command := &Command{
@@ -101,7 +117,7 @@ func (c *Collection) Insert(item interface{}) error {
 }
 
 func (c *Collection) FindOne(data interface{}) {
-	for _, row := range c.rows {
+	for _, row := range c.Rows {
 		json.Unmarshal(row, data)
 		return
 	}
@@ -109,7 +125,7 @@ func (c *Collection) FindOne(data interface{}) {
 }
 
 func (c *Collection) Traverse(f func(data []byte)) {
-	for _, row := range c.rows {
+	for _, row := range c.Rows {
 		f(row)
 	}
 }
@@ -117,13 +133,13 @@ func (c *Collection) Traverse(f func(data []byte)) {
 func (c *Collection) indexRows(options *IndexOptions) error {
 
 	index := Index{}
-	for _, rowData := range c.rows {
+	for _, rowData := range c.Rows {
 		err := indexRow(index, options.Field, rowData)
 		if err != nil {
 			return fmt.Errorf("index row: %w, data: %s", err, string(rowData))
 		}
 	}
-	c.indexes[options.Field] = index
+	c.Indexes[options.Field] = index
 
 	return nil
 }
@@ -165,7 +181,6 @@ func indexInsert(indexes map[string]Index, rowData []byte) (err error) {
 			// TODO: undo previous work? two phases (check+commit) ?
 			break
 		}
-
 	}
 
 	return
@@ -189,14 +204,14 @@ func indexRow(index Index, field string, rowData []byte) error {
 	switch value := itemValue.(type) {
 	case string:
 		if _, exists := index[value]; exists {
-			return fmt.Errorf("conflict: field '%s' with value '%s'", field, value)
+			return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
 		}
 		index[value] = rowData
 	case []interface{}:
 		for _, v := range value {
 			s := v.(string) // TODO: handle this casting error
 			if _, exists := index[s]; exists {
-				return fmt.Errorf("conflict: field '%s' with value '%s'", field, value)
+				return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
 			}
 		}
 		for _, v := range value {
@@ -212,7 +227,7 @@ func indexRow(index Index, field string, rowData []byte) error {
 
 func (c *Collection) FindBy(field string, value string, data interface{}) error {
 
-	index, ok := c.indexes[field]
+	index, ok := c.Indexes[field]
 	if !ok {
 		return fmt.Errorf("field '%s' is not indexed", field)
 	}
