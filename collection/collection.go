@@ -5,17 +5,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type Collection struct {
-	filename string // Just informative...
-	file     *os.File
+	filename  string // Just informative...
+	file      *os.File
+	Rows      []json.RawMessage
+	rowsMutex *sync.Mutex
+	Indexes   map[string]Index
 	//buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
-	Rows    []json.RawMessage
-	Indexes map[string]Index
 }
 
 func OpenCollection(filename string) (*Collection, error) {
@@ -27,9 +29,10 @@ func OpenCollection(filename string) (*Collection, error) {
 	}
 
 	collection := &Collection{
-		Rows:     []json.RawMessage{},
-		filename: filename,
-		Indexes:  map[string]Index{},
+		Rows:      []json.RawMessage{},
+		rowsMutex: &sync.Mutex{},
+		filename:  filename,
+		Indexes:   map[string]Index{},
 	}
 
 	j := json.NewDecoder(f)
@@ -77,7 +80,9 @@ func (c *Collection) addRow(payload json.RawMessage) error {
 		return err
 	}
 
+	c.rowsMutex.Lock()
 	c.Rows = append(c.Rows, payload)
+	c.rowsMutex.Unlock()
 
 	return nil
 }

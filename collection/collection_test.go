@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"strconv"
+	"sync"
 	"testing"
 
 	. "github.com/fulldump/biff"
@@ -27,6 +28,28 @@ func TestInsert(t *testing.T) {
 		command := &Command{}
 		json.Unmarshal(fileContent, command)
 		AssertEqual(string(command.Payload), `{"hello":"world"}`)
+	})
+}
+
+func TestCollection_Insert_Concurrency(t *testing.T) {
+	Environment(func(filename string) {
+
+		c, _ := OpenCollection(filename)
+
+		n := 100
+
+		wg := &sync.WaitGroup{}
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				c.Insert(map[string]interface{}{"hello": "world"})
+			}()
+		}
+
+		wg.Wait()
+
+		AssertEqual(len(c.Rows), n)
 	})
 }
 
