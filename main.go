@@ -1,15 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"io/fs"
-	"path/filepath"
-	"strings"
-	"time"
-
+	"github.com/fulldump/box"
 	"inceptiondb/api"
-	"inceptiondb/collection"
 	"inceptiondb/configuration"
+	"inceptiondb/database"
+	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 )
 
 var banner = `
@@ -25,33 +27,47 @@ var banner = `
 
 func main() {
 
-	c := configuration.Default()
-
 	fmt.Println(banner)
 
-	collections := map[string]*collection.Collection{}
-	fmt.Printf("Loading data...\n")
-	filepath.WalkDir(c.Dir, func(filename string, d fs.DirEntry, err error) error {
-		if d.IsDir() {
-			return nil
+	c := configuration.Default()
+	d := database.NewDatabase(c)
+	b := api.Build(d, c.Dir)
+	s := &http.Server{
+		Addr:    c.HttpAddr,
+		Handler: box.Box2Http(b),
+	}
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		for {
+			sig := <-signalChan
+			fmt.Println("Signal received", sig.String())
+			d.Stop()
+			s.Shutdown(context.Background())
 		}
+	}()
 
-		name := filename
-		name = strings.TrimPrefix(name, c.Dir)
-		name = strings.TrimPrefix(name, "/")
+	wg := &sync.WaitGroup{}
 
-		t0 := time.Now()
-		col, err := collection.OpenCollection(filename)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := d.Start()
 		if err != nil {
-			fmt.Printf("ERROR: open collection '%s': %s\n", filename, err.Error())
-			return nil
+			fmt.Println(err.Error())
 		}
-		fmt.Println(name, len(col.Rows), time.Since(t0))
+	}()
 
-		collections[name] = col
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fmt.Println("listening on", s.Addr)
+		err := s.ListenAndServe()
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+	}()
 
-		return nil
-	})
-
-	api.Build(collections, c.Dir).Serve()
+	wg.Wait()
 }

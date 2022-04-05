@@ -2,7 +2,7 @@ package api
 
 import (
 	"path"
-	
+
 	"inceptiondb/collection"
 )
 

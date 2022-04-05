@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"inceptiondb/database"
 
 	"github.com/fulldump/box"
 )
@@ -29,6 +31,24 @@ func interceptorPrintError(next box.H) box.H {
 			json.NewEncoder(box.GetResponse(ctx)).Encode(map[string]interface{}{
 				"error": err.Error(),
 			})
+		}
+	}
+}
+
+func interceptorUnavailable(db *database.Database) box.I {
+	return func(next box.H) box.H {
+		return func(ctx context.Context) {
+
+			status := db.GetStatus()
+			if status == database.StatusOpening {
+				box.SetError(ctx, fmt.Errorf("temporary unavailable: opening"))
+				return
+			}
+			if status == database.StatusClosing {
+				box.SetError(ctx, fmt.Errorf("temporary unavailable: closing"))
+				return
+			}
+			next(ctx)
 		}
 	}
 }

@@ -1,5 +1,6 @@
 package configuration
 
 type Configuration struct {
-	Dir string `usage:"data directory"`
+	HttpAddr string `usage:"HTTP address"`
+	Dir      string `usage:"data directory"`
 }

@@ -2,15 +2,17 @@ package api
 
 import (
 	"github.com/fulldump/box"
-
-	"inceptiondb/collection"
+	"inceptiondb/database"
 )
 
-func Build(collections map[string]*collection.Collection, dataDir string) *box.B {
+func Build(db *database.Database, dataDir string) *box.B { // TODO: remove datadir
+
+	collections := db.Collections
 
 	b := box.NewBox()
 
 	b.WithInterceptors(interceptorPrintError)
+	b.WithInterceptors(interceptorUnavailable(db))
 
 	b.Resource("collections").
 		WithActions(
