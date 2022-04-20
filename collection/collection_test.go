@@ -167,7 +167,7 @@ func TestIndexSparse(t *testing.T) {
 
 		// Check
 		AssertNil(errIndex)
-		AssertEqual(len(c.Indexes["email"]), 0)
+		AssertEqual(len(c.Indexes["email"].Entries), 0)
 	})
 }
 
@@ -191,7 +191,7 @@ func TestCollection_Index_Collision(t *testing.T) {
 	})
 }
 
-func TestPersistence(t *testing.T) {
+func TestPersistenceInsertAndIndex(t *testing.T) {
 	Environment(func(filename string) {
 
 		// Setup
@@ -217,28 +217,101 @@ func TestPersistence(t *testing.T) {
 	})
 }
 
-func TestInsert100Kssss(t *testing.T) {
+func TestPersistenceDelete(t *testing.T) {
+	Environment(func(filename string) {
+
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Index(&IndexOptions{Field: "email"})
+		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+		c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
+		c.Insert(map[string]interface{}{"id": "3", "name": "Ana", "email": []string{"ana@email.com", "ana@yahoo.com"}})
+		c.DeleteBy("email", "sara@email.com")
+		c.Close()
+
+		// Run
+		c, _ = OpenCollection(filename)
+		user := struct {
+			Id    string
+			Name  string
+			Email []string
+		}{}
+		findByErr := c.FindBy("email", "sara@email.com", &user)
+
+		// Check
+		AssertNotNil(findByErr)
+		AssertEqual(findByErr.Error(), "email 'sara@email.com' not found")
+
+		AssertEqual(len(c.Rows), 2)
+
+	})
+}
+
+func TestInsert1M_serial(t *testing.T) {
 
 	t.Skip()
 
-	// Setup
-	c, _ := OpenCollection("../data/mongodb")
-	defer c.Close()
+	Environment(func(filename string) {
+		// Setup
+		c, _ := OpenCollection(filename)
+		defer c.Close()
 
-	c.Index(&IndexOptions{
-		Field: "uuid",
+		c.Index(&IndexOptions{
+			Field: "uuid",
+		})
+		c.Index(&IndexOptions{
+			Field: "i",
+		})
+
+		// Run
+		n := 1000 * 1000
+		for i := 0; i < n; i++ {
+			c.Insert(map[string]interface{}{"uuid": uuid.New().String(), "hello": "world", "i": strconv.Itoa(i)})
+		}
+
+		// Check
+		AssertEqual(len(c.Rows), n)
 	})
-	c.Index(&IndexOptions{
-		Field: "i",
-	})
-
-	// Run
-	n := 1000 * 1000
-	for i := 0; i < n; i++ {
-		c.Insert(map[string]interface{}{"uuid": uuid.New().String(), "hello": "world", "i": strconv.Itoa(i)})
-	}
-
-	// Check
-	AssertEqual(len(c.Rows), n)
 
 }
+
+func TestInsert1M_concurrent(t *testing.T) {
+
+	t.Skip()
+
+	Environment(func(filename string) {
+
+		// Setup
+		c, _ := OpenCollection(filename)
+		defer c.Close()
+
+		c.Index(&IndexOptions{
+			Field: "uuid",
+		})
+		c.Index(&IndexOptions{
+			Field: "i",
+		})
+
+		// Run
+		wg := &sync.WaitGroup{}
+		workers := 16
+		n := 1000 * 1000 / workers
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func(w int) {
+				defer wg.Done()
+				for i := 0; i < n; i++ {
+					c.Insert(map[string]interface{}{"uuid": uuid.New().String(), "hello": "world", "i": strconv.Itoa(i + n*w)})
+				}
+			}(w)
+		}
+
+		wg.Wait()
+
+		// Check
+		AssertEqual(len(c.Rows), n*workers)
+	})
+
+}
+
+// TODO: test concurrent delete

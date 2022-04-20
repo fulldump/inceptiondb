@@ -45,6 +45,7 @@ func Build(db *database.Database, dataDir string) *box.B { // TODO: remove datad
 	b.Resource("collections/{collection_name}/index/{index_name}/findBy/{value}").
 		WithActions(
 			box.Get(indexFindBy(collections)),
+			box.Delete(indexDeleteBy(collections)),
 		)
 
 	return b
