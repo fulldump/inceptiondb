@@ -46,6 +46,7 @@ func Build(db *database.Database, dataDir string) *box.B { // TODO: remove datad
 		WithActions(
 			box.Get(indexFindBy(collections)),
 			box.Delete(indexDeleteBy(collections)),
+			box.Patch(indexPatchBy(collections)),
 		)
 
 	return b
