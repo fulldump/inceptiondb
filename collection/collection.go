@@ -64,7 +64,7 @@ func OpenCollection(filename string) (*Collection, error) {
 			json.Unmarshal(command.Payload, options) // Todo: handle error properly
 			err := collection.indexRows(options)
 			if err != nil {
-				fmt.Printf("WARNING: create index '%s': %s", options.Field, err.Error())
+				fmt.Printf("WARNING: create index '%s': %s\n", options.Field, err.Error())
 			}
 		case "delete":
 			filter := struct {
@@ -74,7 +74,7 @@ func OpenCollection(filename string) (*Collection, error) {
 			json.Unmarshal(command.Payload, &filter) // Todo: handle error properly
 			err := collection.DeleteBy(filter.Field, filter.Value)
 			if err != nil {
-				fmt.Printf("WARNING: delete item '%s'='%s': %s", filter.Field, filter.Value, err.Error())
+				fmt.Printf("WARNING: delete item '%s'='%s': %s\n", filter.Field, filter.Value, err.Error())
 			}
 		case "patch":
 			params := struct {
@@ -83,9 +83,9 @@ func OpenCollection(filename string) (*Collection, error) {
 				Diff  map[string]interface{}
 			}{}
 			json.Unmarshal(command.Payload, &params)
-			err := collection.PatchBy(params.Field, params.Value, params.Diff)
+			err := collection.patchRow(params.Field, params.Value, params.Diff, false)
 			if err != nil {
-				fmt.Printf("WARNING: patch item '%s'='%s': %s", params.Field, params.Value, err.Error())
+				fmt.Printf("WARNING: patch item '%s'='%s': %s\n", params.Field, params.Value, err.Error())
 			}
 		}
 	}
@@ -377,6 +377,10 @@ func (c *Collection) DeleteBy(field string, value string) error {
 }
 
 func (c *Collection) PatchBy(field string, value string, patch map[string]interface{}) error {
+	return c.patchRow(field, value, patch, true)
+}
+
+func (c *Collection) patchRow(field string, value string, patch map[string]interface{}, persist bool) error {
 
 	index, ok := c.Indexes[field]
 	if !ok {
@@ -414,6 +418,10 @@ func (c *Collection) PatchBy(field string, value string, patch map[string]interf
 	err = indexInsert(c.Indexes, row)
 	if err != nil {
 		return fmt.Errorf("indexInsert: %w", err)
+	}
+
+	if !persist {
+		return nil
 	}
 
 	// Persist
