@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/google/uuid"
 )
 
@@ -74,6 +75,17 @@ func OpenCollection(filename string) (*Collection, error) {
 			err := collection.DeleteBy(filter.Field, filter.Value)
 			if err != nil {
 				fmt.Printf("WARNING: delete item '%s'='%s': %s", filter.Field, filter.Value, err.Error())
+			}
+		case "patch":
+			params := struct {
+				Field string
+				Value string
+				Diff  map[string]interface{}
+			}{}
+			json.Unmarshal(command.Payload, &params)
+			err := collection.PatchBy(params.Field, params.Value, params.Diff)
+			if err != nil {
+				fmt.Printf("WARNING: patch item '%s'='%s': %s", params.Field, params.Value, err.Error())
 			}
 		}
 	}
@@ -350,6 +362,71 @@ func (c *Collection) DeleteBy(field string, value string) error {
 	}
 	command := &Command{
 		Name:      "delete",
+		Uuid:      uuid.New().String(),
+		Timestamp: time.Now().UnixNano(),
+		StartByte: 0,
+		Payload:   payload,
+	}
+
+	err = json.NewEncoder(c.file).Encode(command)
+	if err != nil {
+		return fmt.Errorf("json encode command: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Collection) PatchBy(field string, value string, patch map[string]interface{}) error {
+
+	index, ok := c.Indexes[field]
+	if !ok {
+		return fmt.Errorf("field '%s' is not indexed", field)
+	}
+
+	row, ok := index.Entries[value]
+	if !ok {
+		return fmt.Errorf("%s '%s' not found", field, value)
+	}
+
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("marshal patch: %w", err)
+	}
+
+	newPayload, err := jsonpatch.MergePatch(row.Payload, patchBytes)
+	if err != nil {
+		return fmt.Errorf("cannot apply patch: %w", err)
+	}
+
+	diff, err := jsonpatch.CreateMergePatch(row.Payload, newPayload) // todo: optimization: discard operation if empty
+	if err != nil {
+		return fmt.Errorf("cannot diff: %w", err)
+	}
+
+	// index update
+	err = indexRemove(c.Indexes, row)
+	if err != nil {
+		return fmt.Errorf("indexRemove: %w", err)
+	}
+
+	row.Payload = newPayload
+
+	err = indexInsert(c.Indexes, row)
+	if err != nil {
+		return fmt.Errorf("indexInsert: %w", err)
+	}
+
+	// Persist
+	payload, err := json.Marshal(map[string]interface{}{
+		"field": field,
+		"value": value,
+		"diff":  json.RawMessage(diff),
+	})
+	if err != nil {
+		return err // todo: wrap error
+	}
+	command := &Command{
+		Name:      "patch",
 		Uuid:      uuid.New().String(),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,

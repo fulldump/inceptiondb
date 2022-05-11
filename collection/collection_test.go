@@ -247,6 +247,34 @@ func TestPersistenceDelete(t *testing.T) {
 	})
 }
 
+func TestPersistenceUpdate(t *testing.T) {
+	Environment(func(filename string) {
+
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Index(&IndexOptions{Field: "id"})
+		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+		c.PatchBy("id", "1", map[string]interface{}{"name": "Jaime"})
+		c.Close()
+
+		// Run
+		c, _ = OpenCollection(filename)
+		user := struct {
+			Id    string
+			Name  string
+			Email []string
+		}{}
+		findByErr := c.FindBy("id", "1", &user)
+
+		// Check
+		AssertNil(findByErr)
+		AssertEqual(user.Name, "Jaime")
+
+		AssertEqual(len(c.Rows), 1)
+
+	})
+}
+
 func TestInsert1M_serial(t *testing.T) {
 
 	t.Skip()
