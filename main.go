@@ -31,7 +31,7 @@ func main() {
 
 	c := configuration.Default()
 	d := database.NewDatabase(c)
-	b := api.Build(d, c.Dir)
+	b := api.Build(d, c.Dir, c.Statics)
 	s := &http.Server{
 		Addr:    c.HttpAddr,
 		Handler: box.Box2Http(b),

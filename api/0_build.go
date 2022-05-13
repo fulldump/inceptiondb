@@ -3,9 +3,10 @@ package api
 import (
 	"github.com/fulldump/box"
 	"inceptiondb/database"
+	"inceptiondb/statics"
 )
 
-func Build(db *database.Database, dataDir string) *box.B { // TODO: remove datadir
+func Build(db *database.Database, dataDir string, staticsDir string) *box.B { // TODO: remove datadir
 
 	collections := db.Collections
 
@@ -47,6 +48,12 @@ func Build(db *database.Database, dataDir string) *box.B { // TODO: remove datad
 			box.Get(indexFindBy(collections)),
 			box.Delete(indexDeleteBy(collections)),
 			box.Patch(indexPatchBy(collections)),
+		)
+
+	// Mount statics
+	b.Resource("/*").
+		WithActions(
+			box.Get(statics.ServeStatics(staticsDir)),
 		)
 
 	return b
