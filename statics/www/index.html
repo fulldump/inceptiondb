@@ -1,1 +1,179 @@
-<h1>Welcome to InceptionDB</h1>
+<!doctype html>
+<html>
+    <head>
+        <title>InceptionDB -  αlpha</title>
+        <link rel="stylesheet" href="style.css">
+        <script src="/lib/axios.min.js"></script>
+        <script src="/lib/vue.js"></script>
+    </head>
+    <body>
+        <div id="app">
+            <div id="frame-top">
+                <h1>Welcome to InceptionDB</h1>
+            </div>
+            <div id="frame-center">
+                <div id="frame-left">
+                    <h2>Collections</h2>
+                    <ul id="collectionsList">
+                        <li
+                            v-for="collection in collections"
+                            @click="selectCollection(collection); showPanel('fullscan'); fetchFullScan(collection);"
+                        >
+                            <div class="line1" style="font-size: 110%; font-weight: bold;">{{collection}}</div>
+                            <div class="line2" style="font-size: 90%;">
+                                <a href="#" >Fullscan</a>
+                                <a href="#" @click.prevent.stop="selectCollection(collection); showPanel('indexsearch'); fetchIndexes(collection);">IndexSearch</a>
+                                <a href="#" @click.prevent.stop="selectCollection(collection); showPanel('delete');">Delete</a>
+                            </div>
+                        </li>
+                    </ul>
+                    <a href="#" @click.prevent="createCollectionClick()">New collection</a>
+                </div>
+                <div id="frame-right" v-if="collection_name">
+                    <h2>{{ collection_name }}</h2>
+
+                    <div v-if="panels.fullscan">
+                        <table>
+                            <tr v-for="row in rows">
+                                <td style="font-family: monospace;">{{ row }}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div v-if="panels.indexsearch">
+                        Find by index
+                        <select v-model="find_by_index" @change="find_by_value=''">
+                            <option v-for="index in indexes" :value="index">{{index}}</option>
+                        </select>
+                        :
+                        <input type="text" v-model="find_by_value" @keyup="findByIndex(collection_name, find_by_index, find_by_value)"> <br>
+                        <pre>{{ item }}</pre>
+
+                        <div v-if="item">
+                            Patch:
+                            <textarea style="width: 98%; height: 180px;" v-model="item_patch"></textarea>
+                            <button @click="applyPatchClick()">Apply patch</button>
+                        </div>
+                    </div>
+
+                    <div v-if="panels.delete">
+                        Press the following button to delete the collection:
+                        <button @click="deleteCollectionClick()">Delete</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <script>
+            var app = new Vue({
+                el: '#app',
+                data: {
+                    collection_name: "",
+                    collections: [],
+                    rows: [],
+                    indexes: [],
+                    find_by_value: '',
+                    find_by_index: '',
+                    item: '',
+                    panels: {
+                        fullscan: false,
+                        indexsearch: false,
+                        delete: false,
+                    },
+                    item_patch: '{\n\n}',
+                },
+                methods: {
+                    listCollections() {
+                        var that = this;
+                        axios.get('/collections')
+                            .then(function(resp) {
+                                that.collections = resp.data;
+                            });
+                    },
+                    selectCollection(collection) {
+                        this.collection_name = collection;
+                        this.rows = [];
+                        this.indexes = [];
+                    },
+                    findByIndex(collection, key, value) {
+                        var that = this;
+                        axios.get('/collections/'+ encodeURIComponent(collection) + "/index/"+encodeURIComponent(key)+"/findBy/"+encodeURIComponent(value))
+                            .then(function(resp) {
+                                that.item = resp.data;
+                            });
+                    },
+                    createCollectionClick() {
+                        var name = prompt("Type the name for your collection")
+                        if (!name) return;
+
+                        var that = this;
+                        axios.post('/collections', {name: name})
+                            .then(function(resp) {
+                                that.collections.push(name);
+                                that.selectCollection(name);
+                            })
+                            .catch(function(error) {
+                                if (!error.response) return;
+                                alert(error.response.data.error);
+                            });
+                    },
+                    deleteCollectionClick() {
+                        collection = this.collection_name;
+                        var ok = confirm("Collection '"+collection+"' will be deleted, continue?");
+                        if (!ok) return;
+                        this.deleteCollection(collection)
+                    },
+                    deleteCollection(collection) {
+                        var that = this;
+                        axios.delete('/collections/'+ encodeURIComponent(collection))
+                            .then(function(resp) {
+                                that.collection_name = '';
+                                that.collections.splice(that.collections.indexOf(collection), 1);
+                            });
+                    },
+                    showPanel(panel) {
+                        for (var key in this.panels) {
+                            this.panels[key] = key == panel;
+                        }
+                    },
+                    fetchFullScan(collection) {
+                        var that = this;
+                        axios.get('/collections/'+ encodeURIComponent(collection))
+                            .then(function(resp) {
+                                that.rows = resp.data.split("\n");
+                            });
+                    },
+                    fetchIndexes(collection) {
+                        var that = this;
+                        axios.get('/collections/'+ encodeURIComponent(collection) + "/index")
+                            .then(function(resp) {
+                                that.indexes = resp.data;
+                            });
+                    },
+                    applyPatchClick() {
+                        var patchJson = JSON.parse(this.item_patch);
+                        this.applyPatch(this.collection_name, this.find_by_index, this.find_by_value, patchJson)
+                    },
+                    applyPatch(collection, key, value, patch) {
+                        var that = this;
+                        axios.patch('/collections/'+ encodeURIComponent(collection) + "/index/"+encodeURIComponent(key)+"/findBy/"+encodeURIComponent(value), patch)
+                            .then(function(resp) {
+                                that.item = resp.data;
+                                that.item_patch = '{\n\n}';
+                            });
+
+                    },
+                },
+                beforeMount() {
+                    this.listCollections();
+                },
+            });
+
+        </script>
+
+    </body>
+</html>
+
+
+

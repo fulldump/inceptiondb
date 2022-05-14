@@ -1,0 +1,40 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+}
+
+#frame-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+}
+
+#frame-center {
+    position: absolute;
+    top: 80px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+#frame-left{
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 320px;
+    overflow-y: auto;
+}
+
+#frame-right{
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    left: 320px;
+    overflow-x: auto;
+    overflow-y: auto;
+}
