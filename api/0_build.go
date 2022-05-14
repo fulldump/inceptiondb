@@ -24,6 +24,7 @@ func Build(db *database.Database, dataDir string, staticsDir string) *box.B { //
 	b.Resource("collections/{collection_name}").
 		WithActions(
 			box.Get(listItems(collections)),
+			box.Delete(deleteCollection(collections)),
 			box.Post(insertItem(collections)),
 		)
 
