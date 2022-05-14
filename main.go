@@ -3,15 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/fulldump/box"
-	"inceptiondb/api"
-	"inceptiondb/configuration"
-	"inceptiondb/database"
 	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/fulldump/box"
+	"github.com/fulldump/goconfig"
+
+	"inceptiondb/api"
+	"inceptiondb/configuration"
+	"inceptiondb/database"
 )
 
 var banner = `
@@ -30,6 +33,7 @@ func main() {
 	fmt.Println(banner)
 
 	c := configuration.Default()
+	goconfig.Read(&c)
 	d := database.NewDatabase(c)
 	b := api.Build(d, c.Dir, c.Statics)
 	s := &http.Server{
