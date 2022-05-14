@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+	"net/http"
 	"path"
 
 	"inceptiondb/collection"
@@ -11,7 +13,13 @@ type createCollectionRequest struct {
 }
 
 func createCollection(collections map[string]*collection.Collection, dir string) interface{} {
-	return func(input *createCollectionRequest) (*createCollectionRequest, error) {
+	return func(w http.ResponseWriter, input *createCollectionRequest) (*createCollectionRequest, error) {
+
+		_, exist := collections[input.Name]
+		if exist {
+			w.WriteHeader(http.StatusConflict)
+			return nil, fmt.Errorf("collection '%s' already exists", input.Name)
+		}
 
 		filename := path.Join(dir, input.Name)
 
