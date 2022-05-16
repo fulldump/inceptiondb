@@ -44,7 +44,7 @@ html, body {
 /* collections list */
 #collectionsList .list-group-item:hover {
     cursor: pointer;
-    background-color: #eaf1f8;
+    box-shadow: 0 0 4px 0px dodgerblue;
 }
 
 #collectionsList .list-group-item.active a {

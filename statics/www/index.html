@@ -49,12 +49,17 @@
                     </div>
 
                     <div v-if="panels.fullscan">
-                        <table>
+                        <div v-if="rows === null">loading...</div>
+                        <div v-else-if="rows.length === 0">
+                            <div class="alert alert-info" role="alert">
+                                This table is empty, try inserting some rows.
+                            </div>
+                        </div>
+                        <table class="table table-striped" >
                             <tr v-for="row in rows">
                                 <td style="font-family: monospace;">{{ row }}</td>
                             </tr>
                         </table>
-                        <br>
                         <div class="examples">
                             <div class="examples_client_selector">
                                 <span
@@ -70,6 +75,40 @@
                                 <code>fetch('{{base_url}}/collections/{{collection_name}}')
     .then(response => response.json())
     .then(data => console.log(data));</code>
+                            </div>
+                            <div class="code" v-else>
+                                <code>// No sample available at this moment</code>
+                                You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
+                            </div>
+                        </div>
+                        <br>
+                        <br>
+                        <h2>Insert</h2>
+                        <form @submit.prevent="insertItemSubmit">
+                            <div class="form-group">
+                                <label for="insertPayload">Example textarea</label>
+                                <textarea class="form-control" v-model="insert_item.request.payload" id="insertPayload" rows="3" style="font-family: monospace;"></textarea>
+                            </div>
+                            <div>
+                                <button class="btn btn-primary" type="submit">Insert item</button>
+                            </div>
+                        </form>
+                        <br>
+                        <div class="examples">
+                            <div class="examples_client_selector">
+                                <span
+                                    v-for="client in examples.clients"
+                                    :class="{active: client == examples.client}"
+                                    @click="examples.client = client"
+                                >[{{client}}]</span>
+                            </div>
+                            <div class="code" v-if="examples.client=='curl'">
+                                <code>curl {{base_url}}/collections/{{collection_name}} -d '{{ JSON.parse(insert_item.request.payload) }}'</code>
+                            </div>
+                            <div class="code" v-else-if="examples.client=='js'">
+                                <code>fetch('{{base_url}}/collections/{{collection_name}}')
+                                    .then(response => response.json())
+                                    .then(data => console.log(data));</code>
                             </div>
                             <div class="code" v-else>
                                 <code>// No sample available at this moment</code>
@@ -269,6 +308,13 @@
                             },
                         },
                     },
+
+                    // Operation insert item
+                    insert_item: {
+                        request: {
+                            payload: '{\n\n}',
+                        },
+                    },
                 },
                 methods: {
                     listCollections() {
@@ -315,6 +361,18 @@
                                 alert(error.response.data.error);
                             });
                     },
+                    insertItemSubmit() {
+                        var payloadJson = JSON.parse(this.insert_item.request.payload);
+                        this.insertItem(this.collection_name, payloadJson)
+                    },
+                    insertItem(collection, payload) {
+                        var that = this;
+                        axios.post('/collections/'+ encodeURIComponent(collection), payload)
+                            .then(function(resp) {
+                                that.rows.push(JSON.stringify(resp.data));
+                                that.insert_item.request.payload = '{\n\n}';
+                            });
+                    },
                     createCollectionClick() {
                         this.create_collection.show = true;
                     },
@@ -341,7 +399,12 @@
                         var that = this;
                         axios.get('/collections/'+ encodeURIComponent(collection))
                             .then(function(resp) {
-                                that.rows = resp.data.split("\n");
+                                var rows = [];
+                                resp.data.split("\n").forEach(function(line) {
+                                    if (line == '') return;
+                                    rows.push(line);
+                                });
+                                that.rows = rows;
                             });
                     },
                     fetchIndexes(collection) {
