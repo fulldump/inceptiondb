@@ -1,37 +1,52 @@
 <!doctype html>
 <html>
     <head>
+        <meta charset="utf-8">
         <title>InceptionDB -  αlpha</title>
-        <link rel="stylesheet" href="style.css">
-        <link rel="stylesheet" href="dark.css">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+        <link rel="stylesheet" href="/lib/bootstrap.min.css">
+        <link rel="stylesheet" href="style.css?a">
         <script src="/lib/axios.min.js"></script>
         <script src="/lib/vue.js"></script>
     </head>
     <body>
         <div id="app">
             <div id="frame-top">
-                <h1>Welcome to InceptionDB</h1>
+                <h1 style="padding: 8px 16px;">InceptionDB</h1>
             </div>
             <div id="frame-center">
                 <div id="frame-left">
                     <h2>Collections</h2>
-                    <ul id="collectionsList">
+                    <ul id="collectionsList" style="margin: 0; padding: 0; list-style-type: none;">
                         <li
                             v-for="collection in collections"
+                            class="list-group-item"
+                            :class="{active: collection_name == collection}"
                             @click="selectCollection(collection); showPanel('fullscan'); fetchFullScan(collection);"
                         >
-                            <div class="line1" style="font-size: 110%; font-weight: bold;">{{collection}}</div>
+                            <h5 :title="collection" class="mb-1 text-truncate">{{ collection }}</h5>
                             <div class="line2" style="font-size: 90%;">
                                 <a href="#" >Fullscan</a>
+                                |
                                 <a href="#" @click.prevent.stop="selectCollection(collection); showPanel('indexsearch'); fetchIndexes(collection);">IndexSearch</a>
-                                <a href="#" @click.prevent.stop="selectCollection(collection); showPanel('delete');">Delete</a>
                             </div>
                         </li>
                     </ul>
-                    <a href="#" @click.prevent="createCollectionClick()">New collection</a>
+                    <br>
+                    <div style="text-align: center;">
+                        <button class="btn btn-primary" @click="create_collection.show = true">Create collection</button>
+                    </div>
                 </div>
                 <div id="frame-right" v-if="collection_name">
                     <h2>{{ collection_name }}</h2>
+
+                    <div class="line2">
+                        <a href="#" :class="{active: panels.fullscan}" @click.prevent.stop="showPanel('fullscan'); fetchFullscan(collection_name);">Fullscan</a>
+                        |
+                        <a href="#" :class="{active: panels.indexsearch}" @click.prevent.stop="showPanel('indexsearch'); fetchIndexes(collection_name);">IndexSearch</a>
+                        |
+                        <a href="#" :class="{active: panels.delete}"  @click.prevent.stop="showPanel('delete');">Delete collection</a>
+                    </div>
 
                     <div v-if="panels.fullscan">
                         <table>
@@ -39,6 +54,28 @@
                                 <td style="font-family: monospace;">{{ row }}</td>
                             </tr>
                         </table>
+                        <br>
+                        <div class="examples">
+                            <div class="examples_client_selector">
+                                <span
+                                    v-for="client in examples.clients"
+                                    :class="{active: client == examples.client}"
+                                    @click="examples.client = client"
+                                >[{{client}}]</span>
+                            </div>
+                            <div class="code" v-if="examples.client=='curl'">
+                                <code>curl {{base_url}}/collections/{{collection_name}}</code>
+                            </div>
+                            <div class="code" v-else-if="examples.client=='js'">
+                                <code>fetch('{{base_url}}/collections/{{collection_name}}')
+    .then(response => response.json())
+    .then(data => console.log(data));</code>
+                            </div>
+                            <div class="code" v-else>
+                                <code>// No sample available at this moment</code>
+                                You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
+                            </div>
+                        </div>
                     </div>
 
                     <div v-if="panels.indexsearch">
@@ -48,41 +85,190 @@
                         </select>
                         :
                         <input type="text" v-model="find_by_value" @keyup="findByIndex(collection_name, find_by_index, find_by_value)"> <br>
-                        <pre>{{ item }}</pre>
+                        <div v-if="find_by_error" class="alert alert-danger" role="alert" style="margin-top: 16px;">{{find_by_error}}</div>
+                        <pre v-if="item">{{ item }}</pre>
+                        <button v-if="item" class="btn btn-primary" @click="findByIndex(collection_name, find_by_index, find_by_value)">Reload</button>
+                        <br>
+                        <br>
+                        <div class="examples" v-if="item">
+                            <div class="examples_client_selector">
+                                <span
+                                    v-for="client in examples.clients"
+                                    :class="{active: client == examples.client}"
+                                    @click="examples.client = client"
+                                >[{{client}}]</span>
+                            </div>
+                            <div class="code" v-if="examples.client=='curl'">
+                                <code>curl {{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}</code>
+                            </div>
+                            <div class="code" v-else-if="examples.client=='js'">
+                                <code>fetch('{{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}')
+    .then(response => response.json())
+    .then(data => console.log(data));</code>
+                            </div>
+                            <div class="code" v-else>
+                                <code>// No sample available at this moment</code>
+                                You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
+                            </div>
+                        </div>
 
                         <div v-if="item">
-                            Patch:
+                            <br><br>
+                            <h2>Patch</h2>
                             <textarea style="width: 98%; height: 180px;" v-model="item_patch"></textarea>
-                            <button @click="applyPatchClick()">Apply patch</button>
+                            <button class="btn btn-primary" @click="applyPatchClick()">Apply patch</button>
+                            <br>
+                            <br>
+                            <div class="examples">
+                                <div class="examples_client_selector">
+                                <span
+                                    v-for="client in examples.clients"
+                                    :class="{active: client == examples.client}"
+                                    @click="examples.client = client"
+                                >[{{client}}]</span>
+                                </div>
+                                <div class="code" v-if="examples.client=='curl'">
+                                    <code>curl {{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}} -X PATCH -d '{{ JSON.parse(this.item_patch) }}'</code>
+                                </div>
+                                <div class="code" v-else-if="examples.client=='js'">
+                                    <code>fetch('{{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}', {{ {"method":"PATCH", "body":JSON.parse(this.item_patch)} }})
+    .then(response => response.json())
+    .then(data => console.log(data));</code>
+                                </div>
+                                <div class="code" v-else>
+                                    <code>// No sample available at this moment</code>
+                                    You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
+                                </div>
+                            </div>
+
+                            <br>
+                            <br>
+                            <h2>Delete</h2>
+                            <div style="text-align: center;">
+                                Press this button to delete the item <code>{{find_by_index}}="{{find_by_value}}"</code>
+                                <br>
+                                <br>
+                                <button class="btn btn-danger" @click="deleteItemClick">Delete</button>
+                            </div>
+
+                            <br>
+                            <div class="examples">
+                                <div class="examples_client_selector">
+                                <span
+                                        v-for="client in examples.clients"
+                                        :class="{active: client == examples.client}"
+                                        @click="examples.client = client"
+                                >[{{client}}]</span>
+                                </div>
+                                <div class="code" v-if="examples.client=='curl'">
+                                    <code>curl {{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}} -X DELETE</code>
+                                </div>
+                                <div class="code" v-else-if="examples.client=='js'">
+                                    <code>fetch('{{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}', {{ {"method":"DELETE"} }})
+                                        .then(response => response.json())
+                                        .then(data => console.log(data));</code>
+                                </div>
+                                <div class="code" v-else>
+                                    <code>// No sample available at this moment</code>
+                                    You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
+                                </div>
+                            </div>
+
                         </div>
+                        <br><br><br><br><br><br>
                     </div>
 
-                    <div v-if="panels.delete">
-                        Press the following button to delete the collection:
-                        <button @click="deleteCollectionClick()">Delete</button>
+                    <div v-if="panels.delete" style="text-align: center;">
+                        <br>
+                        Press the following button to delete the collection <code>{{collection_name}}</code>: <br>
+                        <br>
+                        <button class="btn btn-danger" @click="deleteCollectionClick()">Delete</button>
                     </div>
 
                 </div>
             </div>
+
+            <div class="popup" v-if="create_collection.show">
+                <div class="popup-window">
+                    <div class="popup-decoration">
+                        <form @submit.prevent="createCollectionSubmit">
+                            <header>
+                                <h1>Create collection</h1>
+                            </header>
+                            <section>
+                                <div class="form-group">
+                                    <label for="collection_name">Collection name</label>
+                                    <input type="text" v-model="create_collection.request.payload.name" class="form-control" id="collection_name" placeholder="Enter collection name">
+                                    <small id="collection_name_help" class="form-text text-muted">Just alphanumeric text.</small>
+                                </div>
+                                <div class="examples">
+                                    <div class="examples_client_selector">
+                                        <span
+                                            v-for="client in examples.clients"
+                                            :class="{active: client == examples.client}"
+                                            @click="examples.client = client"
+                                        >[{{client}}]</span>
+                                    </div>
+                                    <div class="code" v-if="examples.client=='curl'">
+                                        <code>curl {{base_url}}/collections -d '{{create_collection.request.payload}}' </code>
+                                    </div>
+                                    <div class="code" v-else-if="examples.client=='js'">
+                                        <code>fetch('{{base_url}}/collections', {{ {"method":"POST", "body":create_collection.request.payload} }})
+    .then(response => response.json())
+    .then(data => console.log(data));</code>
+                                    </div>
+                                    <div class="code" v-else>
+                                        <code>// No sample available at this moment</code>
+                                        You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
+                                    </div>
+                                </div>
+
+                            </section>
+                            <footer>
+                                <button type="button" class="btn btn-secondary" @click="create_collection.show = false">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Create collection</button>
+                            </footer>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <script>
             var app = new Vue({
                 el: '#app',
                 data: {
+                    base_url: window.location.protocol + '//' + window.location.host,
+                    examples: {
+                        clients: ['curl', 'js', 'go'],
+                        client: 'curl',
+                    },
                     collection_name: "",
                     collections: [],
                     rows: [],
                     indexes: [],
                     find_by_value: '',
                     find_by_index: '',
+                    find_by_error: '',
                     item: '',
                     panels: {
                         fullscan: false,
                         indexsearch: false,
                         delete: false,
+                        insert: false,
                     },
                     item_patch: '{\n\n}',
+
+                    // Operation create collection
+                    create_collection: {
+                        show: false,
+                        request: {
+                            payload: {
+                                name: '',
+                            },
+                        },
+                    },
                 },
                 methods: {
                     listCollections() {
@@ -99,25 +285,38 @@
                     },
                     findByIndex(collection, key, value) {
                         var that = this;
+                        that.find_by_error = '';
                         axios.get('/collections/'+ encodeURIComponent(collection) + "/index/"+encodeURIComponent(key)+"/findBy/"+encodeURIComponent(value))
                             .then(function(resp) {
                                 that.item = resp.data;
+                            })
+                            .catch(function (error) {
+                                that.item = '';
+                                if (error.response) {
+                                    that.find_by_error = error.response.data.error;
+                                    return
+                                }
+                                that.find_by_error = 'Network error';
                             });
                     },
-                    createCollectionClick() {
-                        var name = prompt("Type the name for your collection")
-                        if (!name) return;
-
+                    createCollectionSubmit() {
                         var that = this;
-                        axios.post('/collections', {name: name})
+                        axios.post('/collections', this.create_collection.request.payload)
                             .then(function(resp) {
+                                var name = resp.data.name;
                                 that.collections.push(name);
                                 that.selectCollection(name);
+                                that.create_collection.show = false;
+                                this.showPanel('insert');
                             })
                             .catch(function(error) {
+                                // TODO: put this error somewhere
                                 if (!error.response) return;
                                 alert(error.response.data.error);
                             });
+                    },
+                    createCollectionClick() {
+                        this.create_collection.show = true;
                     },
                     deleteCollectionClick() {
                         collection = this.collection_name;
@@ -163,7 +362,14 @@
                                 that.item = resp.data;
                                 that.item_patch = '{\n\n}';
                             });
-
+                    },
+                    deleteItemClick() {
+                        var that = this;
+                        axios.delete('/collections/'+ encodeURIComponent(that.collection_name) + "/index/"+encodeURIComponent(that.find_by_index)+"/findBy/"+encodeURIComponent(that.find_by_value))
+                            .then(function(resp) {
+                                that.item = null;
+                                that.find_by_value = '';
+                            });
                     },
                 },
                 beforeMount() {
