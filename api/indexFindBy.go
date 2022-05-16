@@ -3,13 +3,14 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"inceptiondb/collection"
 )
 
 func indexFindBy(collections map[string]*collection.Collection) interface{} {
 
-	return func(ctx context.Context) (interface{}, error) {
+	return func(ctx context.Context, w http.ResponseWriter) (interface{}, error) {
 
 		collectionName := getParam(ctx, "collection_name")
 		indexName := getParam(ctx, "index_name")
@@ -17,6 +18,7 @@ func indexFindBy(collections map[string]*collection.Collection) interface{} {
 		result := map[string]interface{}{}
 		err := collections[collectionName].FindBy(indexName, value, &result)
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			return nil, fmt.Errorf("item %s='%s' does not exist", indexName, value)
 		}
 
