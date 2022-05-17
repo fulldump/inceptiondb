@@ -72,7 +72,7 @@ func OpenCollection(filename string) (*Collection, error) {
 				Value string
 			}{}
 			json.Unmarshal(command.Payload, &filter) // Todo: handle error properly
-			err := collection.DeleteBy(filter.Field, filter.Value)
+			err := collection.deleteRow(filter.Field, filter.Value, false)
 			if err != nil {
 				fmt.Printf("WARNING: delete item '%s'='%s': %s\n", filter.Field, filter.Value, err.Error())
 			}
@@ -331,6 +331,10 @@ func (c *Collection) FindBy(field string, value string, data interface{}) error 
 }
 
 func (c *Collection) DeleteBy(field string, value string) error {
+	return c.deleteRow(field, value, true)
+}
+
+func (c *Collection) deleteRow(field string, value string, persist bool) error {
 
 	index, ok := c.Indexes[field]
 	if !ok {
@@ -351,6 +355,10 @@ func (c *Collection) DeleteBy(field string, value string) error {
 	c.Rows[row.I] = c.Rows[len(c.Rows)-1]
 	c.Rows = c.Rows[:len(c.Rows)-1]
 	c.rowsMutex.Unlock()
+
+	if !persist {
+		return nil
+	}
 
 	// Persist
 	payload, err := json.Marshal(map[string]interface{}{

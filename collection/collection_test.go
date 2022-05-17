@@ -247,6 +247,27 @@ func TestPersistenceDelete(t *testing.T) {
 	})
 }
 
+// TestPersistenceDeleteTwice check if the same command is persisted twice (or more) when the collection is open
+func TestPersistenceDeleteTwice(t *testing.T) {
+	Environment(func(filename string) {
+
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Index(&IndexOptions{Field: "id"})
+		c.Insert(map[string]interface{}{"id": "1"})
+		c.DeleteBy("id", "1")
+		c.Close()
+
+		// Run
+		c, _ = OpenCollection(filename)
+
+		AssertEqual(len(c.Rows), 0)
+
+		// TODO: assert this somehow!
+
+	})
+}
+
 func TestPersistenceUpdate(t *testing.T) {
 	Environment(func(filename string) {
 
