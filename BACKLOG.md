@@ -17,10 +17,11 @@
   * Max document size: per collection and per database
   * Max collections per database
 * Default primary key on field _id (require non sparse indexes)
+* UI should be usable on mobile devices (left panel should not be always present)
 
 ## Could have
 
-* Implement not sparse indexes
+* ~~Implement not sparse indexes~~
 * Filter by JS function
 * Patch by JS function
 * Support UTF-8 in collection names
