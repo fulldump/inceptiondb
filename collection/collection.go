@@ -172,6 +172,7 @@ func (c *Collection) indexRows(options *IndexOptions) error {
 	index := Index{
 		Entries: map[string]*Row{},
 		RWmutex: &sync.RWMutex{},
+		Sparse:  options.Sparse, // include the whole `options` struct?
 	}
 	for _, row := range c.Rows {
 		err := indexRow(index, options.Field, row)
@@ -237,8 +238,11 @@ func indexRow(index Index, field string, row *Row) error {
 
 	itemValue, itemExists := item[field]
 	if !itemExists {
-		// Do not index
-		return nil
+		if index.Sparse {
+			// Do not index
+			return nil
+		}
+		return fmt.Errorf("field `%s` is indexed and mandatory", field)
 	}
 
 	switch value := itemValue.(type) {

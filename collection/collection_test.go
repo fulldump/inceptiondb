@@ -155,7 +155,6 @@ func TestIndexMultiValue(t *testing.T) {
 }
 
 func TestIndexSparse(t *testing.T) {
-
 	Environment(func(filename string) {
 
 		// Setup
@@ -163,11 +162,27 @@ func TestIndexSparse(t *testing.T) {
 		c.Insert(map[string]interface{}{"id": "1"})
 
 		// Run
-		errIndex := c.Index(&IndexOptions{Field: "email"})
+		errIndex := c.Index(&IndexOptions{Field: "email", Sparse: true})
 
 		// Check
 		AssertNil(errIndex)
 		AssertEqual(len(c.Indexes["email"].Entries), 0)
+	})
+}
+
+func TestIndexNonSparse(t *testing.T) {
+	Environment(func(filename string) {
+
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Insert(map[string]interface{}{"id": "1"})
+
+		// Run
+		errIndex := c.Index(&IndexOptions{Field: "email", Sparse: false})
+
+		// Check
+		AssertNotNil(errIndex)
+		AssertEqual(errIndex.Error(), "index row: field `email` is indexed and mandatory, data: {\"id\":\"1\"}")
 	})
 }
 
