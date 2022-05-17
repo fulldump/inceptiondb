@@ -395,6 +395,48 @@
                             this.panels[key] = key == panel;
                         }
                     },
+                    fetchFullScanExperimental(collection) {
+                        var that = this;
+                        that.rows = [];
+                        const fileURL = '/collections/'+ encodeURIComponent(collection);
+                        const utf8Decoder = new TextDecoder("utf-8");
+                        fetch(fileURL).then(response => {
+                            let re = /\r\n|\n|\r/gm;
+                            let startIndex = 0;
+                            let reader = response.body.getReader();
+
+
+                            var readCallback = function({value, done}) {
+                                chunk = value
+                                chunk = chunk ? utf8Decoder.decode(chunk, {stream: true}) : "";
+                                for (;;) {
+                                    let result = re.exec(chunk);
+                                    if (!result) {
+                                        if (done) {
+                                            break;
+                                        }
+                                        let remainder = chunk.substr(startIndex);
+                                        reader.read().then(readCallback);
+                                        chunk = remainder + (chunk ? utf8Decoder.decode(chunk, {stream: true}) : "");
+                                        startIndex = re.lastIndex = 0;
+                                        continue;
+                                    }
+                                    var line = chunk.substring(startIndex, result.index);
+                                    that.rows.push(line)
+                                    console.log(line);
+                                    startIndex = re.lastIndex;
+                                }
+                                if (startIndex < chunk.length) {
+                                    // last line didn't end in a newline char
+                                    console.log(chunk.substr(startIndex));
+                                }
+
+                            }
+
+                            reader.read().then(readCallback);
+
+                        });
+                    },
                     fetchFullScan(collection) {
                         var that = this;
                         axios.get('/collections/'+ encodeURIComponent(collection))
