@@ -31,6 +31,7 @@
   * autoincrement
   * unixnano
 * Ensure thread safety and improve performance with Map from standard library
+* Insert multiple documents per request
 
 ## Won't have
 

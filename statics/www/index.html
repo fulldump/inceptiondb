@@ -92,6 +92,7 @@
                             <div>
                                 <button class="btn btn-primary" type="submit">Insert item</button>
                             </div>
+                            <div v-if="insert_item.error" class="alert alert-danger" role="alert" style="margin-top: 16px;">{{ insert_item.error }}</div>
                         </form>
                         <br>
                         <div class="examples">
@@ -311,6 +312,7 @@
 
                     // Operation insert item
                     insert_item: {
+                        error: '',
                         request: {
                             payload: '{\n\n}',
                         },
@@ -369,8 +371,16 @@
                         var that = this;
                         axios.post('/collections/'+ encodeURIComponent(collection), payload)
                             .then(function(resp) {
+                                that.insert_item.error = '';
                                 that.rows.push(JSON.stringify(resp.data));
                                 that.insert_item.request.payload = '{\n\n}';
+                            })
+                            .catch(function(error) {
+                                if (!error.response) {
+                                    that.insert_item.error = 'network error';
+                                    return
+                                }
+                                that.insert_item.error = error.response.data.error;
                             });
                     },
                     createCollectionClick() {
