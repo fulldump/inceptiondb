@@ -6,6 +6,7 @@
 * Fullscan with offset/skip and limit
 * Authentication and logical collection groups (databases)
 * Index management in UI
+* BUGFIX: when document is modified to remove field from non-sparse index, it should NOT remove the field!!!
 
 ## Should have
 
@@ -17,7 +18,7 @@
   * Max document size: per collection and per database
   * Max collections per database
 * Default primary key on field _id (require non sparse indexes)
-* UI should be usable on mobile devices (left panel should not be always present)
+* ~~UI should be usable on mobile devices (left panel should not be always present)~~
 
 ## Could have
 

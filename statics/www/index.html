@@ -10,13 +10,13 @@
         <script src="/lib/vue.js"></script>
     </head>
     <body>
-        <div id="app">
+        <div id="app" :collection="collection_name">
             <div id="frame-top">
                 <h1 style="padding: 8px 16px;">InceptionDB</h1>
             </div>
             <div id="frame-center">
                 <div id="frame-left">
-                    <h2>Collections</h2>
+                    <h2 id="collectionsTitle">Collections</h2>
                     <ul id="collectionsList" style="margin: 0; padding: 0; list-style-type: none;">
                         <li
                             v-for="collection in collections"
@@ -33,12 +33,12 @@
                         </li>
                     </ul>
                     <br>
-                    <div style="text-align: center;">
+                    <div id="collectionsButtons" style="text-align: center;">
                         <button class="btn btn-primary" @click="create_collection.show = true">Create collection</button>
                     </div>
                 </div>
                 <div id="frame-right" v-if="collection_name">
-                    <h2>{{ collection_name }}</h2>
+                    <h2 id="collectionTitle">{{ collection_name }}</h2>
 
                     <div class="line2">
                         <a href="#" :class="{active: panels.fullscan}" @click.prevent.stop="showPanel('fullscan'); fetchFullScan(collection_name);">Fullscan</a>
@@ -86,10 +86,10 @@
                         <h2>Insert</h2>
                         <form @submit.prevent="insertItemSubmit">
                             <div class="form-group">
-                                <label for="insertPayload">Example textarea</label>
+                                <label for="insertPayload">Type the document you want to insert in JSON:</label>
                                 <textarea class="form-control" v-model="insert_item.request.payload" id="insertPayload" rows="3" style="font-family: monospace;"></textarea>
                             </div>
-                            <div>
+                            <div style="text-align: center;">
                                 <button class="btn btn-primary" type="submit">Insert item</button>
                             </div>
                             <div v-if="insert_item.error" class="alert alert-danger" role="alert" style="margin-top: 16px;">{{ insert_item.error }}</div>
@@ -155,7 +155,7 @@
                         <div v-if="item">
                             <br><br>
                             <h2>Patch</h2>
-                            <textarea style="width: 98%; height: 180px;" v-model="item_patch"></textarea>
+                            <textarea style="width: 98%; height: 180px; font-family: monospace;" v-model="item_patch"></textarea>
                             <button class="btn btn-primary" @click="applyPatchClick()">Apply patch</button>
                             <br>
                             <br>
@@ -327,9 +327,9 @@
                             });
                     },
                     selectCollection(collection) {
-                        this.collection_name = collection;
                         this.rows = [];
                         this.indexes = [];
+                        this.collection_name = (this.collection_name == collection) ? '' : collection;
                     },
                     findByIndex(collection, key, value) {
                         var that = this;

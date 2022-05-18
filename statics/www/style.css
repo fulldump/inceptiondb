@@ -140,3 +140,26 @@ html, body {
     padding: 2px;
     background-color: #f8f2ea;
 }
+
+/* Mobile devices layout */
+@media screen and (max-width: 900px) {
+
+    #frame-left {
+        right: 0;
+        width: auto;
+        position: static;
+    }
+
+    #frame-right {
+        left: 0;
+        position: static;
+    }
+
+    #app:not([collection=""]) #collectionsList li:not(.active),
+    #app:not([collection=""]) #collectionsTitle,
+    #app:not([collection=""]) #collectionTitle,
+    #app:not([collection=""]) #collectionsButtons {
+        display: none;
+    }
+
+}
