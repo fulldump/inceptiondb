@@ -1,6 +1,8 @@
 package api
 
 import (
+	"log"
+
 	"github.com/fulldump/box"
 	"inceptiondb/database"
 	"inceptiondb/statics"
@@ -12,8 +14,12 @@ func Build(db *database.Database, dataDir string, staticsDir string) *box.B { //
 
 	b := box.NewBox()
 
-	b.WithInterceptors(interceptorPrintError)
-	b.WithInterceptors(interceptorUnavailable(db))
+	b.WithInterceptors(
+		recoverFromPanic,
+		interceptorPrintError,
+		accessLog(log.Default()),
+		interceptorUnavailable(db),
+	)
 
 	b.Resource("collections").
 		WithActions(
