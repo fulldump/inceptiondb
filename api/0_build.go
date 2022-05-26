@@ -2,6 +2,7 @@ package api
 
 import (
 	"log"
+	"os"
 
 	"github.com/fulldump/box"
 	"inceptiondb/database"
@@ -14,10 +15,12 @@ func Build(db *database.Database, dataDir string, staticsDir string) *box.B { //
 
 	b := box.NewBox()
 
+	accessLogger := log.New(os.Stdout, "ACCESS:", log.LUTC|log.Lshortfile)
+
 	b.WithInterceptors(
 		recoverFromPanic,
 		interceptorPrintError,
-		accessLog(log.Default()),
+		accessLog(accessLogger),
 		interceptorUnavailable(db),
 	)
 
