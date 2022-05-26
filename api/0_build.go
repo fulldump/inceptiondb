@@ -15,7 +15,7 @@ func Build(db *database.Database, dataDir string, staticsDir string) *box.B { //
 
 	b := box.NewBox()
 
-	accessLogger := log.New(os.Stdout, "ACCESS:", log.LUTC|log.Lshortfile)
+	accessLogger := log.New(os.Stdout, "ACCESS: ", log.Lshortfile)
 
 	b.WithInterceptors(
 		recoverFromPanic,
