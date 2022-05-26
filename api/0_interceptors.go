@@ -27,7 +27,10 @@ func accessLog(l *log.Logger) box.I {
 		return func(ctx context.Context) {
 			r := box.GetRequest(ctx)
 			now := time.Now()
-			defer l.Println(now.UTC().Format(time.RFC3339Nano), formatRemoteAddr(r), r.Method, r.URL.String(), time.Since(now))
+			defer func() {
+				l.Println(now.UTC().Format(time.RFC3339Nano), formatRemoteAddr(r), r.Method, r.URL.String(), time.Since(now))
+			}()
+
 			next(ctx)
 		}
 	}
