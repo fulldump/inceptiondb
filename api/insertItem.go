@@ -21,23 +21,28 @@ func insertItem(collections map[string]*collection.Collection) interface{} {
 		jsonReader := json.NewDecoder(r.Body)
 		jsonWriter := json.NewEncoder(w)
 
+		w.WriteHeader(http.StatusContinue)
+
 		for {
 			item := map[string]interface{}{}
 			err := jsonReader.Decode(&item)
 			if err != nil {
 				// TODO: handle error properly
 				fmt.Println("ERROR:", err.Error())
+				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 			err = collection.Insert(item)
 			if err != nil {
 				// TODO: handle error properly
 				fmt.Println("ERROR:", err.Error())
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
 			jsonWriter.Encode(item)
 		}
 
+		w.WriteHeader(http.StatusOK)
 	}
 }
