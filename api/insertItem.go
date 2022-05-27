@@ -19,9 +19,7 @@ func insertItem(collections map[string]*collection.Collection) interface{} {
 		collection := collections[collectionName]
 
 		jsonReader := json.NewDecoder(r.Body)
-		jsonWriter := json.NewEncoder(w)
-
-		w.WriteHeader(http.StatusContinue)
+		//jsonWriter := json.NewEncoder(w)
 
 		for {
 			item := map[string]interface{}{}
@@ -40,9 +38,8 @@ func insertItem(collections map[string]*collection.Collection) interface{} {
 				return
 			}
 
-			jsonWriter.Encode(item)
+			//jsonWriter.Encode(item)
 		}
 
-		w.WriteHeader(http.StatusOK)
 	}
 }
