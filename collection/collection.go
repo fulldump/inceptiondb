@@ -167,6 +167,18 @@ func (c *Collection) Traverse(f func(data []byte)) { // todo: return *Row instea
 	}
 }
 
+func (c *Collection) TraverseRange(from, to int, f func(row *Row)) { // todo: improve this naive  implementation
+	for i, row := range c.Rows {
+		if i < from {
+			continue
+		}
+		if to > 0 && i >= to {
+			break
+		}
+		f(row)
+	}
+}
+
 func (c *Collection) indexRows(options *IndexOptions) error {
 
 	index := Index{
