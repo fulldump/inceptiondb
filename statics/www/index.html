@@ -503,7 +503,6 @@
                         axios.get('/collections/'+ encodeURIComponent(collection)+'?skip='+encodeURIComponent(that.full_scan.skip)+'&limit='+encodeURIComponent(that.full_scan.limit), {transformResponse: (res) => {return res;},responseType: 'text'})
                             .then(function(resp) {
                                 var rows = [];
-                                console.log({resp:resp})
                                 resp.data.split("\n").forEach(function(line) {
                                     if (line == '') return;
                                     rows.push(line);
