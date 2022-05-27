@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"inceptiondb/collection"
@@ -25,11 +26,13 @@ func insertItem(collections map[string]*collection.Collection) interface{} {
 			err := jsonReader.Decode(&item)
 			if err != nil {
 				// TODO: handle error properly
+				fmt.Println("ERROR:", err.Error())
 				return
 			}
 			err = collection.Insert(item)
 			if err != nil {
 				// TODO: handle error properly
+				fmt.Println("ERROR:", err.Error())
 				return
 			}
 
