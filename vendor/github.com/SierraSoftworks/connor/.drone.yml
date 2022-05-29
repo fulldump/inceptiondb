@@ -1,0 +1,10 @@
+workspace:
+    base: /go
+    path: src/github.com/SierraSoftworks/connor
+
+pipeline:
+
+    go:build:
+        image: golang:1.11
+        commands:
+            - go test ./...

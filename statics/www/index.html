@@ -55,6 +55,12 @@
                                 Result is empty, try inserting some rows.
                             </div>
                         </div>
+                        <form @submit.prevent="fetchFullScan(collection_name)">
+                            <div class="form-group">
+                                <label for="fullscan-filter">Type filter in MongoDB style:</label>
+                                <textarea class="form-control" v-model="full_scan.filter" id="fullscan-filter" rows="3" style="font-family: monospace;" @keyup="fullscanFilterKeyup()"></textarea>
+                            </div>
+                        </form>
                         <table class="table table-striped" >
                             <tr v-for="row in rows">
                                 <td style="font-family: monospace;">{{ row }}</td>
@@ -366,6 +372,7 @@
                     full_scan: {
                         skip: 0,
                         limit: 10,
+                        filter: '{\n\n}',
                     },
                 },
                 methods: {
@@ -381,6 +388,7 @@
                         this.indexes = [];
                         this.collection_name = (this.collection_name == collection) ? '' : collection;
                         this.full_scan.skip = 0;
+                        this.full_scan.filter = '{\n\n}';
                     },
                     findByIndex(collection, key, value) {
                         var that = this;
@@ -500,7 +508,17 @@
                     },
                     fetchFullScan(collection) {
                         var that = this;
-                        axios.get('/collections/'+ encodeURIComponent(collection)+'?skip='+encodeURIComponent(that.full_scan.skip)+'&limit='+encodeURIComponent(that.full_scan.limit), {transformResponse: (res) => {return res;},responseType: 'text'})
+                        var u = '/collections/'+ encodeURIComponent(collection)+'?skip='+encodeURIComponent(that.full_scan.skip)+'&limit='+encodeURIComponent(that.full_scan.limit);
+
+                        try {
+                            var filter = JSON.parse(that.full_scan.filter)
+                            u += '&filter='+encodeURIComponent(JSON.stringify(filter));
+                        } catch (e) {
+                            console.log(e)
+                            // Nothing happen :D
+                        }
+
+                        axios.get(u, {transformResponse: (res) => {return res;},responseType: 'text'})
                             .then(function(resp) {
                                 var rows = [];
                                 resp.data.split("\n").forEach(function(line) {
@@ -509,6 +527,13 @@
                                 });
                                 that.rows = rows;
                             });
+                    },
+                    fullscanFilterKeyup() {
+                        try {
+                            JSON.parse(this.full_scan.filter)
+                            this.fetchFullScan(this.collection_name);
+                        } catch (e) {
+                        }
                     },
                     fetchIndexes(collection) {
                         var that = this;

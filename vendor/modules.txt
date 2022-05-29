@@ -1,3 +1,8 @@
+# github.com/SierraSoftworks/connor v1.0.2
+## explicit
+github.com/SierraSoftworks/connor
+github.com/SierraSoftworks/connor/internal/fields
+github.com/SierraSoftworks/connor/internal/numbers
 # github.com/evanphx/json-patch v0.5.2
 ## explicit; go 1.14
 github.com/evanphx/json-patch

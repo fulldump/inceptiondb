@@ -2,15 +2,15 @@
 
 ## Must have
 
-* Filter collection by perfect match subdocument
-* Fullscan with offset/skip and limit
+* ~~Filter collection by perfect match subdocument~~
+* ~~Fullscan with offset/skip and limit~~
 * Authentication and logical collection groups (databases)
 * Index management in UI
 * BUGFIX: when document is modified to remove field from non-sparse index, it should NOT remove the field!!!
 
 ## Should have
 
-* Filter collection by expressions (similar to connor library)
+* ~~Filter collection by expressions (similar to connor library)~~
 * Quotas
   * Max memory: per collection, also per database?
   * Max disk: per collection, also per database?
