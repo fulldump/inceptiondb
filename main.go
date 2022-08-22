@@ -34,7 +34,9 @@ func main() {
 
 	c := configuration.Default()
 	goconfig.Read(&c)
-	d := database.NewDatabase(c)
+	d := database.NewDatabase(&database.Config{
+		Dir: c.Dir,
+	})
 	b := api.Build(d, c.Dir, c.Statics)
 	s := &http.Server{
 		Addr:    c.HttpAddr,

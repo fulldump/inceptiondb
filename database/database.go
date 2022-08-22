@@ -3,7 +3,6 @@ package database
 import (
 	"fmt"
 	"inceptiondb/collection"
-	"inceptiondb/configuration"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -16,14 +15,18 @@ const (
 	StatusClosing   = "closing"
 )
 
+type Config struct {
+	Dir string
+}
+
 type Database struct {
-	config      *configuration.Configuration
+	config      *Config
 	status      string
 	Collections map[string]*collection.Collection
 	exit        chan struct{}
 }
 
-func NewDatabase(config *configuration.Configuration) *Database { // todo: return error?
+func NewDatabase(config *Config) *Database { // todo: return error?
 	s := &Database{
 		config:      config,
 		status:      StatusOpening,

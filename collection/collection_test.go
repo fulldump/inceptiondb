@@ -2,10 +2,12 @@ package collection
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	. "github.com/fulldump/biff"
 	"github.com/google/uuid"
@@ -357,9 +359,10 @@ func TestInsert1M_concurrent(t *testing.T) {
 		})
 
 		// Run
+		t0 := time.Now()
 		wg := &sync.WaitGroup{}
-		workers := 16
-		n := 1000 * 1000 / workers
+		workers := 128
+		n := 2 * 1000 * 1000 / workers
 		for w := 0; w < workers; w++ {
 			wg.Add(1)
 			go func(w int) {
@@ -371,9 +374,12 @@ func TestInsert1M_concurrent(t *testing.T) {
 		}
 
 		wg.Wait()
+		delay := time.Since(t0)
 
 		// Check
 		AssertEqual(len(c.Rows), n*workers)
+		fmt.Println("delay", delay)
+		fmt.Println("throughput (inserts/second)", float64(n*workers)/delay.Seconds())
 	})
 
 }
