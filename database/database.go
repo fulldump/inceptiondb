@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"io/fs"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -42,9 +43,27 @@ func (db *Database) GetStatus() string {
 	return db.status
 }
 
-func (db *Database) load() error {
+func (db *Database) CreateCollection(name string) (*collection.Collection, error) {
 
-	fmt.Printf("Loading data...\n") // todo: move to logger
+	col, exists := db.Collections[name]
+	if exists {
+		return nil, fmt.Errorf("collection '%s' already exists", name)
+	}
+
+	filename := path.Join(db.config.Dir, name)
+	col, err := collection.OpenCollection(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	db.Collections[name] = col
+
+	return col, nil
+}
+
+func (db *Database) Load() error {
+
+	fmt.Printf("Loading database %s...\n", db.config.Dir) // todo: move to logger
 	dir := db.config.Dir
 	err := filepath.WalkDir(dir, func(filename string, d fs.DirEntry, err error) error {
 		if d.IsDir() {
@@ -81,7 +100,7 @@ func (db *Database) load() error {
 
 func (db *Database) Start() error {
 
-	go db.load()
+	go db.Load()
 
 	<-db.exit
 
