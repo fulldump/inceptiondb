@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"inceptiondb/database"
 
 	"github.com/fulldump/box"
+
+	"github.com/fulldump/inceptiondb/database"
 )
 
 func getBoxContext(ctx context.Context) *box.C {

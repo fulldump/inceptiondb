@@ -3,8 +3,9 @@ package api
 import (
 	"context"
 	"fmt"
-	"inceptiondb/collection"
 	"net/http"
+
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 func deleteCollection(collections map[string]*collection.Collection) interface{} {

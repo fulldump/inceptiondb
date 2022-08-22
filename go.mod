@@ -1,4 +1,4 @@
-module inceptiondb
+module github.com/fulldump/inceptiondb
 
 go 1.17
 

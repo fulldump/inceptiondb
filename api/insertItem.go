@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 func insertItem(collections map[string]*collection.Collection) interface{} {

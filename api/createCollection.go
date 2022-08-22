@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"path"
 
-	"inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 type createCollectionRequest struct {

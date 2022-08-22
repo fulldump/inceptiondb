@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 
-	"inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 func createIndex(collections map[string]*collection.Collection) interface{} {

@@ -1,6 +1,8 @@
 package collection
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type Command struct {
 	Name      string          `json:"name"`

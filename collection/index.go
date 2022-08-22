@@ -1,6 +1,8 @@
 package collection
 
-import "sync"
+import (
+	"sync"
+)
 
 // Index should be an interface to allow multiple kinds and implementations
 type Index struct {

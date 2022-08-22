@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 func indexDeleteBy(collections map[string]*collection.Collection) interface{} {

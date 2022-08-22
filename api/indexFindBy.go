@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 func indexFindBy(collections map[string]*collection.Collection) interface{} {

@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 
-	"inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 func countItems(collections map[string]*collection.Collection) interface{} {

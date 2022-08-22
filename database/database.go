@@ -2,11 +2,12 @@ package database
 
 import (
 	"fmt"
-	"inceptiondb/collection"
 	"io/fs"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 const (

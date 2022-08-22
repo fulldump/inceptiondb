@@ -5,8 +5,9 @@ import (
 	"os"
 
 	"github.com/fulldump/box"
-	"inceptiondb/database"
-	"inceptiondb/statics"
+
+	"github.com/fulldump/inceptiondb/database"
+	"github.com/fulldump/inceptiondb/statics"
 )
 
 func Build(db *database.Database, dataDir string, staticsDir string) *box.B { // TODO: remove datadir

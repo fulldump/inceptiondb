@@ -1,6 +1,8 @@
 package api
 
-import "inceptiondb/collection"
+import (
+	"github.com/fulldump/inceptiondb/collection"
+)
 
 func listCollections(collections map[string]*collection.Collection) interface{} {
 	return func() []string {

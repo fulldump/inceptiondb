@@ -9,7 +9,7 @@ import (
 
 	"github.com/SierraSoftworks/connor"
 
-	"inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 func listItems(collections map[string]*collection.Collection) interface{} {

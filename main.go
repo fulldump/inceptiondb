@@ -12,9 +12,9 @@ import (
 	"github.com/fulldump/box"
 	"github.com/fulldump/goconfig"
 
-	"inceptiondb/api"
-	"inceptiondb/configuration"
-	"inceptiondb/database"
+	"github.com/fulldump/inceptiondb/api"
+	"github.com/fulldump/inceptiondb/configuration"
+	"github.com/fulldump/inceptiondb/database"
 )
 
 var banner = `
