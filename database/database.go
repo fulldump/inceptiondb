@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -65,7 +66,14 @@ func (db *Database) Load() error {
 
 	fmt.Printf("Loading database %s...\n", db.config.Dir) // todo: move to logger
 	dir := db.config.Dir
-	err := filepath.WalkDir(dir, func(filename string, d fs.DirEntry, err error) error {
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		return err
+	}
+	err = filepath.WalkDir(dir, func(filename string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if d.IsDir() {
 			return nil
 		}
