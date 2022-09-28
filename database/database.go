@@ -62,6 +62,25 @@ func (db *Database) CreateCollection(name string) (*collection.Collection, error
 	return col, nil
 }
 
+func (db *Database) DropCollection(name string) (error) { // TODO: rename drop?
+
+	col, exists := db.Collections[name]
+	if !exists {
+		return fmt.Errorf("collection '%s' not found", name)
+	}
+
+	filename := path.Join(db.config.Dir, name)
+
+	err := os.Remove(filename)
+	if err != nil {
+		return err // TODO: wrap?
+	}
+
+	delete(db.Collections, name) // TODO: protect section! not threadsafe
+
+	return  col.Close()
+}
+
 func (db *Database) Load() error {
 
 	fmt.Printf("Loading database %s...\n", db.config.Dir) // todo: move to logger

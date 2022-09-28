@@ -400,11 +400,11 @@ func (c *Collection) deleteRow(field string, value string, persist bool) error {
 	return nil
 }
 
-func (c *Collection) PatchBy(field string, value string, patch map[string]interface{}) error {
+func (c *Collection) PatchBy(field string, value string, patch interface{}) error {
 	return c.patchRow(field, value, patch, true)
 }
 
-func (c *Collection) patchRow(field string, value string, patch map[string]interface{}, persist bool) error {
+func (c *Collection) patchRow(field string, value string, patch interface{}, persist bool) error {
 
 	index, ok := c.Indexes[field]
 	if !ok {
