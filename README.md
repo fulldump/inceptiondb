@@ -2,6 +2,7 @@
 
 A home made database based on journal to store JSON documents.
 
+
 ## Motivation
 
 InceptionDB was born to be the persistence layer of another project called Bitumen. Bitumen is a distributed NAS that should store family memories, pictures and videos that should last for 50 or 100 years.
@@ -23,6 +24,19 @@ It support unique indexes that can be:
 B+ index is a MUST before using it on a real application.
 
 It does not have a scheduler, so the user has the responsibility to choose the proper index (or do a fullscan). The main drawback is adding a new index will require to modify the application.
+
+
+## Performance
+
+InceptionDB has been designed to be small and easy to read, not to be blazing fast but some performance tests reach more than 200K inserts per second with 2 indexes in one node.
+
+
+## Features
+
+* API oriented - HTTP is the only interface so that it can be used by any language with any technology.
+* Based on journal
+* Fast writes
+
 
 ## Future work
 
