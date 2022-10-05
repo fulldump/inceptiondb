@@ -4,9 +4,10 @@
 
 * ~~Filter collection by perfect match subdocument~~
 * ~~Fullscan with offset/skip and limit~~
-* Authentication and logical collection groups (databases)
+* ~~Authentication and logical collection groups (databases)~~
 * Index management in UI
 * BUGFIX: when document is modified to remove field from non-sparse index, it should NOT remove the field!!!
+* BTree index
 
 ## Should have
 
@@ -25,14 +26,14 @@
 * ~~Implement not sparse indexes~~
 * Filter by JS function
 * Patch by JS function
-* Support UTF-8 in collection names
+* ~~Support UTF-8 in collection names~~
 * Composed indexes (key is made by multiple fields combined)
 * Automatic _id index can have multiple value sources (configured at collection level)
   * uuid
   * autoincrement
   * unixnano
 * Ensure thread safety and improve performance with Map from standard library
-* Insert multiple documents per request
+* ~~Insert multiple documents per request~~
 
 ## Won't have
 
