@@ -18,7 +18,7 @@ type Collection struct {
 	Rows      []*Row
 	rowsMutex *sync.Mutex
 	Indexes   map[string]Index
-	//buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
+	// buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
 }
 
 type Row struct {
@@ -71,15 +71,15 @@ func OpenCollection(filename string) (*Collection, error) {
 				I int
 			}{}
 			json.Unmarshal(command.Payload, &params) // Todo: handle error properly
-			row := collection.Rows[params.I] // this access is threadsafe, OpenCollection is a secuence
+			row := collection.Rows[params.I]         // this access is threadsafe, OpenCollection is a secuence
 			err := collection.removeByRow(row, false)
 			if err != nil {
 				fmt.Printf("WARNING: remove row %d: %s\n", params.I, err.Error())
 			}
 		case "patch":
 			params := struct {
-				I int
-				Diff  map[string]interface{}
+				I    int
+				Diff map[string]interface{}
 			}{}
 			json.Unmarshal(command.Payload, &params)
 			row := collection.Rows[params.I] // this access is threadsafe, OpenCollection is a secuence
@@ -120,7 +120,7 @@ func (c *Collection) addRow(payload json.RawMessage) (*Row, error) {
 }
 
 // TODO: test concurrency
-func (c *Collection) Insert(item interface{}) (*Row,error) {
+func (c *Collection) Insert(item interface{}) (*Row, error) {
 	if c.file == nil {
 		return nil, fmt.Errorf("collection is closed")
 	}
@@ -357,14 +357,12 @@ func (c *Collection) FindByRow(field string, value string) (*Row, error) {
 	return row, nil
 }
 
-
-
-func (c *Collection) Remove(r *Row) (error) {
+func (c *Collection) Remove(r *Row) error {
 	return c.removeByRow(r, true)
 }
 
 // TODO: move this to utils/diogenesis?
-func lockBlock(m *sync.Mutex, f func() error) error{
+func lockBlock(m *sync.Mutex, f func() error) error {
 	m.Lock()
 	defer m.Unlock()
 	return f()
@@ -373,10 +371,10 @@ func lockBlock(m *sync.Mutex, f func() error) error{
 func (c *Collection) removeByRow(row *Row, persist bool) error {
 
 	var i int
-	err := lockBlock(c.rowsMutex, func() error{
+	err := lockBlock(c.rowsMutex, func() error {
 		i = row.I
 		if len(c.Rows) <= i {
-			return  fmt.Errorf("row %d does not exist", i)
+			return fmt.Errorf("row %d does not exist", i)
 		}
 
 		err := indexRemove(c.Indexes, row)
@@ -384,14 +382,14 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 			return fmt.Errorf("could not free index")
 		}
 
-		last := len(c.Rows)-1
+		last := len(c.Rows) - 1
 		c.Rows[i] = c.Rows[last]
-		c.Rows = c.Rows[:last]
 		c.Rows[i].I = i
+		c.Rows = c.Rows[:last]
 		return nil
 	})
 	if err != nil {
-		return  err
+		return err
 	}
 
 	if !persist {
@@ -403,7 +401,7 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 		"i": i,
 	})
 	if err != nil {
-		return  err // todo: wrap error
+		return err // todo: wrap error
 	}
 	command := &Command{
 		Name:      "remove",
@@ -416,10 +414,10 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 	err = json.NewEncoder(c.file).Encode(command)
 	if err != nil {
 		// TODO: panic?
-		return  fmt.Errorf("json encode command: %w", err)
+		return fmt.Errorf("json encode command: %w", err)
 	}
 
-	return  nil
+	return nil
 }
 
 func (c *Collection) Patch(row *Row, patch interface{}) error {
@@ -462,8 +460,8 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 
 	// Persist
 	payload, err := json.Marshal(map[string]interface{}{
-		"i": row.I,
-		"diff":  json.RawMessage(diff),
+		"i":    row.I,
+		"diff": json.RawMessage(diff),
 	})
 	if err != nil {
 		return err // todo: wrap error
