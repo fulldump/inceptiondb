@@ -1,8 +1,12 @@
 #!/bin/bash
 
-curl https://inceptiondb.io/collections -d '{
+COLLECTIONS_URL=https://inceptiondb.io/collections
+
+curl $COLLECTIONS_URL -d '{
   "name": "pokemon"
 }'
 
-curl https://inceptiondb.io/collections/pokemon -d @pokemon.jsonl
+curl $COLLECTIONS_URL/pokemon/indexes -d '{"field":"num"}'
+
+curl $COLLECTIONS_URL/pokemon -d @pokemon.jsonl
 

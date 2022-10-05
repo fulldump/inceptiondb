@@ -16,12 +16,12 @@ func indexDeleteBy(collections map[string]*collection.Collection) interface{} {
 		value := getParam(ctx, "value")
 		result := map[string]interface{}{}
 
-		err := collections[collectionName].FindBy(indexName, value, &result)
+		row, err := collections[collectionName].FindByRow(indexName, value)
 		if err != nil {
 			return nil, fmt.Errorf("item %s='%s' does not exist", indexName, value)
 		}
 
-		err = collections[collectionName].DeleteBy(indexName, value)
+		err = collections[collectionName].Remove(row)
 		if err != nil {
 			return nil, fmt.Errorf("item %s='%s' does not exist", indexName, value)
 		}

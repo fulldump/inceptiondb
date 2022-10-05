@@ -15,9 +15,16 @@ func indexPatchBy(collections map[string]*collection.Collection) interface{} {
 		indexName := getParam(ctx, "index_name")
 		value := getParam(ctx, "value")
 
-		err := collections[collectionName].PatchBy(indexName, value, patch)
+		col := collections[collectionName]
+
+		row, err := col.FindByRow(indexName, value)
 		if err != nil {
 			return nil, fmt.Errorf("item %s='%s' does not exist", indexName, value)
+		}
+
+		err = col.Patch(row, patch)
+		if err != nil {
+			return nil, fmt.Errorf("could not patch item %s='%s'", indexName, value)
 		}
 
 		result := map[string]interface{}{}

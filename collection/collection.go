@@ -18,7 +18,7 @@ type Collection struct {
 	Rows      []*Row
 	rowsMutex *sync.Mutex
 	Indexes   map[string]Index
-	//buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
+	// buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
 }
 
 type Row struct {
@@ -55,7 +55,7 @@ func OpenCollection(filename string) (*Collection, error) {
 
 		switch command.Name {
 		case "insert":
-			err := collection.addRow(command.Payload)
+			_, err := collection.addRow(command.Payload)
 			if err != nil {
 				return nil, err
 			}
@@ -66,26 +66,26 @@ func OpenCollection(filename string) (*Collection, error) {
 			if err != nil {
 				fmt.Printf("WARNING: create index '%s': %s\n", options.Field, err.Error())
 			}
-		case "delete":
-			filter := struct {
-				Field string
-				Value string
+		case "remove":
+			params := struct {
+				I int
 			}{}
-			json.Unmarshal(command.Payload, &filter) // Todo: handle error properly
-			err := collection.deleteRow(filter.Field, filter.Value, false)
+			json.Unmarshal(command.Payload, &params) // Todo: handle error properly
+			row := collection.Rows[params.I]         // this access is threadsafe, OpenCollection is a secuence
+			err := collection.removeByRow(row, false)
 			if err != nil {
-				fmt.Printf("WARNING: delete item '%s'='%s': %s\n", filter.Field, filter.Value, err.Error())
+				fmt.Printf("WARNING: remove row %d: %s\n", params.I, err.Error())
 			}
 		case "patch":
 			params := struct {
-				Field string
-				Value string
-				Diff  map[string]interface{}
+				I    int
+				Diff map[string]interface{}
 			}{}
 			json.Unmarshal(command.Payload, &params)
-			err := collection.patchRow(params.Field, params.Value, params.Diff, false)
+			row := collection.Rows[params.I] // this access is threadsafe, OpenCollection is a secuence
+			err := collection.patchByRow(row, params.Diff, false)
 			if err != nil {
-				fmt.Printf("WARNING: patch item '%s'='%s': %s\n", params.Field, params.Value, err.Error())
+				fmt.Printf("WARNING: patch item %d: %s\n", params.I, err.Error())
 			}
 		}
 	}
@@ -100,7 +100,7 @@ func OpenCollection(filename string) (*Collection, error) {
 	return collection, nil
 }
 
-func (c *Collection) addRow(payload json.RawMessage) error {
+func (c *Collection) addRow(payload json.RawMessage) (*Row, error) {
 
 	row := &Row{
 		Payload: payload,
@@ -108,7 +108,7 @@ func (c *Collection) addRow(payload json.RawMessage) error {
 
 	err := indexInsert(c.Indexes, row)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	c.rowsMutex.Lock()
@@ -116,24 +116,24 @@ func (c *Collection) addRow(payload json.RawMessage) error {
 	c.Rows = append(c.Rows, row)
 	c.rowsMutex.Unlock()
 
-	return nil
+	return row, nil
 }
 
 // TODO: test concurrency
-func (c *Collection) Insert(item interface{}) error {
+func (c *Collection) Insert(item interface{}) (*Row, error) {
 	if c.file == nil {
-		return fmt.Errorf("collection is closed")
+		return nil, fmt.Errorf("collection is closed")
 	}
 
 	payload, err := json.Marshal(item)
 	if err != nil {
-		return fmt.Errorf("json encode payload: %w", err)
+		return nil, fmt.Errorf("json encode payload: %w", err)
 	}
 
 	// Add row
-	err = c.addRow(payload)
+	row, err := c.addRow(payload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Persist
@@ -147,10 +147,10 @@ func (c *Collection) Insert(item interface{}) error {
 
 	err = json.NewEncoder(c.file).Encode(command)
 	if err != nil {
-		return fmt.Errorf("json encode command: %w", err)
+		return nil, fmt.Errorf("json encode command: %w", err)
 	}
 
-	return nil
+	return row, nil
 }
 
 func (c *Collection) FindOne(data interface{}) {
@@ -331,46 +331,66 @@ func unindexRow(index Index, field string, row *Row) error {
 	return nil
 }
 
+// Deprecated
 func (c *Collection) FindBy(field string, value string, data interface{}) error {
 
-	index, ok := c.Indexes[field]
-	if !ok {
-		return fmt.Errorf("field '%s' is not indexed", field)
-	}
-
-	row, ok := index.Entries[value]
-	if !ok {
-		return fmt.Errorf("%s '%s' not found", field, value)
+	row, err := c.FindByRow(field, value)
+	if err != nil {
+		return err
 	}
 
 	return json.Unmarshal(row.Payload, &data)
 }
 
-func (c *Collection) DeleteBy(field string, value string) error {
-	return c.deleteRow(field, value, true)
-}
-
-func (c *Collection) deleteRow(field string, value string, persist bool) error {
+func (c *Collection) FindByRow(field string, value string) (*Row, error) {
 
 	index, ok := c.Indexes[field]
 	if !ok {
-		return fmt.Errorf("field '%s' is not indexed", field)
+		return nil, fmt.Errorf("field '%s' is not indexed", field)
 	}
 
 	row, ok := index.Entries[value]
 	if !ok {
-		return fmt.Errorf("%s '%s' not found", field, value)
+		return nil, fmt.Errorf("%s '%s' not found", field, value)
 	}
 
-	err := indexRemove(c.Indexes, row)
+	return row, nil
+}
+
+func (c *Collection) Remove(r *Row) error {
+	return c.removeByRow(r, true)
+}
+
+// TODO: move this to utils/diogenesis?
+func lockBlock(m *sync.Mutex, f func() error) error {
+	m.Lock()
+	defer m.Unlock()
+	return f()
+}
+
+func (c *Collection) removeByRow(row *Row, persist bool) error {
+
+	var i int
+	err := lockBlock(c.rowsMutex, func() error {
+		i = row.I
+		if len(c.Rows) <= i {
+			return fmt.Errorf("row %d does not exist", i)
+		}
+
+		err := indexRemove(c.Indexes, row)
+		if err != nil {
+			return fmt.Errorf("could not free index")
+		}
+
+		last := len(c.Rows) - 1
+		c.Rows[i] = c.Rows[last]
+		c.Rows[i].I = i
+		c.Rows = c.Rows[:last]
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("could not unindex %s='%v'", field, value)
+		return err
 	}
-
-	c.rowsMutex.Lock()
-	c.Rows[row.I] = c.Rows[len(c.Rows)-1]
-	c.Rows = c.Rows[:len(c.Rows)-1]
-	c.rowsMutex.Unlock()
 
 	if !persist {
 		return nil
@@ -378,14 +398,13 @@ func (c *Collection) deleteRow(field string, value string, persist bool) error {
 
 	// Persist
 	payload, err := json.Marshal(map[string]interface{}{
-		"field": field,
-		"value": value,
+		"i": i,
 	})
 	if err != nil {
 		return err // todo: wrap error
 	}
 	command := &Command{
-		Name:      "delete",
+		Name:      "remove",
 		Uuid:      uuid.New().String(),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
@@ -394,27 +413,18 @@ func (c *Collection) deleteRow(field string, value string, persist bool) error {
 
 	err = json.NewEncoder(c.file).Encode(command)
 	if err != nil {
+		// TODO: panic?
 		return fmt.Errorf("json encode command: %w", err)
 	}
 
 	return nil
 }
 
-func (c *Collection) PatchBy(field string, value string, patch interface{}) error {
-	return c.patchRow(field, value, patch, true)
+func (c *Collection) Patch(row *Row, patch interface{}) error {
+	return c.patchByRow(row, patch, true)
 }
 
-func (c *Collection) patchRow(field string, value string, patch interface{}, persist bool) error {
-
-	index, ok := c.Indexes[field]
-	if !ok {
-		return fmt.Errorf("field '%s' is not indexed", field)
-	}
-
-	row, ok := index.Entries[value]
-	if !ok {
-		return fmt.Errorf("%s '%s' not found", field, value)
-	}
+func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error {
 
 	patchBytes, err := json.Marshal(patch)
 	if err != nil {
@@ -450,9 +460,8 @@ func (c *Collection) patchRow(field string, value string, patch interface{}, per
 
 	// Persist
 	payload, err := json.Marshal(map[string]interface{}{
-		"field": field,
-		"value": value,
-		"diff":  json.RawMessage(diff),
+		"i":    row.I,
+		"diff": json.RawMessage(diff),
 	})
 	if err != nil {
 		return err // todo: wrap error

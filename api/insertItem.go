@@ -19,7 +19,7 @@ func insertItem(collections map[string]*collection.Collection) interface{} {
 		collection := collections[collectionName]
 
 		jsonReader := json.NewDecoder(r.Body)
-		//jsonWriter := json.NewEncoder(w)
+		// jsonWriter := json.NewEncoder(w)
 
 		for {
 			item := map[string]interface{}{}
@@ -30,7 +30,7 @@ func insertItem(collections map[string]*collection.Collection) interface{} {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			err = collection.Insert(item)
+			_, err = collection.Insert(item)
 			if err != nil {
 				// TODO: handle error properly
 				fmt.Println("ERROR:", err.Error())
@@ -38,7 +38,7 @@ func insertItem(collections map[string]*collection.Collection) interface{} {
 				return
 			}
 
-			//jsonWriter.Encode(item)
+			// jsonWriter.Encode(item)
 		}
 
 	}

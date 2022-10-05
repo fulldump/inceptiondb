@@ -241,9 +241,10 @@ func TestPersistenceDelete(t *testing.T) {
 		c, _ := OpenCollection(filename)
 		c.Index(&IndexOptions{Field: "email"})
 		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
-		c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
+		row, _ := c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
 		c.Insert(map[string]interface{}{"id": "3", "name": "Ana", "email": []string{"ana@email.com", "ana@yahoo.com"}})
-		c.DeleteBy("email", "sara@email.com")
+		err := c.Remove(row)
+		AssertNil(err)
 		c.Close()
 
 		// Run
@@ -271,8 +272,8 @@ func TestPersistenceDeleteTwice(t *testing.T) {
 		// Setup
 		c, _ := OpenCollection(filename)
 		c.Index(&IndexOptions{Field: "id"})
-		c.Insert(map[string]interface{}{"id": "1"})
-		c.DeleteBy("id", "1")
+		row, _ := c.Insert(map[string]interface{}{"id": "1"})
+		c.Remove(row)
 		c.Close()
 
 		// Run
@@ -291,8 +292,8 @@ func TestPersistenceUpdate(t *testing.T) {
 		// Setup
 		c, _ := OpenCollection(filename)
 		c.Index(&IndexOptions{Field: "id"})
-		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
-		c.PatchBy("id", "1", map[string]interface{}{"name": "Jaime"})
+		row, _ := c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+		c.Patch(row, map[string]interface{}{"name": "Jaime"})
 		c.Close()
 
 		// Run
