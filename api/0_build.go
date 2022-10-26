@@ -1,12 +1,11 @@
 package api
 
 import (
-	"log"
-	"os"
-
 	"github.com/fulldump/box"
 
+	"github.com/fulldump/inceptiondb/api/apicollectionv1"
 	"github.com/fulldump/inceptiondb/database"
+	"github.com/fulldump/inceptiondb/service"
 	"github.com/fulldump/inceptiondb/statics"
 )
 
@@ -16,13 +15,9 @@ func Build(db *database.Database, dataDir string, staticsDir string) *box.B { //
 
 	b := box.NewBox()
 
-	accessLogger := log.New(os.Stdout, "ACCESS: ", log.Lshortfile)
-
 	b.WithInterceptors(
 		recoverFromPanic,
 		interceptorPrintError,
-		accessLog(accessLogger),
-		interceptorUnavailable(db),
 	)
 
 	b.Resource("collections").
@@ -60,6 +55,10 @@ func Build(db *database.Database, dataDir string, staticsDir string) *box.B { //
 			box.Delete(indexDeleteBy(collections)),
 			box.Patch(indexPatchBy(collections)),
 		)
+
+	v1 := b.Resource("/v1")
+	s := service.NewService(db)
+	apicollectionv1.BuildV1Collection(v1, s)
 
 	// Mount statics
 	b.Resource("/*").

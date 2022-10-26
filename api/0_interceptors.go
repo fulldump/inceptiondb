@@ -22,7 +22,7 @@ func recoverFromPanic(next box.H) box.H {
 	}
 }
 
-func accessLog(l *log.Logger) box.I {
+func AccessLog(l *log.Logger) box.I {
 	return func(next box.H) box.H {
 		return func(ctx context.Context) {
 			r := box.GetRequest(ctx)

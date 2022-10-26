@@ -23,7 +23,7 @@ type Config struct {
 }
 
 type Database struct {
-	config      *Config
+	Config      *Config
 	status      string
 	Collections map[string]*collection.Collection
 	exit        chan struct{}
@@ -31,7 +31,7 @@ type Database struct {
 
 func NewDatabase(config *Config) *Database { // todo: return error?
 	s := &Database{
-		config:      config,
+		Config:      config,
 		status:      StatusOpening,
 		Collections: map[string]*collection.Collection{},
 		exit:        make(chan struct{}),
@@ -51,7 +51,7 @@ func (db *Database) CreateCollection(name string) (*collection.Collection, error
 		return nil, fmt.Errorf("collection '%s' already exists", name)
 	}
 
-	filename := path.Join(db.config.Dir, name)
+	filename := path.Join(db.Config.Dir, name)
 	col, err := collection.OpenCollection(filename)
 	if err != nil {
 		return nil, err
@@ -62,14 +62,14 @@ func (db *Database) CreateCollection(name string) (*collection.Collection, error
 	return col, nil
 }
 
-func (db *Database) DropCollection(name string) (error) { // TODO: rename drop?
+func (db *Database) DropCollection(name string) error { // TODO: rename drop?
 
 	col, exists := db.Collections[name]
 	if !exists {
 		return fmt.Errorf("collection '%s' not found", name)
 	}
 
-	filename := path.Join(db.config.Dir, name)
+	filename := path.Join(db.Config.Dir, name)
 
 	err := os.Remove(filename)
 	if err != nil {
@@ -78,13 +78,13 @@ func (db *Database) DropCollection(name string) (error) { // TODO: rename drop?
 
 	delete(db.Collections, name) // TODO: protect section! not threadsafe
 
-	return  col.Close()
+	return col.Close()
 }
 
 func (db *Database) Load() error {
 
-	fmt.Printf("Loading database %s...\n", db.config.Dir) // todo: move to logger
-	dir := db.config.Dir
+	fmt.Printf("Loading database %s...\n", db.Config.Dir) // todo: move to logger
+	dir := db.Config.Dir
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		return err

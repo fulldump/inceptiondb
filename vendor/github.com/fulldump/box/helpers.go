@@ -6,14 +6,14 @@ import (
 )
 
 func GetError(ctx context.Context) error {
-	return getBoxContext(ctx).error
+	return GetBoxContext(ctx).error
 }
 
 func SetError(ctx context.Context, err error) {
-	getBoxContext(ctx).error = err
+	GetBoxContext(ctx).error = err
 }
 
-func getBoxContext(ctx context.Context) *C {
+func GetBoxContext(ctx context.Context) *C {
 
 	v := ctx.Value("box_context")
 	if c, ok := v.(*C); ok {
@@ -23,16 +23,20 @@ func getBoxContext(ctx context.Context) *C {
 	return nil
 }
 
-func setBoxContext(ctx context.Context, c *C) context.Context {
+func SetBoxContext(ctx context.Context, c *C) context.Context {
 	return context.WithValue(ctx, "box_context", c)
 }
 
 // TODO: add missing helpers...
 
 func GetResponse(ctx context.Context) http.ResponseWriter {
-	return getBoxContext(ctx).Response
+	return GetBoxContext(ctx).Response
 }
 
 func GetRequest(ctx context.Context) *http.Request {
-	return getBoxContext(ctx).Request
+	return GetBoxContext(ctx).Request
+}
+
+func GetUrlParameter(ctx context.Context, param string) string {
+	return GetBoxContext(ctx).Parameters[param]
 }

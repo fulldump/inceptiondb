@@ -36,7 +36,7 @@ func interceptorPrintError(next box.H) box.H {
 	}
 }
 
-func interceptorUnavailable(db *database.Database) box.I {
+func InterceptorUnavailable(db *database.Database) box.I {
 	return func(next box.H) box.H {
 		return func(ctx context.Context) {
 
