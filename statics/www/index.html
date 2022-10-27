@@ -22,9 +22,9 @@
                             v-for="collection in collections"
                             class="list-group-item"
                             :class="{active: collection_name == collection}"
-                            @click="selectCollection(collection); showPanel('fullscan'); fetchFullScan(collection);"
+                            @click="selectCollection(collection.name); showPanel('fullscan'); fetchFullScan(collection.name);"
                         >
-                            <h5 :title="collection" class="mb-1 text-truncate">{{ collection }}</h5>
+                            <h5 :title="collection" class="mb-1 text-truncate">{{ collection.name }}</h5>
                             <div class="line2" style="font-size: 90%;">
                                 <a href="#" >Fullscan</a>
                                 |
@@ -45,7 +45,7 @@
                         |
                         <a href="#" :class="{active: panels.indexsearch}" @click.prevent.stop="showPanel('indexsearch'); fetchIndexes(collection_name);">IndexSearch</a>
                         |
-                        <a href="#" :class="{active: panels.delete}"  @click.prevent.stop="showPanel('delete');">Delete collection</a>
+                        <a href="#" :class="{active: panels.delete}"  @click.prevent.stop="showPanel('delete');">Drop collection</a>
                     </div>
 
                     <div v-if="panels.fullscan">
@@ -119,10 +119,10 @@
                                 >[{{client}}]</span>
                             </div>
                             <div class="code" v-if="examples.client=='curl'">
-                                <code>curl '{{base_url}}/collections/{{collection_name}}?skip={{full_scan.skip}}&limit={{full_scan.limit}}'</code>
+                                <code>curl '{{base_url}}/v1/collections/{{collection_name}}:find' -d '{{  {mode:'fullscan', limit: full_scan.limit, skip: full_scan.skip, filter: JSON.parse(full_scan.filter) } }}'</code>
                             </div>
                             <div class="code" v-else-if="examples.client=='js'">
-                                <code>fetch('{{base_url}}/collections/{{collection_name}}?skip={{full_scan.skip}}&limit={{full_scan.limit}}')
+                                <code>fetch('{{base_url}}/v1/collections/{{collection_name}}:find', {method: 'POST'})
     .then(response => response.json())
     .then(data => console.log(data));</code>
                             </div>
@@ -154,10 +154,10 @@
                                 >[{{client}}]</span>
                             </div>
                             <div class="code" v-if="examples.client=='curl'">
-                                <code>curl {{base_url}}/collections/{{collection_name}} -d '{{ JSON.parse(insert_item.request.payload) }}'</code>
+                                <code>curl {{base_url}}/v1/collections/{{collection_name}} -d '{{ JSON.parse(insert_item.request.payload) }}'</code>
                             </div>
                             <div class="code" v-else-if="examples.client=='js'">
-                                <code>fetch('{{base_url}}/collections/{{collection_name}}')
+                                <code>fetch('{{base_url}}/v1/collections/{{collection_name}}')
                                     .then(response => response.json())
                                     .then(data => console.log(data));</code>
                             </div>
@@ -171,7 +171,7 @@
                     <div v-if="panels.indexsearch">
                         Find by index
                         <select v-model="find_by_index" @change="find_by_value=''">
-                            <option v-for="index in indexes" :value="index">{{index}}</option>
+                            <option v-for="index in indexes" :value="index.field">{{index.field}}</option>
                         </select>
                         :
                         <input type="text" v-model="find_by_value" @keyup="findByIndex(collection_name, find_by_index, find_by_value)"> <br>
@@ -189,10 +189,10 @@
                                 >[{{client}}]</span>
                             </div>
                             <div class="code" v-if="examples.client=='curl'">
-                                <code>curl {{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}</code>
+                                <code>curl {{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}</code>
                             </div>
                             <div class="code" v-else-if="examples.client=='js'">
-                                <code>fetch('{{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}')
+                                <code>fetch('{{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}')
     .then(response => response.json())
     .then(data => console.log(data));</code>
                             </div>
@@ -218,10 +218,10 @@
                                 >[{{client}}]</span>
                                 </div>
                                 <div class="code" v-if="examples.client=='curl'">
-                                    <code>curl {{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}} -X PATCH -d '{{ JSON.parse(this.item_patch) }}'</code>
+                                    <code>curl {{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}:patch -X PATCH -d '{{ JSON.parse(this.item_patch) }}'</code>
                                 </div>
                                 <div class="code" v-else-if="examples.client=='js'">
-                                    <code>fetch('{{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}', {{ {"method":"PATCH", "body":JSON.parse(this.item_patch)} }})
+                                    <code>fetch('{{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}:patch', {{ {"method":"PATCH", "body":JSON.parse(this.item_patch)} }})
     .then(response => response.json())
     .then(data => console.log(data));</code>
                                 </div>
@@ -251,10 +251,10 @@
                                 >[{{client}}]</span>
                                 </div>
                                 <div class="code" v-if="examples.client=='curl'">
-                                    <code>curl {{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}} -X DELETE</code>
+                                    <code>curl {{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}} -X DELETE</code>
                                 </div>
                                 <div class="code" v-else-if="examples.client=='js'">
-                                    <code>fetch('{{base_url}}/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}', {{ {"method":"DELETE"} }})
+                                    <code>fetch('{{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}', {{ {"method":"DELETE"} }})
                                         .then(response => response.json())
                                         .then(data => console.log(data));</code>
                                 </div>
@@ -270,9 +270,9 @@
 
                     <div v-if="panels.delete" style="text-align: center;">
                         <br>
-                        Press the following button to delete the collection <code>{{collection_name}}</code>: <br>
+                        Press the following button to drop the collection <code>{{collection_name}}</code>: <br>
                         <br>
-                        <button class="btn btn-danger" @click="deleteCollectionClick()">Delete</button>
+                        <button class="btn btn-danger" @click="deleteCollectionClick()">Drop</button>
                     </div>
 
                 </div>
@@ -300,10 +300,10 @@
                                         >[{{client}}]</span>
                                     </div>
                                     <div class="code" v-if="examples.client=='curl'">
-                                        <code>curl {{base_url}}/collections -d '{{create_collection.request.payload}}' </code>
+                                        <code>curl {{base_url}}/v1/collections -d '{{create_collection.request.payload}}' </code>
                                     </div>
                                     <div class="code" v-else-if="examples.client=='js'">
-                                        <code>fetch('{{base_url}}/collections', {{ {"method":"POST", "body":create_collection.request.payload} }})
+                                        <code>fetch('{{base_url}}/v1/collections', {{ {"method":"POST", "body":create_collection.request.payload} }})
     .then(response => response.json())
     .then(data => console.log(data));</code>
                                     </div>
@@ -373,12 +373,15 @@
                         skip: 0,
                         limit: 10,
                         filter: '{\n\n}',
+                        request: {
+                            payload: {},
+                        },
                     },
                 },
                 methods: {
                     listCollections() {
                         var that = this;
-                        axios.get('/collections')
+                        axios.get('/v1/collections')
                             .then(function(resp) {
                                 that.collections = resp.data;
                             });
@@ -393,7 +396,15 @@
                     findByIndex(collection, key, value) {
                         var that = this;
                         that.find_by_error = '';
-                        axios.get('/collections/'+ encodeURIComponent(collection) + "/index/"+encodeURIComponent(key)+"/findBy/"+encodeURIComponent(value))
+                        axios({
+                            method: 'POST',
+                            url: '/v1/collections/'+ encodeURIComponent(collection) + ':find',
+                            data: {
+                                mode: "unique",
+                                field: key,
+                                value: value,
+                            }
+                        })
                             .then(function(resp) {
                                 that.item = resp.data;
                             })
@@ -407,14 +418,16 @@
                             });
                     },
                     createCollectionSubmit() {
+                        // this.showPanel('');
                         var that = this;
-                        axios.post('/collections', this.create_collection.request.payload)
+                        axios.post('/v1/collections', this.create_collection.request.payload)
                             .then(function(resp) {
-                                var name = resp.data.name;
-                                that.collections.push(name);
-                                that.selectCollection(name);
+                                console.log('createcollectionresp', resp);
+                                var newCollection = resp.data;
+                                that.collections.push(newCollection);
+                                that.selectCollection(newCollection.name);
                                 that.create_collection.show = false;
-                                this.showPanel('insert');
+                                that.showPanel('fullscan');
                             })
                             .catch(function(error) {
                                 // TODO: put this error somewhere
@@ -428,10 +441,10 @@
                     },
                     insertItem(collection, payload) {
                         var that = this;
-                        axios.post('/collections/'+ encodeURIComponent(collection), payload)
+                        axios.post('/v1/collections/'+ encodeURIComponent(collection)+':insert', payload)
                             .then(function(resp) {
                                 that.insert_item.error = '';
-                                that.rows.push(JSON.stringify(resp.data));
+                                that.rows.push(JSON.stringify(payload));
                                 that.insert_item.request.payload = '{\n\n}';
                             })
                             .catch(function(error) {
@@ -445,15 +458,15 @@
                     createCollectionClick() {
                         this.create_collection.show = true;
                     },
-                    deleteCollectionClick() {
+                    deleteCollectionClick() { // Todo: rename to dropCollection
                         collection = this.collection_name;
                         var ok = confirm("Collection '"+collection+"' will be deleted, continue?");
                         if (!ok) return;
                         this.deleteCollection(collection)
                     },
-                    deleteCollection(collection) {
+                    deleteCollection(collection) { // Todo: rename to dropCollection
                         var that = this;
-                        axios.delete('/collections/'+ encodeURIComponent(collection))
+                        axios.post('/v1/collections/'+ encodeURIComponent(collection)+':dropCollection')
                             .then(function(resp) {
                                 that.collection_name = '';
                                 that.collections.splice(that.collections.indexOf(collection), 1);
@@ -467,7 +480,7 @@
                     fetchFullScanExperimental(collection) {
                         var that = this;
                         that.rows = [];
-                        const fileURL = '/collections/'+ encodeURIComponent(collection);
+                        const fileURL = '/v1/collections/'+ encodeURIComponent(collection) + ':find';
                         const utf8Decoder = new TextDecoder("utf-8");
                         fetch(fileURL).then(response => {
                             let re = /\r\n|\n|\r/gm;
@@ -507,18 +520,28 @@
                         });
                     },
                     fetchFullScan(collection) {
-                        var that = this;
-                        var u = '/collections/'+ encodeURIComponent(collection)+'?skip='+encodeURIComponent(that.full_scan.skip)+'&limit='+encodeURIComponent(that.full_scan.limit);
+                        let that = this;
+                        let payload = {
+                            mode: "fullscan",
+                            filter: {},
+                            limit: parseInt(that.full_scan.limit),
+                            skip: that.full_scan.skip,
+                        };
 
                         try {
-                            var filter = JSON.parse(that.full_scan.filter)
-                            u += '&filter='+encodeURIComponent(JSON.stringify(filter));
+                            payload.filter = JSON.parse(that.full_scan.filter);
                         } catch (e) {
                             console.log(e)
                             // Nothing happen :D
                         }
 
-                        axios.get(u, {transformResponse: (res) => {return res;},responseType: 'text'})
+                        axios({
+                            method: 'post',
+                            url: '/v1/collections/'+ encodeURIComponent(collection)+':find',
+                            data: payload,
+                            transformResponse: (res) => {return res;},
+                            responseType: 'text',
+                        })
                             .then(function(resp) {
                                 var rows = [];
                                 resp.data.split("\n").forEach(function(line) {
@@ -537,7 +560,7 @@
                     },
                     fetchIndexes(collection) {
                         var that = this;
-                        axios.get('/collections/'+ encodeURIComponent(collection) + "/index")
+                        axios.post('/v1/collections/'+ encodeURIComponent(collection) + ":listIndexes")
                             .then(function(resp) {
                                 that.indexes = resp.data;
                             });
@@ -548,7 +571,13 @@
                     },
                     applyPatch(collection, key, value, patch) {
                         var that = this;
-                        axios.patch('/collections/'+ encodeURIComponent(collection) + "/index/"+encodeURIComponent(key)+"/findBy/"+encodeURIComponent(value), patch)
+                        let payload = {
+                            "mode": "unique",
+                            "field": key,
+                            "value": value,
+                            "patch": patch,
+                        };
+                        axios.post('/v1/collections/'+ encodeURIComponent(collection) + ':patch', payload)
                             .then(function(resp) {
                                 that.item = resp.data;
                                 that.item_patch = '{\n\n}';
@@ -556,7 +585,12 @@
                     },
                     deleteItemClick() {
                         var that = this;
-                        axios.delete('/collections/'+ encodeURIComponent(that.collection_name) + "/index/"+encodeURIComponent(that.find_by_index)+"/findBy/"+encodeURIComponent(that.find_by_value))
+                        let payload = {
+                            "mode": "unique",
+                            "field": that.find_by_index,
+                            "value": that.find_by_value,
+                        };
+                        axios.post('/v1/collections/'+ encodeURIComponent(that.collection_name) + ':remove', payload)
                             .then(function(resp) {
                                 that.item = null;
                                 that.find_by_value = '';

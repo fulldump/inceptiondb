@@ -11,7 +11,7 @@ import (
 	"github.com/fulldump/box"
 )
 
-func recoverFromPanic(next box.H) box.H {
+func RecoverFromPanic(next box.H) box.H {
 	return func(ctx context.Context) {
 		go func() {
 			if err := recover(); err != nil {
@@ -22,13 +22,17 @@ func recoverFromPanic(next box.H) box.H {
 	}
 }
 
-func accessLog(l *log.Logger) box.I {
+func AccessLog(l *log.Logger) box.I {
 	return func(next box.H) box.H {
 		return func(ctx context.Context) {
 			r := box.GetRequest(ctx)
+			action := ""
+			if boxAction := box.GetBoxContext(ctx).Action; boxAction != nil {
+				action = boxAction.Name
+			}
 			now := time.Now()
 			defer func() {
-				l.Println(now.UTC().Format(time.RFC3339Nano), formatRemoteAddr(r), r.Method, r.URL.String(), time.Since(now))
+				l.Println(now.UTC().Format(time.RFC3339Nano), formatRemoteAddr(r), r.Method, r.URL.String(), time.Since(now), action)
 			}()
 
 			next(ctx)

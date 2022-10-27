@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/fulldump/box"
 
@@ -36,7 +37,7 @@ func interceptorPrintError(next box.H) box.H {
 	}
 }
 
-func interceptorUnavailable(db *database.Database) box.I {
+func InterceptorUnavailable(db *database.Database) box.I {
 	return func(next box.H) box.H {
 		return func(ctx context.Context) {
 
@@ -51,5 +52,60 @@ func interceptorUnavailable(db *database.Database) box.I {
 			}
 			next(ctx)
 		}
+	}
+}
+
+func PrettyErrorInterceptor(next box.H) box.H {
+	return func(ctx context.Context) {
+
+		next(ctx)
+
+		err := box.GetError(ctx)
+		if err == nil {
+			return
+		}
+		w := box.GetResponse(ctx)
+
+		if err == box.ErrResourceNotFound {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message":     err.Error(),
+					"description": fmt.Sprintf("resource '%s' not found", box.GetRequest(ctx).URL.String()),
+				},
+			})
+			return
+		}
+
+		if err == box.ErrMethodNotAllowed {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message":     err.Error(),
+					"description": fmt.Sprintf("method '%s' not allowed", box.GetRequest(ctx).Method),
+				},
+			})
+			return
+		}
+
+		if _, ok := err.(*json.SyntaxError); ok {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message":     err.Error(),
+					"description": "Malformed JSON",
+				},
+			})
+			return
+		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"message":     err.Error(),
+				"description": "Unexpected error",
+			},
+		})
+
 	}
 }

@@ -1,0 +1,9 @@
+
+# IDES
+/.idea
+
+# Go
+/bin
+
+#mac os
+.DS_Store

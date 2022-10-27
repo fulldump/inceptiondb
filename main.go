@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -34,10 +35,18 @@ func main() {
 
 	c := configuration.Default()
 	goconfig.Read(&c)
-	d := database.NewDatabase(&database.Config{
+	db := database.NewDatabase(&database.Config{
 		Dir: c.Dir,
 	})
-	b := api.Build(d, c.Dir, c.Statics)
+	b := api.Build(db, c.Statics)
+	accessLogger := log.New(os.Stdout, "ACCESS: ", log.Lshortfile)
+	b.WithInterceptors(
+		api.AccessLog(accessLogger),
+		api.InterceptorUnavailable(db),
+		api.RecoverFromPanic,
+		api.PrettyErrorInterceptor,
+	)
+
 	s := &http.Server{
 		Addr:    c.HttpAddr,
 		Handler: box.Box2Http(b),
@@ -49,7 +58,7 @@ func main() {
 		for {
 			sig := <-signalChan
 			fmt.Println("Signal received", sig.String())
-			d.Stop()
+			db.Stop()
 			s.Shutdown(context.Background())
 		}
 	}()
@@ -59,7 +68,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := d.Start()
+		err := db.Start()
 		if err != nil {
 			fmt.Println(err.Error())
 		}

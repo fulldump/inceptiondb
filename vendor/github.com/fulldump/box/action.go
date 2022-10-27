@@ -2,6 +2,8 @@ package box
 
 import "net/http"
 
+const HttpMethodAny = "*"
+
 // An A stands for Action
 type A struct {
 	Attr
@@ -76,6 +78,9 @@ func Options(handler interface{}) *A {
 }
 func Trace(handler interface{}) *A {
 	return actionBound(handler, http.MethodTrace)
+}
+func AnyMethod(handler interface{}) *A {
+	return actionBound(handler, HttpMethodAny)
 }
 
 // WithName overwrite default action name
