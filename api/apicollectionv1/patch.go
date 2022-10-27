@@ -48,14 +48,14 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 var patchModes = map[string]func(input []byte, col *collection.Collection, w http.ResponseWriter) error{
 	"fullscan": func(input []byte, col *collection.Collection, w http.ResponseWriter) error {
-		return traverseFullscan(input, col, patchRow(input, col))
+		return traverseFullscan(input, col, patchRow(input, col, json.NewEncoder(w)))
 	},
 	"unique": func(input []byte, col *collection.Collection, w http.ResponseWriter) (err error) {
-		return traverseUnique(input, col, patchRow(input, col))
+		return traverseUnique(input, col, patchRow(input, col, json.NewEncoder(w)))
 	},
 }
 
-func patchRow(input []byte, col *collection.Collection) func(row *collection.Row) {
+func patchRow(input []byte, col *collection.Collection, e *json.Encoder) func(row *collection.Row) {
 	return func(row *collection.Row) {
 		patch := struct {
 			Patch interface{}
@@ -63,5 +63,6 @@ func patchRow(input []byte, col *collection.Collection) func(row *collection.Row
 		json.Unmarshal(input, &patch) // TODO: handle err
 
 		_ = col.Patch(row, patch.Patch) // TODO: handle err
+		e.Encode(row.Payload)
 	}
 }

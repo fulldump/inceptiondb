@@ -31,10 +31,14 @@ Host: example.com
 }
 
 HTTP/1.1 200 OK
-Content-Length: 0
+Content-Length: 26
+Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
-
+{
+    "id": "3",
+    "name": "Pedro"
+}
 ```
 
 

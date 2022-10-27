@@ -38,7 +38,7 @@ func main() {
 	db := database.NewDatabase(&database.Config{
 		Dir: c.Dir,
 	})
-	b := api.Build(db, c.Dir, c.Statics)
+	b := api.Build(db, c.Statics)
 	accessLogger := log.New(os.Stdout, "ACCESS: ", log.Lshortfile)
 	b.WithInterceptors(
 		api.AccessLog(accessLogger),

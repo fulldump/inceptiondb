@@ -21,7 +21,7 @@ func TestAcceptance(t *testing.T) {
 		biff.AssertNil(db.Load())
 		biff.AssertEqual(db.GetStatus(), database.StatusOperating)
 
-		b := Build(db, "", "test-version")
+		b := Build(db, "")
 		b.WithInterceptors(
 			InterceptorUnavailable(db),
 			RecoverFromPanic,
