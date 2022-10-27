@@ -11,7 +11,7 @@ import (
 	"github.com/fulldump/box"
 )
 
-func recoverFromPanic(next box.H) box.H {
+func RecoverFromPanic(next box.H) box.H {
 	return func(ctx context.Context) {
 		go func() {
 			if err := recover(); err != nil {

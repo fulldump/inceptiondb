@@ -43,6 +43,8 @@ func main() {
 	b.WithInterceptors(
 		api.AccessLog(accessLogger),
 		api.InterceptorUnavailable(db),
+		api.RecoverFromPanic,
+		api.PrettyErrorInterceptor,
 	)
 
 	s := &http.Server{

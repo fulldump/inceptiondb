@@ -15,14 +15,16 @@ Host: example.com
 
 
 
-HTTP/1.1 200 OK
-Content-Length: 35
+HTTP/1.1 404 Not Found
+Content-Length: 78
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
-    "name": "my-collection",
-    "total": 0
+    "error": {
+        "description": "Unexpected error",
+        "message": "collection not found"
+    }
 }
 ```
 

@@ -3,18 +3,18 @@ package apicollectionv1
 import (
 	"context"
 	"net/http"
-
-	"github.com/fulldump/inceptiondb/service"
 )
 
-func listCollections(s service.Servicer) interface{} {
-	return func(ctx context.Context, w http.ResponseWriter) (interface{}, error) {
+func listCollections(ctx context.Context, w http.ResponseWriter) ([]*CollectionResponse, error) {
 
-		result, err := s.ListCollections()
-		if err != nil {
-			return nil, err // todo: wrap this?
-		}
+	s := GetServicer(ctx)
 
-		return result, nil
+	response := []*CollectionResponse{}
+	for name, collection := range s.ListCollections() {
+		response = append(response, &CollectionResponse{
+			Name:  name,
+			Total: len(collection.Rows),
+		})
 	}
+	return response, nil
 }

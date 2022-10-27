@@ -16,13 +16,10 @@ Host: example.com
 
 
 HTTP/1.1 200 OK
-Content-Length: 31
-Content-Type: text/plain; charset=utf-8
+Content-Length: 0
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
-{
-    "error": "method_not_allowed"
-}
+
 ```
 
 

@@ -1,6 +1,6 @@
 module github.com/fulldump/inceptiondb
 
-go 1.17
+go 1.18
 
 require (
 	github.com/SierraSoftworks/connor v1.0.2

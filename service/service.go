@@ -1,7 +1,10 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"path"
 
 	"github.com/fulldump/inceptiondb/collection"
@@ -22,8 +25,7 @@ func NewService(db *database.Database) *Service {
 
 var ErrorCollectionAlreadyExists = errors.New("collection already exists")
 
-func (s *Service) CreateCollection(name string) (*Collection, error) {
-
+func (s *Service) CreateCollection(name string) (*collection.Collection, error) {
 	_, exist := s.collections[name]
 	if exist {
 		return nil, ErrorCollectionAlreadyExists
@@ -38,32 +40,58 @@ func (s *Service) CreateCollection(name string) (*Collection, error) {
 
 	s.collections[name] = collection
 
-	return &Collection{
-		Name: name,
-	}, nil
+	return collection, nil
 }
 
-func (s *Service) GetCollection(name string) (*Collection, error) {
+func (s *Service) GetCollection(name string) (*collection.Collection, error) {
 	collection, exist := s.collections[name]
 	if !exist {
 		return nil, ErrorCollectionNotFound
 	}
 
-	return &Collection{
-		Name:  name,
-		Total: len(collection.Rows),
-	}, nil
+	return collection, nil
 }
 
-func (s *Service) ListCollections() ([]*Collection, error) {
-	result := []*Collection{}
+func (s *Service) ListCollections() map[string]*collection.Collection {
+	return s.collections
+}
 
-	for k, collection := range s.collections {
-		result = append(result, &Collection{
-			Name:  k,
-			Total: len(collection.Rows),
-		})
+func (s *Service) DeleteCollection(name string) error {
+	return s.db.DropCollection(name)
+}
+
+var ErrorInsertBadJson = errors.New("insert bad json")
+var ErrorInsertConflict = errors.New("insert conflict")
+
+func (s *Service) Insert(name string, data io.Reader) error {
+
+	collection, exists := s.db.Collections[name]
+	if !exists {
+		// TODO: here create collection :D
+		return ErrorCollectionNotFound
 	}
 
-	return result, nil
+	jsonReader := json.NewDecoder(data)
+
+	for {
+		item := map[string]interface{}{}
+		err := jsonReader.Decode(&item)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			// TODO: handle error properly
+			fmt.Println("ERROR:", err.Error())
+			return ErrorInsertBadJson
+		}
+		_, err = collection.Insert(item)
+		if err != nil {
+			// TODO: handle error properly
+			return ErrorInsertConflict
+		}
+
+		// jsonWriter.Encode(item)
+	}
+
+	return nil
 }

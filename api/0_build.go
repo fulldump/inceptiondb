@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+
 	"github.com/fulldump/box"
 
 	"github.com/fulldump/inceptiondb/api/apicollectionv1"
@@ -14,11 +16,6 @@ func Build(db *database.Database, dataDir string, staticsDir string) *box.B { //
 	collections := db.Collections
 
 	b := box.NewBox()
-
-	b.WithInterceptors(
-		recoverFromPanic,
-		interceptorPrintError,
-	)
 
 	b.Resource("collections").
 		WithActions(
@@ -58,7 +55,14 @@ func Build(db *database.Database, dataDir string, staticsDir string) *box.B { //
 
 	v1 := b.Resource("/v1")
 	s := service.NewService(db)
-	apicollectionv1.BuildV1Collection(v1, s)
+	collectionsEndpoint := apicollectionv1.BuildV1Collection(v1, s)
+	collectionsEndpoint.WithInterceptors(
+		func(next box.H) box.H {
+			return func(ctx context.Context) {
+				next(apicollectionv1.SetServicer(ctx, s))
+			}
+		},
+	)
 
 	// Mount statics
 	b.Resource("/*").

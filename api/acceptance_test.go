@@ -22,6 +22,11 @@ func TestAcceptance(t *testing.T) {
 		biff.AssertEqual(db.GetStatus(), database.StatusOperating)
 
 		b := Build(db, "", "test-version")
+		b.WithInterceptors(
+			InterceptorUnavailable(db),
+			RecoverFromPanic,
+			PrettyErrorInterceptor,
+		)
 
 		api := apitest.NewWithHandler(b)
 
