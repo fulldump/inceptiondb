@@ -11,10 +11,10 @@ import (
 
 type JSON = map[string]interface{}
 
-func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *apitest.Request) {
+func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request) {
 
 	a.Alternative("Create collection", func(a *biff.A) {
-		resp := apiRequest("POST", base+"/collections").
+		resp := apiRequest("POST", "/collections").
 			WithBodyJson(JSON{
 				"name": "my-collection",
 			}).Do()
@@ -28,7 +28,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 		biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
 		a.Alternative("Retrieve collection", func(a *biff.A) {
-			resp := apiRequest("GET", base+"/collections/my-collection").
+			resp := apiRequest("GET", "/collections/my-collection").
 				WithBodyJson(JSON{
 					"name": "my-collection", // TODO: remove
 				}).Do()
@@ -43,7 +43,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 		})
 
 		a.Alternative("List collections", func(a *biff.A) {
-			resp := apiRequest("GET", base+"/collections").Do()
+			resp := apiRequest("GET", "/collections").Do()
 			Save(resp, "List collections", ``)
 
 			biff.AssertEqual(resp.StatusCode, http.StatusOK)
@@ -57,14 +57,14 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 		})
 
 		a.Alternative("Drop collection", func(a *biff.A) {
-			resp := apiRequest("POST", base+"/collections/my-collection:dropCollection").
+			resp := apiRequest("POST", "/collections/my-collection:dropCollection").
 				Do()
 			Save(resp, "Drop collection", ``)
 
 			biff.AssertEqual(resp.StatusCode, http.StatusOK)
 
 			a.Alternative("Get dropped collection", func(a *biff.A) {
-				resp := apiRequest("GET", base+"/collections/my-collection").
+				resp := apiRequest("GET", "/collections/my-collection").
 					Do()
 				Save(resp, "Get collection - not found", ``)
 
@@ -78,7 +78,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 				"name":    "Fulanez",
 				"address": "Elm Street 11",
 			}
-			resp := apiRequest("POST", base+"/collections/my-collection:insert").
+			resp := apiRequest("POST", "/collections/my-collection:insert").
 				WithBodyJson(myDocument).Do()
 			Save(resp, "Insert one", ``)
 
@@ -86,7 +86,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 			biff.AssertEqual(resp.BodyString(), "")
 
 			a.Alternative("Find with fullscan", func(a *biff.A) {
-				resp := apiRequest("POST", base+"/collections/my-collection:find").
+				resp := apiRequest("POST", "/collections/my-collection:find").
 					WithBodyJson(JSON{
 						"mode":  "fullscan",
 						"limit": 0,
@@ -116,17 +116,17 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 				myDocument, _ := json.Marshal(myDocument)
 				body += string(myDocument) + "\n"
 			}
-			resp := apiRequest("POST", base+"/collections/my-collection:insert").
+			resp := apiRequest("POST", "/collections/my-collection:insert").
 				WithBodyString(body).Do()
 			Save(resp, "Insert many", ``)
 
 			a.Alternative("Create index", func(a *biff.A) {
-				resp := apiRequest("POST", base+"/collections/my-collection:createIndex").
+				resp := apiRequest("POST", "/collections/my-collection:createIndex").
 					WithBodyJson(JSON{"field": "id", "sparse": true}).Do()
 				Save(resp, "Create index", ``)
 
 				a.Alternative("Delete by index", func(a *biff.A) {
-					resp := apiRequest("POST", base+"/collections/my-collection:remove").
+					resp := apiRequest("POST", "/collections/my-collection:remove").
 						WithBodyJson(JSON{
 							"mode":  "unique",
 							"field": "id",
@@ -138,7 +138,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 					biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				})
 				a.Alternative("Patch by index", func(a *biff.A) {
-					resp := apiRequest("POST", base+"/collections/my-collection:patch").
+					resp := apiRequest("POST", "/collections/my-collection:patch").
 						WithBodyJson(JSON{
 							"mode":  "unique",
 							"field": "id",
@@ -153,7 +153,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 					biff.AssertEqual(resp.StatusCode, http.StatusOK)
 
 					{
-						resp = apiRequest("POST", base+"/collections/my-collection:find").
+						resp = apiRequest("POST", "/collections/my-collection:find").
 							WithBodyJson(JSON{"limit": 10}).Do()
 						Save(resp, "Find - fullscan with limit 10", ``)
 
@@ -178,7 +178,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 			a.Alternative("Delete by fullscan", func(a *biff.A) {
 
 				{
-					resp := apiRequest("POST", base+"/collections/my-collection:remove").
+					resp := apiRequest("POST", "/collections/my-collection:remove").
 						WithBodyJson(JSON{
 							"limit": 10,
 							"filter": JSON{
@@ -201,7 +201,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 				}
 
 				{
-					resp = apiRequest("POST", base+"/collections/my-collection:find").
+					resp = apiRequest("POST", "/collections/my-collection:find").
 						WithBodyJson(JSON{}).Do()
 
 					dec := json.NewDecoder(strings.NewReader(resp.BodyString()))
@@ -221,7 +221,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 			a.Alternative("Patch by fullscan", func(a *biff.A) {
 
 				{
-					resp := apiRequest("POST", base+"/collections/my-collection:patch").
+					resp := apiRequest("POST", "/collections/my-collection:patch").
 						WithBodyJson(JSON{
 							"limit": 10,
 							"filter": JSON{
@@ -238,7 +238,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 				}
 
 				{
-					resp = apiRequest("POST", base+"/collections/my-collection:find").
+					resp = apiRequest("POST", "/collections/my-collection:find").
 						WithBodyJson(JSON{"limit": 10}).Do()
 
 					dec := json.NewDecoder(strings.NewReader(resp.BodyString()))
@@ -260,7 +260,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 		})
 
 		a.Alternative("Create index", func(a *biff.A) {
-			resp := apiRequest("POST", base+"/collections/my-collection:createIndex").
+			resp := apiRequest("POST", "/collections/my-collection:createIndex").
 				WithBodyJson(JSON{"field": "id", "sparse": true}).Do()
 
 			expectedBody := JSON{"field": "id", "name": "id", "sparse": true}
@@ -268,7 +268,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
 			a.Alternative("Get index", func(a *biff.A) {
-				resp := apiRequest("POST", base+"/collections/my-collection:getIndex").
+				resp := apiRequest("POST", "/collections/my-collection:getIndex").
 					WithBodyJson(JSON{
 						"name": "id",
 					}).Do()
@@ -279,7 +279,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 			})
 
 			a.Alternative("List indexes", func(a *biff.A) {
-				resp := apiRequest("POST", base+"/collections/my-collection:listIndexes").Do()
+				resp := apiRequest("POST", "/collections/my-collection:listIndexes").Do()
 				Save(resp, "List indexes", ``)
 
 				expectedBody := []JSON{{"field": "id", "name": "id", "sparse": true}}
@@ -294,9 +294,9 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 					"address": "Elm Street 11",
 				}
 
-				apiRequest("POST", base+"/collections/my-collection:insert").
+				apiRequest("POST", "/collections/my-collection:insert").
 					WithBodyJson(myDocument).Do()
-				resp := apiRequest("POST", base+"/collections/my-collection:insert").
+				resp := apiRequest("POST", "/collections/my-collection:insert").
 					WithBodyJson(myDocument).Do()
 				Save(resp, "Insert - unique index conflict", ``)
 
@@ -317,10 +317,10 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 					"name":    "Fulanez",
 					"address": "Elm Street 11",
 				}
-				apiRequest("POST", base+"/collections/my-collection:insert").
+				apiRequest("POST", "/collections/my-collection:insert").
 					WithBodyJson(myDocument).Do()
 
-				resp := apiRequest("POST", base+"/collections/my-collection:find").
+				resp := apiRequest("POST", "/collections/my-collection:find").
 					WithBodyJson(JSON{
 						"mode":  "unique",
 						"field": "id",
@@ -336,7 +336,7 @@ func Acceptance(a *biff.A, base string, apiRequest func(method, path string) *ap
 
 		a.Alternative("Find with {invalid} mode", func(a *biff.A) {
 
-			resp := apiRequest("POST", base+"/collections/my-collection:find").
+			resp := apiRequest("POST", "/collections/my-collection:find").
 				WithBodyJson(JSON{
 					"mode": "{invalid}",
 				}).Do()

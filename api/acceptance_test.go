@@ -30,8 +30,8 @@ func TestAcceptance(t *testing.T) {
 
 		api := apitest.NewWithHandler(b)
 
-		service.Acceptance(a, "/v1", func(method, path string) *apitest.Request {
-			return api.Request(method, path)
+		service.Acceptance(a, func(method, path string) *apitest.Request {
+			return api.Request(method, "/v1"+path)
 		})
 
 	})
