@@ -7,6 +7,7 @@ import (
 	"github.com/fulldump/box"
 
 	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/service"
 )
 
 func createIndex(ctx context.Context, options *collection.IndexOptions) (*listIndexesItem, error) {
@@ -14,6 +15,9 @@ func createIndex(ctx context.Context, options *collection.IndexOptions) (*listIn
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
 	collection, err := s.GetCollection(collectionName)
+	if err == service.ErrorCollectionNotFound {
+		collection, err = s.CreateCollection(collectionName)
+	}
 	if err != nil {
 		return nil, err // todo: handle/wrap this properly
 	}

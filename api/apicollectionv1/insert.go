@@ -8,6 +8,8 @@ import (
 	"net/http"
 
 	"github.com/fulldump/box"
+
+	"github.com/fulldump/inceptiondb/service"
 )
 
 func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -15,8 +17,10 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
 	collection, err := s.GetCollection(collectionName)
+	if err == service.ErrorCollectionNotFound {
+		collection, err = s.CreateCollection(collectionName)
+	}
 	if err != nil {
-		// TODO: autocreate collection?
 		return err // todo: handle/wrap this properly
 	}
 

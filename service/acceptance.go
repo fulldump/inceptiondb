@@ -355,4 +355,37 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 	})
 
+	a.Alternative("Insert on not existing collection", func(a *biff.A) {
+
+		myDocument := JSON{
+			"id": "my-id",
+		}
+		resp := apiRequest("POST", "/collections/my-collection:insert").
+			WithBodyJson(myDocument).Do()
+
+		biff.AssertEqual(resp.BodyString(), "")
+		biff.AssertEqual(resp.StatusCode, http.StatusCreated)
+
+		a.Alternative("List collection", func(a *biff.A) {
+
+			resp := apiRequest("POST", "/collections/my-collection:find").
+				WithBodyJson(JSON{}).Do()
+
+			biff.AssertEqual(resp.BodyString(), "{\"id\":\"my-id\"}\n")
+			biff.AssertEqual(resp.StatusCode, http.StatusOK)
+
+		})
+
+	})
+
+	a.Alternative("Create index on not existing collection", func(a *biff.A) {
+
+		resp := apiRequest("POST", "/collections/my-collection:createIndex").
+			WithBodyJson(JSON{
+				"field": "id",
+			}).Do()
+
+		biff.AssertEqual(resp.StatusCode, http.StatusCreated)
+	})
+
 }
