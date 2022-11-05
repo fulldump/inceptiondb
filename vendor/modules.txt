@@ -18,6 +18,9 @@ github.com/fulldump/box
 # github.com/fulldump/goconfig v1.6.1
 ## explicit; go 1.5
 github.com/fulldump/goconfig
+# github.com/google/btree v1.1.2
+## explicit; go 1.18
+github.com/google/btree
 # github.com/google/uuid v1.3.0
 ## explicit
 github.com/google/uuid
