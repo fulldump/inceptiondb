@@ -201,6 +201,10 @@ func (c *Collection) indexRows(options *IndexOptions) error {
 // Constraints: values can be only scalar strings or array of strings
 func (c *Collection) Index(options *IndexOptions) error {
 
+	if _, exists := c.Indexes[options.Field]; exists {
+		return fmt.Errorf("index '%s' already exists", options.Field)
+	}
+
 	err := c.indexRows(options)
 	if err != nil {
 		return err
