@@ -2,11 +2,15 @@ package collection
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	. "github.com/fulldump/biff"
+	"github.com/google/uuid"
 )
 
 func TestInsert(t *testing.T) {
@@ -98,19 +102,28 @@ func TestIndex(t *testing.T) {
 
 		// Run
 		c.Index(&CreateIndexOptions{
-			Name:       "id",
+			Name:       "my-index",
 			Kind:       "map",
 			Parameters: json.RawMessage(`{"field":"id"}`),
 		})
 
 		// Check
 		user := &User{}
-		c.Indexes["id"].Traverse([]byte(`{"value":"2"}`), func(row *Row) bool {
+		c.Indexes["my-index"].Traverse([]byte(`{"value":"2"}`), func(row *Row) bool {
 			json.Unmarshal(row.Payload, &user)
 			return false
 		})
 		AssertEqual(user.Name, "Sara")
 	})
+}
+
+func findByIndex(index Index, options string, value interface{}) (n int) {
+	index.Traverse([]byte(options), func(row *Row) bool {
+		n++
+		json.Unmarshal(row.Payload, &value)
+		return false
+	})
+	return
 }
 
 func TestInsertAfterIndex(t *testing.T) {
@@ -120,18 +133,21 @@ func TestInsertAfterIndex(t *testing.T) {
 	}
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		//
-		// // Run
-		// c.Index(&IndexMapOptions{Field: "id"})
-		// c.Insert(&User{"1", "Pablo"})
-		//
-		// // Check
-		// user := &User{}
-		// errFindBy := c.FindBy("id", "1", user)
-		// AssertNil(errFindBy)
-		// AssertEqual(user.Name, "Pablo")
+		// Setup
+		c, _ := OpenCollection(filename)
+
+		// Run
+		c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"id"}`),
+		})
+		c.Insert(&User{"1", "Pablo"})
+
+		// Check
+		user := &User{}
+		findByIndex(c.Indexes["my-index"], `{"value":"1"}`, user)
+		AssertEqual(user.Name, "Pablo")
 	})
 }
 
@@ -142,51 +158,66 @@ func TestIndexMultiValue(t *testing.T) {
 	}
 	Environment(func(filename string) {
 
-		// // Setup
-		// newUser := &User{"1", []string{"pablo@hotmail.com", "p18@yahoo.com"}}
-		// c, _ := OpenCollection(filename)
-		// c.Insert(newUser)
-		//
-		// // Run
-		// indexErr := c.Index(&IndexMapOptions{Field: "email"})
-		//
-		// // Check
-		// AssertNil(indexErr)
-		// u := &User{}
-		// c.FindBy("email", "p18@yahoo.com", u)
-		// AssertEqual(u.Id, newUser.Id)
+		// Setup
+		newUser := &User{"1", []string{"pablo@hotmail.com", "p18@yahoo.com"}}
+		c, _ := OpenCollection(filename)
+		c.Insert(newUser)
+
+		// Run
+		indexErr := c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"email"}`),
+		})
+
+		// Check
+		AssertNil(indexErr)
+		u := &User{}
+		findByIndex(c.Indexes["my-index"], `{"value":"p18@yahoo.com"}`, u)
+		AssertEqual(u.Id, newUser.Id)
 	})
 }
 
+// TODO: this should be a unit test for IndexMap
 func TestIndexSparse(t *testing.T) {
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// c.Insert(map[string]interface{}{"id": "1"})
-		//
-		// // Run
-		// errIndex := c.Index(&IndexMapOptions{Field: "email", Sparse: true})
-		//
-		// // Check
-		// AssertNil(errIndex)
-		// AssertEqual(len(c.Indexes["email"].Entries), 0)
+		// Setup
+		c, _ := OpenCollection(filename)
+		row, err := c.Insert(map[string]interface{}{"id": "1"})
+
+		// Run
+		errIndex := c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"email", "sparse":true}`),
+		})
+
+		// Check
+		AssertNil(errIndex)
+		AssertNotNil(row)
+		AssertNil(err)
+		AssertEqual(len(c.Indexes["my-index"].(*IndexMap).Entries), 0)
 	})
 }
 
 func TestIndexNonSparse(t *testing.T) {
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// c.Insert(map[string]interface{}{"id": "1"})
-		//
-		// // Run
-		// errIndex := c.Index(&IndexMapOptions{Field: "email", Sparse: false})
-		//
-		// // Check
-		// AssertNotNil(errIndex)
-		// AssertEqual(errIndex.Error(), "index row: field `email` is indexed and mandatory, data: {\"id\":\"1\"}")
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Insert(map[string]interface{}{"id": "1"})
+
+		// Run
+		errIndex := c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"email", "sparse":false}`),
+		})
+
+		// Check
+		AssertNotNil(errIndex)
+		AssertEqual(errIndex.Error(), "index row: field `email` is indexed and mandatory, data: {\"id\":\"1\"}")
 	})
 }
 
@@ -197,41 +228,49 @@ func TestCollection_Index_Collision(t *testing.T) {
 	}
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// c.Insert(&User{"1", "Pablo"})
-		// c.Insert(&User{"1", "Sara"})
-		//
-		// // Run
-		// err := c.Index(&IndexMapOptions{Field: "id"})
-		//
-		// // Check
-		// AssertNotNil(err)
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Insert(&User{"1", "Pablo"})
+		c.Insert(&User{"1", "Sara"})
+
+		// Run
+		errIndex := c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"id"}`),
+		})
+
+		// Check
+		AssertNotNil(errIndex)
+		AssertEqual(errIndex.Error(), `index row: index conflict: field 'id' with value '1', data: {"id":"1","name":"Sara"}`)
 	})
 }
 
 func TestPersistenceInsertAndIndex(t *testing.T) {
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
-		// c.Index(&IndexMapOptions{Field: "email"})
-		// c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
-		// c.Close()
-		//
-		// // Run
-		// c, _ = OpenCollection(filename)
-		// user := struct {
-		// 	Id    string
-		// 	Name  string
-		// 	Email []string
-		// }{}
-		// findByErr := c.FindBy("email", "sara@email.com", &user)
-		//
-		// // Check
-		// AssertNil(findByErr)
-		// AssertEqual(user.Id, "2")
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+		c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"email"}`),
+		})
+		c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
+		c.Close()
+
+		// Run
+		c, _ = OpenCollection(filename)
+		user := struct {
+			Id    string
+			Name  string
+			Email []string
+		}{}
+		findByIndex(c.Indexes["my-index"], `{"value":"sara@email.com"}`, &user)
+
+		// Check
+		AssertEqual(user.Id, "2")
 
 	})
 }
@@ -239,31 +278,32 @@ func TestPersistenceInsertAndIndex(t *testing.T) {
 func TestPersistenceDelete(t *testing.T) {
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// c.Index(&IndexMapOptions{Field: "email"})
-		// c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
-		// row, _ := c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
-		// c.Insert(map[string]interface{}{"id": "3", "name": "Ana", "email": []string{"ana@email.com", "ana@yahoo.com"}})
-		// err := c.Remove(row)
-		// AssertNil(err)
-		// c.Close()
-		//
-		// // Run
-		// c, _ = OpenCollection(filename)
-		// user := struct {
-		// 	Id    string
-		// 	Name  string
-		// 	Email []string
-		// }{}
-		// findByErr := c.FindBy("email", "sara@email.com", &user)
-		//
-		// // Check
-		// AssertNotNil(findByErr)
-		// AssertEqual(findByErr.Error(), "email 'sara@email.com' not found")
-		//
-		// AssertEqual(len(c.Rows), 2)
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"email"}`),
+		})
+		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+		row, _ := c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
+		c.Insert(map[string]interface{}{"id": "3", "name": "Ana", "email": []string{"ana@email.com", "ana@yahoo.com"}})
+		err := c.Remove(row)
+		AssertNil(err)
+		c.Close()
 
+		// Run
+		c, _ = OpenCollection(filename)
+		user := struct {
+			Id    string
+			Name  string
+			Email []string
+		}{}
+		n := findByIndex(c.Indexes["my-index"], `{"value":"sara@email.com"}`, &user)
+
+		// Check
+		AssertEqual(n, 0)
+		AssertEqual(len(c.Rows), 2)
 	})
 }
 
@@ -271,19 +311,23 @@ func TestPersistenceDelete(t *testing.T) {
 func TestPersistenceDeleteTwice(t *testing.T) {
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// c.Index(&IndexMapOptions{Field: "id"})
-		// row, _ := c.Insert(map[string]interface{}{"id": "1"})
-		// c.Remove(row)
-		// c.Close()
-		//
-		// // Run
-		// c, _ = OpenCollection(filename)
-		//
-		// AssertEqual(len(c.Rows), 0)
-		//
-		// // TODO: assert this somehow!
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"id"}`),
+		})
+		row, _ := c.Insert(map[string]interface{}{"id": "1"})
+		c.Remove(row)
+		c.Close()
+
+		// Run
+		c, _ = OpenCollection(filename)
+
+		AssertEqual(len(c.Rows), 0)
+
+		// TODO: assert this somehow!
 
 	})
 }
@@ -291,28 +335,31 @@ func TestPersistenceDeleteTwice(t *testing.T) {
 func TestPersistenceUpdate(t *testing.T) {
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// c.Index(&IndexMapOptions{Field: "id"})
-		// row, _ := c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
-		// c.Patch(row, map[string]interface{}{"name": "Jaime"})
-		// c.Close()
-		//
-		// // Run
-		// c, _ = OpenCollection(filename)
-		// user := struct {
-		// 	Id    string
-		// 	Name  string
-		// 	Email []string
-		// }{}
-		// findByErr := c.FindBy("id", "1", &user)
-		//
-		// // Check
-		// AssertNil(findByErr)
-		// AssertEqual(user.Name, "Jaime")
-		//
-		// AssertEqual(len(c.Rows), 1)
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Index(&CreateIndexOptions{
+			Name:       "my-index",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"id"}`),
+		})
+		row, _ := c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
+		c.Patch(row, map[string]interface{}{"name": "Jaime"})
+		c.Close()
 
+		// Run
+		c, _ = OpenCollection(filename)
+		user := struct {
+			Id    string
+			Name  string
+			Email []string
+		}{}
+		n := findByIndex(c.Indexes["my-index"], `{"value":"1"}`, &user)
+
+		// Check
+		AssertEqual(n, 1)
+		AssertEqual(user.Name, "Jaime")
+
+		AssertEqual(len(c.Rows), 1)
 	})
 }
 
@@ -321,25 +368,29 @@ func TestInsert1M_serial(t *testing.T) {
 	t.Skip()
 
 	Environment(func(filename string) {
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// defer c.Close()
-		//
-		// c.Index(&IndexMapOptions{
-		// 	Field: "uuid",
-		// })
-		// c.Index(&IndexMapOptions{
-		// 	Field: "i",
-		// })
-		//
-		// // Run
-		// n := 1000 * 1000
-		// for i := 0; i < n; i++ {
-		// 	c.Insert(map[string]interface{}{"uuid": uuid.New().String(), "hello": "world", "i": strconv.Itoa(i)})
-		// }
-		//
-		// // Check
-		// AssertEqual(len(c.Rows), n)
+		// Setup
+		c, _ := OpenCollection(filename)
+		defer c.Close()
+
+		c.Index(&CreateIndexOptions{
+			Name:       "index1",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"uuid"}`),
+		})
+		c.Index(&CreateIndexOptions{
+			Name:       "index2",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"i"}`),
+		})
+
+		// Run
+		n := 1000 * 1000
+		for i := 0; i < n; i++ {
+			c.Insert(map[string]interface{}{"uuid": uuid.New().String(), "hello": "world", "i": strconv.Itoa(i)})
+		}
+
+		// Check
+		AssertEqual(len(c.Rows), n)
 	})
 
 }
@@ -350,39 +401,43 @@ func TestInsert1M_concurrent(t *testing.T) {
 
 	Environment(func(filename string) {
 
-		// // Setup
-		// c, _ := OpenCollection(filename)
-		// defer c.Close()
-		//
-		// c.Index(&IndexMapOptions{
-		// 	Field: "uuid",
-		// })
-		// c.Index(&IndexMapOptions{
-		// 	Field: "i",
-		// })
-		//
-		// // Run
-		// t0 := time.Now()
-		// wg := &sync.WaitGroup{}
-		// workers := 128
-		// n := 2 * 1000 * 1000 / workers
-		// for w := 0; w < workers; w++ {
-		// 	wg.Add(1)
-		// 	go func(w int) {
-		// 		defer wg.Done()
-		// 		for i := 0; i < n; i++ {
-		// 			c.Insert(map[string]interface{}{"uuid": uuid.New().String(), "hello": "world", "i": strconv.Itoa(i + n*w)})
-		// 		}
-		// 	}(w)
-		// }
-		//
-		// wg.Wait()
-		// delay := time.Since(t0)
-		//
-		// // Check
-		// AssertEqual(len(c.Rows), n*workers)
-		// fmt.Println("delay", delay)
-		// fmt.Println("throughput (inserts/second)", float64(n*workers)/delay.Seconds())
+		// Setup
+		c, _ := OpenCollection(filename)
+		defer c.Close()
+
+		c.Index(&CreateIndexOptions{
+			Name:       "index1",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"uuid"}`),
+		})
+		c.Index(&CreateIndexOptions{
+			Name:       "index2",
+			Kind:       "map",
+			Parameters: json.RawMessage(`{"field":"i"}`),
+		})
+
+		// Run
+		t0 := time.Now()
+		wg := &sync.WaitGroup{}
+		workers := 128
+		n := 2 * 1000 * 1000 / workers
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func(w int) {
+				defer wg.Done()
+				for i := 0; i < n; i++ {
+					c.Insert(map[string]interface{}{"uuid": uuid.New().String(), "hello": "world", "i": strconv.Itoa(i + n*w)})
+				}
+			}(w)
+		}
+
+		wg.Wait()
+		delay := time.Since(t0)
+
+		// Check
+		AssertEqual(len(c.Rows), n*workers)
+		fmt.Println("delay", delay)
+		fmt.Println("throughput (inserts/second)", float64(n*workers)/delay.Seconds())
 	})
 
 }

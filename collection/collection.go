@@ -61,12 +61,12 @@ func OpenCollection(filename string) (*Collection, error) {
 			}
 		case "index":
 			// TODO: implement this
-			// options := &IndexMapOptions{}
-			// json.Unmarshal(command.Payload, options) // Todo: handle error properly
-			// err := collection.indexRows(options)
-			// if err != nil {
-			// 	fmt.Printf("WARNING: create index '%s': %s\n", options.Field, err.Error())
-			// }
+			options := &CreateIndexOptions{}
+			json.Unmarshal(command.Payload, options) // Todo: handle error properly
+			err := collection.createIndex(options, false)
+			if err != nil {
+				fmt.Printf("WARNING: create index '%s': %s\n", options.Name, err.Error())
+			}
 		case "remove":
 			params := struct {
 				I int
@@ -189,6 +189,10 @@ type CreateIndexOptions struct {
 // IndexMap create a unique index with a name
 // Constraints: values can be only scalar strings or array of strings
 func (c *Collection) Index(options *CreateIndexOptions) error {
+	return c.createIndex(options, true)
+}
+
+func (c *Collection) createIndex(options *CreateIndexOptions, persist bool) error {
 
 	if _, exists := c.Indexes[options.Name]; exists {
 		return fmt.Errorf("index '%s' already exists", options.Name)
@@ -211,7 +215,15 @@ func (c *Collection) Index(options *CreateIndexOptions) error {
 
 	// Add all rows to the index
 	for _, row := range c.Rows {
-		index.AddRow(row)
+		err := index.AddRow(row)
+		if err != nil {
+			delete(c.Indexes, options.Name)
+			return fmt.Errorf("index row: %s, data: %s", err.Error(), string(row.Payload))
+		}
+	}
+
+	if !persist {
+		return nil
 	}
 
 	payload, err := json.Marshal(options)
