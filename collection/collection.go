@@ -60,12 +60,13 @@ func OpenCollection(filename string) (*Collection, error) {
 				return nil, err
 			}
 		case "index":
-			options := &IndexOptions{}
-			json.Unmarshal(command.Payload, options) // Todo: handle error properly
-			err := collection.indexRows(options)
-			if err != nil {
-				fmt.Printf("WARNING: create index '%s': %s\n", options.Field, err.Error())
-			}
+			// TODO: implement this
+			// options := &IndexMapOptions{}
+			// json.Unmarshal(command.Payload, options) // Todo: handle error properly
+			// err := collection.indexRows(options)
+			// if err != nil {
+			// 	fmt.Printf("WARNING: create index '%s': %s\n", options.Field, err.Error())
+			// }
 		case "remove":
 			params := struct {
 				I int
@@ -179,35 +180,38 @@ func (c *Collection) TraverseRange(from, to int, f func(row *Row)) { // todo: im
 	}
 }
 
-func (c *Collection) indexRows(options *IndexOptions) error {
-
-	index := Index{
-		Entries: map[string]*Row{},
-		RWmutex: &sync.RWMutex{},
-		Sparse:  options.Sparse, // include the whole `options` struct?
-	}
-	for _, row := range c.Rows {
-		err := indexRow(index, options.Field, row)
-		if err != nil {
-			return fmt.Errorf("index row: %w, data: %s", err, string(row.Payload))
-		}
-	}
-	c.Indexes[options.Field] = index
-
-	return nil
+type CreateIndexOptions struct {
+	Name       string          `json:"name"`
+	Kind       string          `json:"kind"` // todo: find a better name
+	Parameters json.RawMessage `json:"parameters"`
 }
 
-// Index create a unique index with a name
+// IndexMap create a unique index with a name
 // Constraints: values can be only scalar strings or array of strings
-func (c *Collection) Index(options *IndexOptions) error {
+func (c *Collection) Index(options *CreateIndexOptions) error {
 
-	if _, exists := c.Indexes[options.Field]; exists {
-		return fmt.Errorf("index '%s' already exists", options.Field)
+	if _, exists := c.Indexes[options.Name]; exists {
+		return fmt.Errorf("index '%s' already exists", options.Name)
 	}
 
-	err := c.indexRows(options)
-	if err != nil {
-		return err
+	var index Index
+
+	switch options.Kind {
+	case "map":
+		parameters := &IndexMapOptions{}
+		json.Unmarshal(options.Parameters, &parameters)
+		index = NewIndexMap(parameters)
+	case "btree":
+		// todo: implement this
+	default:
+		return fmt.Errorf("unexpected kind, it should be [map|btree]")
+	}
+
+	c.Indexes[options.Name] = index
+
+	// Add all rows to the index
+	for _, row := range c.Rows {
+		index.AddRow(row)
 	}
 
 	payload, err := json.Marshal(options)
@@ -233,132 +237,26 @@ func (c *Collection) Index(options *IndexOptions) error {
 
 func indexInsert(indexes map[string]Index, row *Row) (err error) {
 	for key, index := range indexes {
-		err = indexRow(index, key, row)
+		err = index.AddRow(row)
 		if err != nil {
 			// TODO: undo previous work? two phases (check+commit) ?
-			break
+			return fmt.Errorf("index add '%s': %s", key, err.Error())
 		}
 	}
 
 	return
-}
-
-func indexRow(index Index, field string, row *Row) error {
-
-	item := map[string]interface{}{}
-
-	err := json.Unmarshal(row.Payload, &item)
-	if err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
-	}
-
-	itemValue, itemExists := item[field]
-	if !itemExists {
-		if index.Sparse {
-			// Do not index
-			return nil
-		}
-		return fmt.Errorf("field `%s` is indexed and mandatory", field)
-	}
-
-	switch value := itemValue.(type) {
-	case string:
-
-		index.RWmutex.RLock()
-		_, exists := index.Entries[value]
-		index.RWmutex.RUnlock()
-		if exists {
-			return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
-		}
-
-		index.RWmutex.Lock()
-		index.Entries[value] = row
-		index.RWmutex.Unlock()
-	case []interface{}:
-		for _, v := range value {
-			s := v.(string) // TODO: handle this casting error
-			if _, exists := index.Entries[s]; exists {
-				return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
-			}
-		}
-		for _, v := range value {
-			s := v.(string) // TODO: handle this casting error
-			index.Entries[s] = row
-		}
-	default:
-		return fmt.Errorf("type not supported")
-	}
-
-	return nil
 }
 
 func indexRemove(indexes map[string]Index, row *Row) (err error) {
 	for key, index := range indexes {
-		err = unindexRow(index, key, row)
+		err = index.RemoveRow(row)
 		if err != nil {
 			// TODO: does this make any sense?
-			break
+			return fmt.Errorf("index remove '%s': %s", key, err.Error())
 		}
 	}
 
 	return
-}
-
-func unindexRow(index Index, field string, row *Row) error {
-
-	item := map[string]interface{}{}
-
-	err := json.Unmarshal(row.Payload, &item)
-	if err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
-	}
-
-	itemValue, itemExists := item[field]
-	if !itemExists {
-		// Do not index
-		return nil
-	}
-
-	switch value := itemValue.(type) {
-	case string:
-		delete(index.Entries, value)
-	case []interface{}:
-		for _, v := range value {
-			s := v.(string) // TODO: handle this casting error
-			delete(index.Entries, s)
-		}
-	default:
-		// Should this error?
-		return fmt.Errorf("type not supported")
-	}
-
-	return nil
-}
-
-// Deprecated
-func (c *Collection) FindBy(field string, value string, data interface{}) error {
-
-	row, err := c.FindByRow(field, value)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(row.Payload, &data)
-}
-
-func (c *Collection) FindByRow(field string, value string) (*Row, error) {
-
-	index, ok := c.Indexes[field]
-	if !ok {
-		return nil, fmt.Errorf("field '%s' is not indexed", field)
-	}
-
-	row, ok := index.Entries[value]
-	if !ok {
-		return nil, fmt.Errorf("%s '%s' not found", field, value)
-	}
-
-	return row, nil
 }
 
 func (c *Collection) Remove(r *Row) error {
@@ -372,7 +270,7 @@ func lockBlock(m *sync.Mutex, f func() error) error {
 	return f()
 }
 
-func (c *Collection) removeByRow(row *Row, persist bool) error {
+func (c *Collection) removeByRow(row *Row, persist bool) error { // todo: rename to 'removeRow'
 
 	var i int
 	err := lockBlock(c.rowsMutex, func() error {
@@ -428,7 +326,7 @@ func (c *Collection) Patch(row *Row, patch interface{}) error {
 	return c.patchByRow(row, patch, true)
 }
 
-func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error {
+func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error { // todo: rename to 'patchRow'
 
 	patchBytes, err := json.Marshal(patch)
 	if err != nil {

@@ -2,15 +2,16 @@ package apicollectionv1
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/fulldump/box"
 )
 
 type listIndexesItem struct {
-	Name   string `json:"name"`
-	Field  string `json:"field"`
-	Sparse bool   `json:"sparse"`
+	Name       string          `json:"name"`
+	Kind       string          `json:"kind"`
+	Parameters json.RawMessage `json:"parameters"` // todo: find a better name
 }
 
 func listIndexes(ctx context.Context, w http.ResponseWriter) ([]*listIndexesItem, error) {
@@ -24,10 +25,10 @@ func listIndexes(ctx context.Context, w http.ResponseWriter) ([]*listIndexesItem
 
 	result := []*listIndexesItem{}
 	for name, index := range collection.Indexes {
+		_ = index
 		result = append(result, &listIndexesItem{
-			Name:   name,
-			Field:  name,
-			Sparse: index.Sparse,
+			Name: name,
+			// TODO: complete the rest of fields
 		})
 	}
 

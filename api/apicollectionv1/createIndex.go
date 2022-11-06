@@ -10,19 +10,19 @@ import (
 	"github.com/fulldump/inceptiondb/service"
 )
 
-func createIndex(ctx context.Context, options *collection.IndexOptions) (*listIndexesItem, error) {
+func createIndex(ctx context.Context, input *collection.CreateIndexOptions) (*listIndexesItem, error) {
 
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
-	collection, err := s.GetCollection(collectionName)
+	col, err := s.GetCollection(collectionName)
 	if err == service.ErrorCollectionNotFound {
-		collection, err = s.CreateCollection(collectionName)
+		col, err = s.CreateCollection(collectionName)
 	}
 	if err != nil {
 		return nil, err // todo: handle/wrap this properly
 	}
 
-	err = collection.Index(options)
+	err = col.Index(input)
 	if err != nil {
 		return nil, err
 	}
@@ -30,8 +30,8 @@ func createIndex(ctx context.Context, options *collection.IndexOptions) (*listIn
 	box.GetResponse(ctx).WriteHeader(http.StatusCreated)
 
 	return &listIndexesItem{
-		Name:   options.Field,
-		Field:  options.Field,
-		Sparse: options.Sparse,
+		Name: input.Name,
+		Kind: input.Kind,
+		// todo: return parameteres somehow
 	}, nil
 }
