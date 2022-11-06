@@ -16,15 +16,15 @@ Host: example.com
 
 
 HTTP/1.1 200 OK
-Content-Length: 43
+Content-Length: 50
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 [
     {
-        "field": "id",
-        "name": "id",
-        "sparse": true
+        "kind": "",
+        "name": "my-index",
+        "parameters": null
     }
 ]
 ```

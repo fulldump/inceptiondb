@@ -5,8 +5,7 @@ Curl example:
 ```sh
 curl -X POST "https://example.com/v1/collections/my-collection:patch" \
 -d '{
-    "field": "id",
-    "mode": "unique",
+    "index": "my-index",
     "patch": {
         "name": "Pedro"
     },
@@ -22,8 +21,7 @@ POST /v1/collections/my-collection:patch HTTP/1.1
 Host: example.com
 
 {
-    "field": "id",
-    "mode": "unique",
+    "index": "my-index",
     "patch": {
         "name": "Pedro"
     },
