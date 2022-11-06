@@ -207,6 +207,9 @@ func (c *Collection) createIndex(options *CreateIndexOptions, persist bool) erro
 		index = NewIndexMap(parameters)
 	case "btree":
 		// todo: implement this
+		parameters := &IndexBTreeOptions{}
+		json.Unmarshal(options.Parameters, &parameters)
+		index = NewIndexBTree(parameters)
 	default:
 		return fmt.Errorf("unexpected kind, it should be [map|btree]")
 	}

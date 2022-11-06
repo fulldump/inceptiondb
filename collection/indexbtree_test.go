@@ -35,7 +35,7 @@ func Test_IndexBTree_HappyPath(t *testing.T) {
 			`{"id":0}`, `{"id":1}`, `{"id":2}`, `{"id":3}`,
 		}
 		payloads := []string{}
-		index.Traverse(TraverseOptions{}, func(row *Row) bool {
+		index.Traverse([]byte(`{}`), func(row *Row) bool {
 			payloads = append(payloads, string(row.Payload))
 			return true
 		})
@@ -47,7 +47,7 @@ func Test_IndexBTree_HappyPath(t *testing.T) {
 			`{"id":3}`, `{"id":2}`, `{"id":1}`, `{"id":0}`,
 		}
 		reversedPayloads := []string{}
-		index.Traverse(TraverseOptions{Reverse: true}, func(row *Row) bool {
+		index.Traverse([]byte(`{"reverse":true}`), func(row *Row) bool {
 			reversedPayloads = append(reversedPayloads, string(row.Payload))
 			return true
 		})

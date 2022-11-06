@@ -13,6 +13,29 @@ type IndexBtree struct {
 	Options *IndexBTreeOptions
 }
 
+func (b *IndexBtree) RemoveRow(r *Row) error {
+
+	// TODO: duplicated code:
+	values := []interface{}{}
+	data := map[string]interface{}{}
+	json.Unmarshal(r.Payload, &data)
+
+	for _, field := range b.Options.Fields {
+		values = append(values, data[field])
+	}
+
+	b.Btree.Delete(&RowOrdered{
+		Row:    r, // probably r is not needed
+		Values: values,
+	})
+
+	return nil
+}
+
+type IndexBtreeTraverse struct {
+	Reverse bool `json:"reverse"`
+}
+
 type RowOrdered struct {
 	*Row
 	Values []interface{}
@@ -95,7 +118,10 @@ type TraverseOptions struct {
 	Reverse bool
 }
 
-func (b *IndexBtree) Traverse(options TraverseOptions, f func(*Row) bool) {
+func (b *IndexBtree) Traverse(optionsData []byte, f func(*Row) bool) {
+
+	options := &IndexBtreeTraverse{}
+	json.Unmarshal(optionsData, options) // todo: handle error
 
 	if options.Reverse {
 		b.Btree.Descend(func(r *RowOrdered) bool {
