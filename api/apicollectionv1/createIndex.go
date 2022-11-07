@@ -30,8 +30,8 @@ func createIndex(ctx context.Context, input *collection.CreateIndexOptions) (*li
 	box.GetResponse(ctx).WriteHeader(http.StatusCreated)
 
 	return &listIndexesItem{
-		Name: input.Name,
-		Kind: input.Kind,
-		// todo: return parameteres somehow
+		Name:       input.Name,
+		Kind:       input.Kind,
+		Parameters: input.Parameters,
 	}, nil
 }
