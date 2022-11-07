@@ -281,7 +281,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				Save(resp, "Retrieve index", ``)
 
 				biff.AssertEqual(resp.StatusCode, http.StatusOK)
-				expectedBody["kind"] = "" // Todo: fix this!
+				expectedBody = map[string]interface{}{"kind": "map", "name": "my-index", "parameters": map[string]interface{}{"field": "id", "sparse": true}}
 				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 			})
 
