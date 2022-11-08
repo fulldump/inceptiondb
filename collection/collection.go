@@ -10,6 +10,8 @@ import (
 
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/google/uuid"
+
+	"github.com/fulldump/inceptiondb/utils"
 )
 
 type Collection struct {
@@ -17,8 +19,14 @@ type Collection struct {
 	file      *os.File
 	Rows      []*Row
 	rowsMutex *sync.Mutex
-	Indexes   map[string]Index
+	Indexes   map[string]*collectionIndex
 	// buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
+}
+
+type collectionIndex struct {
+	Index
+	Type    string
+	Options interface{}
 }
 
 type Row struct {
@@ -38,7 +46,7 @@ func OpenCollection(filename string) (*Collection, error) {
 		Rows:      []*Row{},
 		rowsMutex: &sync.Mutex{},
 		filename:  filename,
-		Indexes:   map[string]Index{},
+		Indexes:   map[string]*collectionIndex{},
 	}
 
 	j := json.NewDecoder(f)
@@ -60,12 +68,25 @@ func OpenCollection(filename string) (*Collection, error) {
 				return nil, err
 			}
 		case "index":
-			// TODO: implement this
-			options := &CreateIndexOptions{}
-			json.Unmarshal(command.Payload, options) // Todo: handle error properly
-			err := collection.createIndex(options, false)
+			indexCommand := &CreateIndexCommand{}
+			json.Unmarshal(command.Payload, indexCommand) // Todo: handle error properly
+
+			var options interface{}
+
+			switch indexCommand.Type {
+			case "map":
+				options = &IndexMapOptions{}
+				utils.Remarshal(indexCommand.Options, options)
+			case "btree":
+				options = &IndexBTreeOptions{}
+				utils.Remarshal(indexCommand.Options, options)
+			default:
+				return nil, fmt.Errorf("index command: unexpected type '%s' instead of [map|btree]", indexCommand.Type)
+			}
+
+			err := collection.createIndex(indexCommand.Name, options, false)
 			if err != nil {
-				fmt.Printf("WARNING: create index '%s': %s\n", options.Name, err.Error())
+				fmt.Printf("WARNING: create index '%s': %s\n", indexCommand.Name, err.Error())
 			}
 		case "remove":
 			params := struct {
@@ -181,46 +202,51 @@ func (c *Collection) TraverseRange(from, to int, f func(row *Row)) { // todo: im
 }
 
 type CreateIndexOptions struct {
-	Name       string          `json:"name"`
-	Kind       string          `json:"kind"` // todo: find a better name
-	Parameters json.RawMessage `json:"parameters"`
+	Name    string      `json:"name"`
+	Type    string      `json:"type"`
+	Options interface{} `json:"options"`
+}
+
+type CreateIndexCommand struct {
+	Name    string      `json:"name"`
+	Type    string      `json:"type"`
+	Options interface{} `json:"options"`
 }
 
 // IndexMap create a unique index with a name
 // Constraints: values can be only scalar strings or array of strings
-func (c *Collection) Index(options *CreateIndexOptions) error {
-	return c.createIndex(options, true)
+func (c *Collection) Index(name string, options interface{}) error {
+	return c.createIndex(name, options, true)
 }
 
-func (c *Collection) createIndex(options *CreateIndexOptions, persist bool) error {
+func (c *Collection) createIndex(name string, options interface{}, persist bool) error {
 
-	if _, exists := c.Indexes[options.Name]; exists {
-		return fmt.Errorf("index '%s' already exists", options.Name)
+	if _, exists := c.Indexes[name]; exists {
+		return fmt.Errorf("index '%s' already exists", name)
 	}
 
-	var index Index
+	index := &collectionIndex{}
 
-	switch options.Kind {
-	case "map":
-		parameters := &IndexMapOptions{}
-		json.Unmarshal(options.Parameters, &parameters)
-		index = NewIndexMap(parameters)
-	case "btree":
-		// todo: implement this
-		parameters := &IndexBTreeOptions{}
-		json.Unmarshal(options.Parameters, &parameters)
-		index = NewIndexBTree(parameters)
+	switch value := options.(type) {
+	case *IndexMapOptions:
+		index.Type = "map"
+		index.Index = NewIndexMap(value)
+		index.Options = value
+	case *IndexBTreeOptions:
+		index.Type = "btree"
+		index.Index = NewIndexBTree(value)
+		index.Options = value
 	default:
-		return fmt.Errorf("unexpected kind, it should be [map|btree]")
+		return fmt.Errorf("unexpected options parameters, it should be [map|btree]")
 	}
 
-	c.Indexes[options.Name] = index
+	c.Indexes[name] = index
 
 	// Add all rows to the index
 	for _, row := range c.Rows {
 		err := index.AddRow(row)
 		if err != nil {
-			delete(c.Indexes, options.Name)
+			delete(c.Indexes, name)
 			return fmt.Errorf("index row: %s, data: %s", err.Error(), string(row.Payload))
 		}
 	}
@@ -229,7 +255,11 @@ func (c *Collection) createIndex(options *CreateIndexOptions, persist bool) erro
 		return nil
 	}
 
-	payload, err := json.Marshal(options)
+	payload, err := json.Marshal(&CreateIndexCommand{
+		Name:    name,
+		Type:    index.Type,
+		Options: options,
+	})
 	if err != nil {
 		return fmt.Errorf("json encode payload: %w", err)
 	}
@@ -250,7 +280,7 @@ func (c *Collection) createIndex(options *CreateIndexOptions, persist bool) erro
 	return nil
 }
 
-func indexInsert(indexes map[string]Index, row *Row) (err error) {
+func indexInsert(indexes map[string]*collectionIndex, row *Row) (err error) {
 	for key, index := range indexes {
 		err = index.AddRow(row)
 		if err != nil {
@@ -262,7 +292,7 @@ func indexInsert(indexes map[string]Index, row *Row) (err error) {
 	return
 }
 
-func indexRemove(indexes map[string]Index, row *Row) (err error) {
+func indexRemove(indexes map[string]*collectionIndex, row *Row) (err error) {
 	for key, index := range indexes {
 		err = index.RemoveRow(row)
 		if err != nil {

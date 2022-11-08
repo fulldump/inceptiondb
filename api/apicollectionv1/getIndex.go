@@ -16,24 +16,22 @@ func getIndex(ctx context.Context, input getIndexInput) (*listIndexesItem, error
 
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
-	collection, err := s.GetCollection(collectionName)
+	current, err := s.GetCollection(collectionName)
 	if err != nil {
 		return nil, err // todo: handle/wrap this properly
 	}
 
-	for name, index := range collection.Indexes {
-		_ = index
-		if name == input.Name {
-			return &listIndexesItem{
-				Name: name,
-				// Field:  name,
-				// Sparse: index.Sparse,
-				// todo: fild properly
-			}, nil
-		}
+	name := input.Name
+	index, found := current.Indexes[name]
+
+	if !found {
+		box.GetResponse(ctx).WriteHeader(http.StatusNotFound)
+		return nil, fmt.Errorf("index '%s' not found in collection '%s'", input.Name, collectionName)
 	}
 
-	box.GetResponse(ctx).WriteHeader(http.StatusNotFound)
-
-	return nil, fmt.Errorf("index '%s' not found in collection '%s'", input.Name, collectionName)
+	return &listIndexesItem{
+		Name:    name,
+		Type:    index.Type,
+		Options: index.Options,
+	}, nil
 }

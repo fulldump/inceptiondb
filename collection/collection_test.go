@@ -101,10 +101,8 @@ func TestIndex(t *testing.T) {
 		c.Insert(&User{"2", "Sara"})
 
 		// Run
-		c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"id"}`),
+		c.Index("my-index", &IndexMapOptions{
+			Field: "id",
 		})
 
 		// Check
@@ -137,10 +135,8 @@ func TestInsertAfterIndex(t *testing.T) {
 		c, _ := OpenCollection(filename)
 
 		// Run
-		c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"id"}`),
+		c.Index("my-index", &IndexMapOptions{
+			Field: "id",
 		})
 		c.Insert(&User{"1", "Pablo"})
 
@@ -164,10 +160,8 @@ func TestIndexMultiValue(t *testing.T) {
 		c.Insert(newUser)
 
 		// Run
-		indexErr := c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"email"}`),
+		indexErr := c.Index("my-index", &IndexMapOptions{
+			Field: "email",
 		})
 
 		// Check
@@ -187,17 +181,16 @@ func TestIndexSparse(t *testing.T) {
 		row, err := c.Insert(map[string]interface{}{"id": "1"})
 
 		// Run
-		errIndex := c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"email", "sparse":true}`),
+		errIndex := c.Index("my-index", &IndexMapOptions{
+			Field:  "email",
+			Sparse: true,
 		})
 
 		// Check
 		AssertNil(errIndex)
 		AssertNotNil(row)
 		AssertNil(err)
-		AssertEqual(len(c.Indexes["my-index"].(*IndexMap).Entries), 0)
+		AssertEqual(len(c.Indexes["my-index"].Index.(*IndexMap).Entries), 0)
 	})
 }
 
@@ -209,10 +202,9 @@ func TestIndexNonSparse(t *testing.T) {
 		c.Insert(map[string]interface{}{"id": "1"})
 
 		// Run
-		errIndex := c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"email", "sparse":false}`),
+		errIndex := c.Index("my-index", &IndexMapOptions{
+			Field:  "email",
+			Sparse: false,
 		})
 
 		// Check
@@ -234,10 +226,8 @@ func TestCollection_Index_Collision(t *testing.T) {
 		c.Insert(&User{"1", "Sara"})
 
 		// Run
-		errIndex := c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"id"}`),
+		errIndex := c.Index("my-index", &IndexMapOptions{
+			Field: "id",
 		})
 
 		// Check
@@ -252,10 +242,8 @@ func TestPersistenceInsertAndIndex(t *testing.T) {
 		// Setup
 		c, _ := OpenCollection(filename)
 		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
-		c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"email"}`),
+		c.Index("my-index", &IndexMapOptions{
+			Field: "email",
 		})
 		c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
 		c.Close()
@@ -280,10 +268,8 @@ func TestPersistenceDelete(t *testing.T) {
 
 		// Setup
 		c, _ := OpenCollection(filename)
-		c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"email"}`),
+		c.Index("my-index", &IndexMapOptions{
+			Field: "email",
 		})
 		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
 		row, _ := c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
@@ -313,10 +299,8 @@ func TestPersistenceDeleteTwice(t *testing.T) {
 
 		// Setup
 		c, _ := OpenCollection(filename)
-		c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"id"}`),
+		c.Index("my-index", &IndexMapOptions{
+			Field: "id",
 		})
 		row, _ := c.Insert(map[string]interface{}{"id": "1"})
 		c.Remove(row)
@@ -337,10 +321,8 @@ func TestPersistenceUpdate(t *testing.T) {
 
 		// Setup
 		c, _ := OpenCollection(filename)
-		c.Index(&CreateIndexOptions{
-			Name:       "my-index",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"id"}`),
+		c.Index("my-index", &IndexMapOptions{
+			Field: "id",
 		})
 		row, _ := c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
 		c.Patch(row, map[string]interface{}{"name": "Jaime"})
@@ -372,15 +354,11 @@ func TestInsert1M_serial(t *testing.T) {
 		c, _ := OpenCollection(filename)
 		defer c.Close()
 
-		c.Index(&CreateIndexOptions{
-			Name:       "index1",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"uuid"}`),
+		c.Index("index1", &IndexMapOptions{
+			Field: "uuid",
 		})
-		c.Index(&CreateIndexOptions{
-			Name:       "index2",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"i"}`),
+		c.Index("index2", &IndexMapOptions{
+			Field: "i",
 		})
 
 		// Run
@@ -405,15 +383,11 @@ func TestInsert1M_concurrent(t *testing.T) {
 		c, _ := OpenCollection(filename)
 		defer c.Close()
 
-		c.Index(&CreateIndexOptions{
-			Name:       "index1",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"uuid"}`),
+		c.Index("index1", &IndexMapOptions{
+			Field: "uuid",
 		})
-		c.Index(&CreateIndexOptions{
-			Name:       "index2",
-			Kind:       "map",
-			Parameters: json.RawMessage(`{"field":"i"}`),
+		c.Index("index2", &IndexMapOptions{
+			Field: "i",
 		})
 
 		// Run
