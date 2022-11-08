@@ -25,14 +25,14 @@ Host: example.com
 }
 
 HTTP/1.1 409 Conflict
-Content-Length: 103
+Content-Length: 125
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
     "error": {
         "description": "Unexpected error",
-        "message": "index conflict: field 'id' with value 'my-id'"
+        "message": "index add 'my-index': index conflict: field 'id' with value 'my-id'"
     }
 }
 ```

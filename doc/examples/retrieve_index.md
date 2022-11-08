@@ -5,7 +5,7 @@ Curl example:
 ```sh
 curl -X POST "https://example.com/v1/collections/my-collection:getIndex" \
 -d '{
-    "name": "id"
+    "name": "my-index"
 }'
 ```
 
@@ -17,18 +17,18 @@ POST /v1/collections/my-collection:getIndex HTTP/1.1
 Host: example.com
 
 {
-    "name": "id"
+    "name": "my-index"
 }
 
 HTTP/1.1 200 OK
-Content-Length: 41
+Content-Length: 48
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
-    "field": "id",
-    "name": "id",
-    "sparse": true
+    "kind": "",
+    "name": "my-index",
+    "parameters": null
 }
 ```
 

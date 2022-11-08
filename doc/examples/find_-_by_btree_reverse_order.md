@@ -1,4 +1,4 @@
-# Find - by unique index
+# Find - by BTree reverse order
 
 Curl example:
 
@@ -6,7 +6,7 @@ Curl example:
 curl -X POST "https://example.com/v1/collections/my-collection:find" \
 -d '{
     "index": "my-index",
-    "value": "my-id"
+    "reverse": true
 }'
 ```
 
@@ -19,19 +19,19 @@ Host: example.com
 
 {
     "index": "my-index",
-    "value": "my-id"
+    "reverse": true
 }
 
 HTTP/1.1 200 OK
-Content-Length: 58
+Content-Length: 192
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
-{
-    "address": "Elm Street 11",
-    "id": "my-id",
-    "name": "Fulanez"
-}
+{"category":"fruit","id":"1","product":"orange"}
+{"category":"fruit","id":"4","product":"apple"}
+{"category":"drink","id":"2","product":"water"}
+{"category":"drink","id":"3","product":"milk"}
+
 ```
 
 

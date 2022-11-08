@@ -22,11 +22,13 @@ func getIndex(ctx context.Context, input getIndexInput) (*listIndexesItem, error
 	}
 
 	for name, index := range collection.Indexes {
+		_ = index
 		if name == input.Name {
 			return &listIndexesItem{
-				Name:   name,
-				Field:  name,
-				Sparse: index.Sparse,
+				Name: name,
+				// Field:  name,
+				// Sparse: index.Sparse,
+				// todo: fild properly
 			}, nil
 		}
 	}

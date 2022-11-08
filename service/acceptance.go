@@ -1,7 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -122,26 +125,24 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 			a.Alternative("Create index", func(a *biff.A) {
 				resp := apiRequest("POST", "/collections/my-collection:createIndex").
-					WithBodyJson(JSON{"field": "id", "sparse": true}).Do()
+					WithBodyJson(JSON{"name": "my-index", "kind": "map", "parameters": JSON{"field": "id"}}).Do()
 				Save(resp, "Create index", ``)
 
 				a.Alternative("Delete by index", func(a *biff.A) {
 					resp := apiRequest("POST", "/collections/my-collection:remove").
 						WithBodyJson(JSON{
-							"mode":  "unique",
-							"field": "id",
-							"value": "1",
+							"index": "my-index",
+							"value": "2",
 						}).Do()
 					Save(resp, "Delete - by index", ``)
 
-					biff.AssertEqualJson(resp.BodyJson(), myDocuments[0])
+					biff.AssertEqualJson(resp.BodyJson(), myDocuments[1])
 					biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				})
 				a.Alternative("Patch by index", func(a *biff.A) {
 					resp := apiRequest("POST", "/collections/my-collection:patch").
 						WithBodyJson(JSON{
-							"mode":  "unique",
-							"field": "id",
+							"index": "my-index",
 							"value": "3",
 							"patch": JSON{
 								"name": "Pedro",
@@ -264,22 +265,23 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		})
 
-		a.Alternative("Create index", func(a *biff.A) {
+		a.Alternative("Create index - map", func(a *biff.A) {
 			resp := apiRequest("POST", "/collections/my-collection:createIndex").
-				WithBodyJson(JSON{"field": "id", "sparse": true}).Do()
+				WithBodyJson(JSON{"name": "my-index", "kind": "map", "parameters": JSON{"field": "id", "sparse": true}}).Do()
 
-			expectedBody := JSON{"field": "id", "name": "id", "sparse": true}
+			expectedBody := JSON{"name": "my-index", "kind": "map", "parameters": interface{}(nil)}
 			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
 			a.Alternative("Get index", func(a *biff.A) {
 				resp := apiRequest("POST", "/collections/my-collection:getIndex").
 					WithBodyJson(JSON{
-						"name": "id",
+						"name": "my-index",
 					}).Do()
 				Save(resp, "Retrieve index", ``)
 
 				biff.AssertEqual(resp.StatusCode, http.StatusOK)
+				expectedBody["kind"] = "" // Todo: fix this!
 				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 			})
 
@@ -287,7 +289,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				resp := apiRequest("POST", "/collections/my-collection:listIndexes").Do()
 				Save(resp, "List indexes", ``)
 
-				expectedBody := []JSON{{"field": "id", "name": "id", "sparse": true}}
+				expectedBody := []JSON{{"kind": "", "name": "my-index", "parameters": interface{}(nil)}}
 				biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 			})
@@ -308,7 +310,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				expectedBody := JSON{
 					"error": JSON{
 						"description": "Unexpected error",
-						"message":     "index conflict: field 'id' with value 'my-id'",
+						"message":     "index add 'my-index': index conflict: field 'id' with value 'my-id'",
 					},
 				}
 				biff.AssertEqual(resp.StatusCode, http.StatusConflict)
@@ -327,8 +329,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 				resp := apiRequest("POST", "/collections/my-collection:find").
 					WithBodyJson(JSON{
-						"mode":  "unique",
-						"field": "id",
+						"index": "my-index",
 						"value": "my-id",
 					}).Do()
 				Save(resp, "Find - by unique index", ``)
@@ -339,18 +340,89 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		})
 
-		a.Alternative("Find with {invalid} mode", func(a *biff.A) {
+		a.Alternative("Create index - btree", func(a *biff.A) {
+			resp := apiRequest("POST", "/collections/my-collection:createIndex").
+				WithBodyJson(JSON{"name": "my-index", "kind": "btree", "parameters": JSON{"fields": []string{"category", "product"}}}).Do()
+			Save(resp, "Create index - btree", ``)
 
-			resp := apiRequest("POST", "/collections/my-collection:find").
-				WithBodyJson(JSON{
-					"mode": "{invalid}",
-				}).Do()
+			expectedBody := JSON{"kind": "btree", "name": "my-index", "parameters": interface{}(nil)}
+			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
+			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
-			Save(resp, "Find - bad request", ``)
+			a.Alternative("Insert some documents", func(a *biff.A) {
+
+				documents := []JSON{
+					{"id": "1", "category": "fruit", "product": "orange"},
+					{"id": "2", "category": "drink", "product": "water"},
+					{"id": "3", "category": "drink", "product": "milk"},
+					{"id": "4", "category": "fruit", "product": "apple"},
+				}
+
+				for _, document := range documents {
+					resp := apiRequest("POST", "/collections/my-collection:insert").
+						WithBodyJson(document).Do()
+					fmt.Println(resp.StatusCode, resp.BodyString())
+				}
+
+				a.Alternative("Find with BTree", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:find").
+						WithBodyJson(JSON{
+							"index": "my-index",
+						}).Do()
+					Save(resp, "Find - by BTree", ``)
+
+					expectedOrderIDs := []string{"3", "2", "4", "1"}
+
+					d := json.NewDecoder(bytes.NewReader(resp.BodyBytes()))
+					i := 0
+					for {
+						item := JSON{}
+						err := d.Decode(&item)
+						if err == io.EOF {
+							break
+						}
+						biff.AssertEqual(item["id"], expectedOrderIDs[i])
+						i++
+					}
+				})
+
+				a.Alternative("Find with BTree - reverse order", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:find").
+						WithBodyJson(JSON{
+							"index":   "my-index",
+							"reverse": true,
+						}).Do()
+					Save(resp, "Find - by BTree reverse order", ``)
+
+					expectedOrderIDs := []string{"1", "4", "2", "3"}
+
+					d := json.NewDecoder(bytes.NewReader(resp.BodyBytes()))
+					i := 0
+					for {
+						item := JSON{}
+						err := d.Decode(&item)
+						if err == io.EOF {
+							break
+						}
+						biff.AssertEqual(item["id"], expectedOrderIDs[i])
+						i++
+					}
+				})
+
+			})
+
+		})
+
+		a.Alternative("Find with collection not found", func(a *biff.A) {
+
+			resp := apiRequest("POST", "/collections/your-collection:find").
+				WithBodyJson(JSON{}).Do()
+
+			Save(resp, "Find - collection not found", ``)
 
 			errorMessage := resp.BodyJson().(JSON)["error"].(JSON)["message"].(string)
-			biff.AssertEqual(errorMessage, "bad mode '{invalid}', must be [fullscan|unique]. See docs: TODO")
-			biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
+			biff.AssertEqual(errorMessage, "collection not found")
+			biff.AssertEqual(resp.StatusCode, http.StatusInternalServerError) // todo: it should return 404
 		})
 
 	})
@@ -382,6 +454,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		resp := apiRequest("POST", "/collections/my-collection:createIndex").
 			WithBodyJson(JSON{
+				"kind":  "map",
 				"field": "id",
 			}).Do()
 

@@ -3,10 +3,8 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/fulldump/box"
 
@@ -21,50 +19,44 @@ func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}
 
 	input := struct {
-		Mode string
+		Index string
 	}{
-		Mode: "fullscan",
+		Index: "",
 	}
 	err = json.Unmarshal(rquestBody, &input)
 	if err != nil {
 		return err
 	}
 
-	f, exist := removeModes[input.Mode]
-	if !exist {
-		box.GetResponse(ctx).WriteHeader(http.StatusBadRequest)
-		return fmt.Errorf("bad mode '%s', must be [%s]. See docs: TODO", input.Mode, strings.Join(GetKeys(removeModes), "|"))
-	}
-
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
-	collection, err := s.GetCollection(collectionName)
+	col, err := s.GetCollection(collectionName)
 	if err != nil {
 		return err // todo: handle/wrap this properly
 	}
 
-	return f(rquestBody, collection, w)
-}
-
-var removeModes = map[string]func(input []byte, col *collection.Collection, w http.ResponseWriter) error{
-	"fullscan": func(input []byte, col *collection.Collection, w http.ResponseWriter) error {
-		traverseFullscan(input, col, removeRow(col, w))
+	index, exists := col.Indexes[input.Index]
+	if !exists {
+		traverseFullscan(rquestBody, col, func(row *collection.Row) {
+			removeRow(col, row, w)
+		})
 		return nil
-	},
-	"unique": func(input []byte, col *collection.Collection, w http.ResponseWriter) (err error) {
-		return traverseUnique(input, col, removeRow(col, w))
-	},
+	}
+
+	index.Traverse(rquestBody, func(row *collection.Row) bool {
+		removeRow(col, row, w)
+		return true
+	})
+
+	return nil
 }
 
-func removeRow(col *collection.Collection, w http.ResponseWriter) func(row *collection.Row) {
-	return func(row *collection.Row) {
-
-		err := col.Remove(row)
-		if err != nil {
-			return
-		}
-
-		w.Write(row.Payload)
-		w.Write([]byte("\n"))
+func removeRow(col *collection.Collection, row *collection.Row, w http.ResponseWriter) {
+	err := col.Remove(row)
+	if err != nil {
+		return
 	}
+
+	w.Write(row.Payload)
+	w.Write([]byte("\n"))
 }

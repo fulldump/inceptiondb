@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"github.com/SierraSoftworks/connor"
@@ -59,7 +60,7 @@ func traverseFullscan(input []byte, col *collection.Collection, f func(row *coll
 func traverseUnique(input []byte, col *collection.Collection, f func(row *collection.Row)) error {
 
 	params := &struct {
-		Field string
+		Index string
 		Value string
 	}{}
 	err := json.Unmarshal(input, &params)
@@ -67,14 +68,22 @@ func traverseUnique(input []byte, col *collection.Collection, f func(row *collec
 		return err
 	}
 
-	row, err := col.FindByRow(params.Field, params.Value)
-	if err != nil {
-		return err
-		// w.WriteHeader(http.StatusNotFound)
-		// return fmt.Errorf("item %s='%s' does not exist", params.Field, params.Value)
+	index, exist := col.Indexes[params.Index]
+	if !exist {
+		return fmt.Errorf("index '%s' does not exist", params.Index)
 	}
 
-	f(row)
+	traverseOptions, err := json.Marshal(collection.IndexMapTraverse{
+		Value: params.Value,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal traverse options: %s", err.Error())
+	}
+
+	index.Traverse(traverseOptions, func(row *collection.Row) bool {
+		f(row)
+		return true
+	})
 
 	return nil
 }
