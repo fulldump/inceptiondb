@@ -125,7 +125,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 			a.Alternative("Create index", func(a *biff.A) {
 				resp := apiRequest("POST", "/collections/my-collection:createIndex").
-					WithBodyJson(JSON{"name": "my-index", "kind": "map", "parameters": JSON{"field": "id"}}).Do()
+					WithBodyJson(JSON{"name": "my-index", "type": "map", "options": JSON{"field": "id"}}).Do()
 				Save(resp, "Create index", ``)
 
 				a.Alternative("Delete by index", func(a *biff.A) {
@@ -267,9 +267,9 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		a.Alternative("Create index - map", func(a *biff.A) {
 			resp := apiRequest("POST", "/collections/my-collection:createIndex").
-				WithBodyJson(JSON{"name": "my-index", "kind": "map", "parameters": JSON{"field": "id", "sparse": true}}).Do()
+				WithBodyJson(JSON{"name": "my-index", "type": "map", "options": JSON{"field": "id", "sparse": true}}).Do()
 
-			expectedBody := JSON{"kind": "map", "name": "my-index", "parameters": JSON{"field": "id", "sparse": true}}
+			expectedBody := JSON{"type": "map", "name": "my-index", "options": JSON{"field": "id", "sparse": true}}
 			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
