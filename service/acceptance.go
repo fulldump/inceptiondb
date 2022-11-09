@@ -178,6 +178,14 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 					}
 
 				})
+				a.Alternative("Size", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:size").Do()
+					Save(resp, "Size - experimental", `
+						EXPERIMENTAL!!!
+
+						This will probably be removed, it is extremely inefficient.
+					`)
+				})
 
 			})
 

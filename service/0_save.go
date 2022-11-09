@@ -19,7 +19,7 @@ func Save(response *apitest.Response, title, description string) {
 	s := ""
 
 	s += "# " + title + "\n"
-	s += description + "\n"
+	s += md_description(description) + "\n"
 
 	s += "Curl example:\n\n"
 
@@ -128,4 +128,59 @@ func writeFile(filename, text string) {
 			fmt.Println("Saving err:", err)
 		}
 	}
+}
+
+func md_description(d string) string {
+	d = md_crop_tabs(d)
+	d = strings.Replace(d, "\n´´´", "\n```", -1)
+	// d = strings.Replace(d, "´", "`", -1)
+	return d
+}
+
+func md_crop_tabs(d string) string {
+	// Split lines
+	lines := strings.Split(d, "\n")
+
+	first := 0
+	last := len(lines)
+	if len(lines) > 2 {
+		first++
+		last--
+	}
+
+	// Get min tabs
+	min_tabs := 99999
+	for _, line := range lines[first:last] {
+		// if 0 == i {
+		// 	continue
+		// }
+		if strings.TrimSpace(line) != "" {
+			c := md_count_tabs(line)
+			if min_tabs > c {
+				min_tabs = c
+			}
+		}
+	}
+
+	// Prefix
+	prefix := strings.Repeat("\t", min_tabs)
+
+	// Do the work
+	for i, line := range lines {
+		lines[i] = strings.TrimPrefix(line, prefix)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func md_count_tabs(d string) int {
+	i := 0
+	for _, c := range d {
+		if c != '\t' {
+			break
+		}
+		i++
+	}
+
+	return i
 }

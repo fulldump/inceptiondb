@@ -15,7 +15,7 @@ import (
 )
 
 type Collection struct {
-	filename  string // Just informative...
+	Filename  string // Just informative...
 	file      *os.File
 	Rows      []*Row
 	rowsMutex *sync.Mutex
@@ -45,7 +45,7 @@ func OpenCollection(filename string) (*Collection, error) {
 	collection := &Collection{
 		Rows:      []*Row{},
 		rowsMutex: &sync.Mutex{},
-		filename:  filename,
+		Filename:  filename,
 		Indexes:   map[string]*collectionIndex{},
 	}
 
@@ -441,7 +441,7 @@ func (c *Collection) Drop() error {
 		return fmt.Errorf("close: %w", err)
 	}
 
-	err = os.Remove(c.filename)
+	err = os.Remove(c.Filename)
 	if err != nil {
 		return fmt.Errorf("remove: %w", err)
 	}

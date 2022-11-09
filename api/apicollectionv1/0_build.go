@@ -26,6 +26,7 @@ func BuildV1Collection(v1 *box.R, s service.Servicer) *box.R {
 			box.ActionPost(listIndexes),
 			box.ActionPost(createIndex),
 			box.ActionPost(getIndex),
+			box.ActionPost(size),
 		)
 
 	return collections
