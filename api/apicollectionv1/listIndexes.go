@@ -26,8 +26,9 @@ func listIndexes(ctx context.Context, w http.ResponseWriter) ([]*listIndexesItem
 	for name, index := range collection.Indexes {
 		_ = index
 		result = append(result, &listIndexesItem{
-			Name: name,
-			// TODO: complete the rest of fields
+			Name:    name,
+			Type:    index.Type,
+			Options: index.Options,
 		})
 	}
 

@@ -288,7 +288,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				resp := apiRequest("POST", "/collections/my-collection:listIndexes").Do()
 				Save(resp, "List indexes", ``)
 
-				expectedBody := []JSON{{"type": "", "name": "my-index", "options": interface{}(nil)}}
+				expectedBody := []JSON{{"type": "map", "name": "my-index", "options": JSON{"field": "id", "sparse": true}}}
 				biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 			})
