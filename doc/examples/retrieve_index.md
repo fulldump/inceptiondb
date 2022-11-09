@@ -21,14 +21,17 @@ Host: example.com
 }
 
 HTTP/1.1 200 OK
-Content-Length: 48
+Content-Length: 72
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
-    "kind": "",
     "name": "my-index",
-    "parameters": null
+    "options": {
+        "field": "id",
+        "sparse": true
+    },
+    "type": "map"
 }
 ```
 
