@@ -25,8 +25,9 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		biff.AssertEqual(resp.StatusCode, http.StatusCreated)
 		expectedBody := JSON{
-			"name":  "my-collection",
-			"total": 0,
+			"name":    "my-collection",
+			"total":   0,
+			"indexes": 0,
 		}
 		biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
@@ -39,8 +40,9 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 			biff.AssertEqual(resp.StatusCode, http.StatusOK)
 			expectedBody := JSON{
-				"name":  "my-collection",
-				"total": 0,
+				"name":    "my-collection",
+				"total":   0,
+				"indexes": 0,
 			}
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 		})
@@ -52,8 +54,9 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 			biff.AssertEqual(resp.StatusCode, http.StatusOK)
 			expectedBody := []JSON{
 				{
-					"name":  "my-collection",
-					"total": 0,
+					"name":    "my-collection",
+					"total":   0,
+					"indexes": 0,
 				},
 			}
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)

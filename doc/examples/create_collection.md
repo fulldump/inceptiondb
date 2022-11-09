@@ -21,11 +21,12 @@ Host: example.com
 }
 
 HTTP/1.1 201 Created
-Content-Length: 35
+Content-Length: 47
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
+    "indexes": 0,
     "name": "my-collection",
     "total": 0
 }
