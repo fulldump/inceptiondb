@@ -125,7 +125,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 			a.Alternative("Create index", func(a *biff.A) {
 				resp := apiRequest("POST", "/collections/my-collection:createIndex").
-					WithBodyJson(JSON{"name": "my-index", "type": "map", "options": JSON{"field": "id"}}).Do()
+					WithBodyJson(JSON{"name": "my-index", "type": "map", "field": "id"}).Do()
 				Save(resp, "Create index", ``)
 
 				a.Alternative("Delete by index", func(a *biff.A) {
@@ -267,7 +267,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		a.Alternative("Create index - map", func(a *biff.A) {
 			resp := apiRequest("POST", "/collections/my-collection:createIndex").
-				WithBodyJson(JSON{"name": "my-index", "type": "map", "options": JSON{"field": "id", "sparse": true}}).Do()
+				WithBodyJson(JSON{"name": "my-index", "type": "map", "field": "id", "sparse": true}).Do()
 
 			expectedBody := JSON{"type": "map", "name": "my-index", "options": JSON{"field": "id", "sparse": true}}
 			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
@@ -341,7 +341,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		a.Alternative("Create index - btree", func(a *biff.A) {
 			resp := apiRequest("POST", "/collections/my-collection:createIndex").
-				WithBodyJson(JSON{"name": "my-index", "type": "btree", "options": JSON{"fields": []string{"category", "product"}}}).Do()
+				WithBodyJson(JSON{"name": "my-index", "type": "btree", "fields": []string{"category", "product"}}).Do()
 			Save(resp, "Create index - btree", ``)
 
 			expectedBody := JSON{"name": "my-index", "options": JSON{"Fields": []interface{}{"category", "product"}, "Sparse": false, "Unique": false}, "type": "btree"}

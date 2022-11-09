@@ -2,14 +2,15 @@ package apicollectionv1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/fulldump/box"
 
 	"github.com/fulldump/inceptiondb/collection"
 	"github.com/fulldump/inceptiondb/service"
-	"github.com/fulldump/inceptiondb/utils"
 )
 
 type CreateIndexRequest struct {
@@ -18,7 +19,24 @@ type CreateIndexRequest struct {
 	Options interface{} `json:"options"`
 }
 
-func createIndex(ctx context.Context, input *CreateIndexRequest) (*listIndexesItem, error) {
+func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error) {
+
+	rquestBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	input := struct {
+		Name string
+		Type string
+	}{
+		"",
+		"", // todo: put default index here (if any)
+	}
+	err = json.Unmarshal(rquestBody, &input)
+	if err != nil {
+		return nil, err
+	}
 
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
@@ -41,7 +59,10 @@ func createIndex(ctx context.Context, input *CreateIndexRequest) (*listIndexesIt
 		return nil, fmt.Errorf("unexpected type '%s' instead of [map|btree]", input.Type)
 	}
 
-	utils.Remarshal(input.Options, options) // todo: handle error properly
+	err = json.Unmarshal(rquestBody, &options)
+	if err != nil {
+		return nil, err
+	}
 
 	err = col.Index(input.Name, options)
 	if err != nil {

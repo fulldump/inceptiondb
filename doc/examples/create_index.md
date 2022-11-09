@@ -5,10 +5,8 @@ Curl example:
 ```sh
 curl -X POST "https://example.com/v1/collections/my-collection:createIndex" \
 -d '{
+    "field": "id",
     "name": "my-index",
-    "options": {
-        "field": "id"
-    },
     "type": "map"
 }'
 ```
@@ -21,10 +19,8 @@ POST /v1/collections/my-collection:createIndex HTTP/1.1
 Host: example.com
 
 {
+    "field": "id",
     "name": "my-index",
-    "options": {
-        "field": "id"
-    },
     "type": "map"
 }
 

@@ -5,13 +5,11 @@ Curl example:
 ```sh
 curl -X POST "https://example.com/v1/collections/my-collection:createIndex" \
 -d '{
+    "fields": [
+        "category",
+        "product"
+    ],
     "name": "my-index",
-    "options": {
-        "fields": [
-            "category",
-            "product"
-        ]
-    },
     "type": "btree"
 }'
 ```
@@ -24,13 +22,11 @@ POST /v1/collections/my-collection:createIndex HTTP/1.1
 Host: example.com
 
 {
+    "fields": [
+        "category",
+        "product"
+    ],
     "name": "my-index",
-    "options": {
-        "fields": [
-            "category",
-            "product"
-        ]
-    },
     "type": "btree"
 }
 

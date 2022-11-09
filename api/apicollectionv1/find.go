@@ -21,7 +21,7 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	input := struct {
 		Index string
 	}{
-		Index: "",
+		"",
 	}
 	err = json.Unmarshal(rquestBody, &input)
 	if err != nil {
