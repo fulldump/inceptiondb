@@ -30,7 +30,7 @@ html, body {
     padding: 0 16px;
 }
 
-#frame-right{
+.frame-right{
     position: absolute;
     top: 0;
     bottom: 0;

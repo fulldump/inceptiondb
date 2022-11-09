@@ -12,6 +12,11 @@
     <body>
         <div id="app" :collection="collection_name">
             <div id="frame-top">
+                <a href="https://github.com/fulldump/inceptiondb" style="display: block; float: right; margin: 8px;">
+                    <svg aria-hidden="true" height="24" viewBox="0 0 16 16" version="1.1" width="24" data-view-component="true" class="octicon octicon-mark-github" style="vertical-align: middle; height: 2em;">
+                        <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                    </svg>
+                </a>
                 <h1 style="padding: 8px 16px;">InceptionDB</h1>
             </div>
             <div id="frame-center">
@@ -41,7 +46,62 @@
                         <button class="btn btn-primary" @click="create_collection.show = true">Create collection</button>
                     </div>
                 </div>
-                <div id="frame-right" v-if="collection_name">
+
+                <div class="frame-right" v-if="panels.home">
+                    <div style="max-width: 800px; margin: auto;">
+
+                        <div style="text-align: center;">
+                            <h1>InceptionDB</h1>
+                            <h2 style="color: silver; font-size: 24px; margin-top: -20px; font-weight: bold;">community edition</h2>
+                        </div>
+
+                        <br>
+
+                        <p>A home made database based on journal to store JSON documents.</p>
+
+                        <h2>Motivation</h2>
+
+                        <p>InceptionDB was born to be the persistence layer of another project called Bitumen. Bitumen is a distributed NAS that should store family memories, pictures and videos that should last for 50 or 100 years.</p>
+
+                        <p>One of the biggest motivations is the code should be simple and easy to maintain (yes, even the database itself) and also 100% free of license restrictions.</p>
+
+                        <p>The second biggest motivation is to have fun and learn some things :D.</p>
+
+                        <h2>Contribute</h2>
+
+                        <p>InceptionDB is free software.</p>
+
+                        <p>
+                            Here is the source:
+                            <a href="https://github.com/fulldump/inceptiondb">
+                                <svg aria-hidden="true" height="24" viewBox="0 0 16 16" version="1.1" width="24" data-view-component="true" class="octicon octicon-mark-github" style="vertical-align: middle; height: 14px;">
+                                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                                </svg>github.com/fulldump/inceptiondb
+                            </a>
+                        </p>
+
+                        <p>
+                            <ul>
+                                <li>Use it in your project (as an independent process or embedded into your software)</li>
+                                <li>Modify to cover your own needs</li>
+                                <li>Learn how other software is built</li>
+                            </ul>
+                        </p>
+
+                        <p>
+                            Find documentation examples here:
+                            <a href="https://github.com/fulldump/inceptiondb/tree/master/doc/examples">
+                                <svg aria-hidden="true" height="24" viewBox="0 0 16 16" version="1.1" width="24" data-view-component="true" class="octicon octicon-mark-github" style="vertical-align: middle; height: 14px;">
+                                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                                </svg>github.com/fulldump/inceptiondb/tree/master/doc/examples
+                            </a>
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="frame-right" v-if="collection_name">
                     <h2 id="collectionTitle">{{ collection_name }}</h2>
 
                     <div class="line2">
@@ -352,6 +412,7 @@
                         indexsearch: false,
                         delete: false,
                         insert: false,
+                        home: true,
                     },
                     item_patch: '{\n\n}',
 
