@@ -52,7 +52,7 @@ html, body {
 }
 
 /* options menus line2 */
-#frame-right .line2 {
+.frame-right .line2 {
     margin-bottom: 16px;
 }
 
@@ -150,7 +150,7 @@ html, body {
         position: static;
     }
 
-    #frame-right {
+    .frame-right {
         left: 0;
         position: static;
     }
