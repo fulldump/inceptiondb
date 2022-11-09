@@ -24,11 +24,15 @@
                             :class="{active: collection_name == collection}"
                             @click="selectCollection(collection.name); showPanel('fullscan'); fetchFullScan(collection.name);"
                         >
+                            <div style="float: right; font-size: 12px;">
+                                <span v-if="collection.indexes">🔑 {{ collection.indexes }}</span>
+                                <span :title="collection.total">📃 {{ prettyTotal(collection.total) }}</span>
+                            </div>
                             <h5 :title="collection" class="mb-1 text-truncate">{{ collection.name }}</h5>
                             <div class="line2" style="font-size: 90%;">
                                 <a href="#" >Fullscan</a>
                                 |
-                                <a href="#" @click.prevent.stop="selectCollection(collection); showPanel('indexsearch'); fetchIndexes(collection);">IndexSearch</a>
+                                <a href="#" @click.prevent.stop="selectCollection(collection.name); showPanel('indexsearch'); fetchIndexes(collection);">IndexSearch</a>
                             </div>
                         </li>
                     </ul>
@@ -171,7 +175,7 @@
                     <div v-if="panels.indexsearch">
                         Find by index
                         <select v-model="find_by_index" @change="find_by_value=''">
-                            <option v-for="index in indexes" :value="index.field">{{index.field}}</option>
+                            <option v-for="index in indexes" :value="index.name">{{index.name}}</option>
                         </select>
                         :
                         <input type="text" v-model="find_by_value" @keyup="findByIndex(collection_name, find_by_index, find_by_value)"> <br>
@@ -326,6 +330,7 @@
         </div>
 
         <script>
+
             var app = new Vue({
                 el: '#app',
                 data: {
@@ -393,7 +398,7 @@
                         this.full_scan.skip = 0;
                         this.full_scan.filter = '{\n\n}';
                     },
-                    findByIndex(collection, key, value) {
+                    findByIndex(collection, index, value) {
                         var that = this;
                         that.find_by_error = '';
                         axios({
@@ -401,12 +406,15 @@
                             url: '/v1/collections/'+ encodeURIComponent(collection) + ':find',
                             data: {
                                 mode: "unique",
-                                field: key,
+                                index: index,
                                 value: value,
                             }
                         })
                             .then(function(resp) {
                                 that.item = resp.data;
+                                if (resp.data == '') {
+                                    that.find_by_error = `No match for ${value}`
+                                }
                             })
                             .catch(function (error) {
                                 that.item = '';
@@ -596,10 +604,20 @@
                                 that.find_by_value = '';
                             });
                     },
-                },
+                    prettyTotal(n) {
+                        if (n > 1000000) {
+                            return (n/1000000).toFixed(0) + 'M';
+                        }
+                        if (n > 1000) {
+                            return (n/1000).toFixed(0) + 'K';
+                        }
+                        return n
+                    },
+            },
                 beforeMount() {
                     this.listCollections();
                 },
+
             });
 
         </script>
