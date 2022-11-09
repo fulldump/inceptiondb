@@ -42,15 +42,9 @@ type RowOrdered struct {
 }
 
 type IndexBTreeOptions struct {
-	Fields []string
-	Sparse bool
-	Unique bool
-}
-
-// todo: not used?
-type IndexBtreeOptions struct {
-	Name string `json:"name"`
-	*IndexBTreeOptions
+	Fields []string `json:"fields"`
+	Sparse bool     `json:"sparse"`
+	Unique bool     `json:"unique"`
 }
 
 func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree { // todo: group all arguments into a BTreeConfig struct

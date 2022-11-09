@@ -2,9 +2,11 @@ package apicollectionv1
 
 import (
 	"context"
-	"net/http"
+	"encoding/json"
 
 	"github.com/fulldump/box"
+
+	"github.com/fulldump/inceptiondb/utils"
 )
 
 type listIndexesItem struct {
@@ -13,7 +15,18 @@ type listIndexesItem struct {
 	Options interface{} `json:"options"`
 }
 
-func listIndexes(ctx context.Context, w http.ResponseWriter) ([]*listIndexesItem, error) {
+func (l *listIndexesItem) MarshalJSON() ([]byte, error) {
+
+	result := map[string]interface{}{
+		"name": l.Name,
+		"type": l.Type,
+	}
+	utils.Remarshal(l.Options, &result)
+
+	return json.Marshal(result)
+}
+
+func listIndexes(ctx context.Context) ([]*listIndexesItem, error) {
 
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")

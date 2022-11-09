@@ -25,16 +25,14 @@ Host: example.com
 }
 
 HTTP/1.1 201 Created
-Content-Length: 73
+Content-Length: 61
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
+    "field": "id",
     "name": "my-index",
-    "options": {
-        "field": "id",
-        "sparse": false
-    },
+    "sparse": false,
     "type": "map"
 }
 ```

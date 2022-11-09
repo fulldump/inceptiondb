@@ -31,21 +31,19 @@ Host: example.com
 }
 
 HTTP/1.1 201 Created
-Content-Length: 109
+Content-Length: 97
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
+    "fields": [
+        "category",
+        "product"
+    ],
     "name": "my-index",
-    "options": {
-        "Fields": [
-            "category",
-            "product"
-        ],
-        "Sparse": false,
-        "Unique": false
-    },
-    "type": "btree"
+    "sparse": false,
+    "type": "btree",
+    "unique": false
 }
 ```
 

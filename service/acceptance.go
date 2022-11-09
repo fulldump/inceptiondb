@@ -269,7 +269,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 			resp := apiRequest("POST", "/collections/my-collection:createIndex").
 				WithBodyJson(JSON{"name": "my-index", "type": "map", "field": "id", "sparse": true}).Do()
 
-			expectedBody := JSON{"type": "map", "name": "my-index", "options": JSON{"field": "id", "sparse": true}}
+			expectedBody := JSON{"type": "map", "name": "my-index", "field": "id", "sparse": true}
 			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
@@ -288,7 +288,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				resp := apiRequest("POST", "/collections/my-collection:listIndexes").Do()
 				Save(resp, "List indexes", ``)
 
-				expectedBody := []JSON{{"type": "map", "name": "my-index", "options": JSON{"field": "id", "sparse": true}}}
+				expectedBody := []JSON{{"type": "map", "name": "my-index", "field": "id", "sparse": true}}
 				biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 			})
@@ -344,7 +344,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				WithBodyJson(JSON{"name": "my-index", "type": "btree", "fields": []string{"category", "product"}}).Do()
 			Save(resp, "Create index - btree", ``)
 
-			expectedBody := JSON{"name": "my-index", "options": JSON{"Fields": []interface{}{"category", "product"}, "Sparse": false, "Unique": false}, "type": "btree"}
+			expectedBody := JSON{"name": "my-index", "type": "btree", "fields": []interface{}{"category", "product"}, "sparse": false, "unique": false}
 			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
 			biff.AssertEqual(resp.BodyJson(), expectedBody)
 
