@@ -378,6 +378,8 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 					resp := apiRequest("POST", "/collections/my-collection:find").
 						WithBodyJson(JSON{
 							"index": "my-index",
+							"skip":  0,
+							"limit": 10,
 						}).Do()
 					Save(resp, "Find - by BTree", ``)
 
@@ -400,6 +402,8 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 					resp := apiRequest("POST", "/collections/my-collection:find").
 						WithBodyJson(JSON{
 							"index":   "my-index",
+							"skip":    0,
+							"limit":   10,
 							"reverse": true,
 						}).Do()
 					Save(resp, "Find - by BTree reverse order", ``)

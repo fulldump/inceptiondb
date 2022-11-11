@@ -5,7 +5,9 @@ Curl example:
 ```sh
 curl -X POST "https://example.com/v1/collections/my-collection:find" \
 -d '{
-    "index": "my-index"
+    "index": "my-index",
+    "limit": 10,
+    "skip": 0
 }'
 ```
 
@@ -17,7 +19,9 @@ POST /v1/collections/my-collection:find HTTP/1.1
 Host: example.com
 
 {
-    "index": "my-index"
+    "index": "my-index",
+    "limit": 10,
+    "skip": 0
 }
 
 HTTP/1.1 200 OK

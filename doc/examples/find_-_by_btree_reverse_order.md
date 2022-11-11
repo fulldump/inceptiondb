@@ -6,7 +6,9 @@ Curl example:
 curl -X POST "https://example.com/v1/collections/my-collection:find" \
 -d '{
     "index": "my-index",
-    "reverse": true
+    "limit": 10,
+    "reverse": true,
+    "skip": 0
 }'
 ```
 
@@ -19,7 +21,9 @@ Host: example.com
 
 {
     "index": "my-index",
-    "reverse": true
+    "limit": 10,
+    "reverse": true,
+    "skip": 0
 }
 
 HTTP/1.1 200 OK

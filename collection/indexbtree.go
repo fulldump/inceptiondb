@@ -34,6 +34,8 @@ func (b *IndexBtree) RemoveRow(r *Row) error {
 
 type IndexBtreeTraverse struct {
 	Reverse bool `json:"reverse"`
+	Limit   int64
+	Skip    int64
 }
 
 type RowOrdered struct {
@@ -108,23 +110,29 @@ func (b *IndexBtree) AddRow(r *Row) error {
 	return nil
 }
 
-type TraverseOptions struct {
-	Reverse bool
-}
-
 func (b *IndexBtree) Traverse(optionsData []byte, f func(*Row) bool) {
 
-	options := &IndexBtreeTraverse{}
+	options := &IndexBtreeTraverse{
+		Limit: 1,
+	}
 	json.Unmarshal(optionsData, options) // todo: handle error
 
+	traverse := b.Btree.Ascend
 	if options.Reverse {
-		b.Btree.Descend(func(r *RowOrdered) bool {
-			return f(r.Row)
-		})
-		return
+		traverse = b.Btree.Descend
 	}
 
-	b.Btree.Ascend(func(r *RowOrdered) bool {
+	skip := options.Skip
+	limit := options.Limit
+	traverse(func(r *RowOrdered) bool {
+		if skip > 0 {
+			skip--
+			return true
+		}
+		if limit == 0 {
+			return false
+		}
+		limit--
 		return f(r.Row)
 	})
 }
