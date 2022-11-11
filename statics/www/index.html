@@ -264,22 +264,19 @@
                                 </div>
                             </div>
 
-                            <!--
                             <div>
-                                From
+                                From (included)
                                 <div v-for="field in selected_index.fields" style="padding-left: 20px;">
                                     <span style="font-family: monospace;">{{field}}</span> <input type="text" v-model="find_btree.from[field]" @keyup="findByIndexBtree()"><br>
                                 </div>
                             </div>
 
                             <div>
-                                To
+                                To (excluded)
                                 <div v-for="field in selected_index.fields" style="padding-left: 20px;">
                                     <span style="font-family: monospace;">{{field}}</span> <input type="text" v-model="find_btree.to[field]" @keyup="findByIndexBtree()"><br>
                                 </div>
                             </div>
-                            -->
-
 
                             <table>
                                 <tr>
@@ -788,6 +785,26 @@
                             limit: parseInt(this.find_btree.limit),
                             skip: parseInt(this.find_btree.skip),
                         };
+
+                        let fromCount = 0;
+                        for (let field in this.find_btree.from) {
+                            if (this.find_btree.from[field]) {
+                                fromCount++;
+                            }
+                        }
+                        if (fromCount = this.selected_index.fields.length) {
+                            payload.from = this.find_btree.from
+                        }
+
+                        let toCount = 0;
+                        for (let field in this.find_btree.to) {
+                            if (this.find_btree.to[field]) {
+                                toCount++;
+                            }
+                        }
+                        if (toCount = this.selected_index.fields.length) {
+                            payload.to = this.find_btree.to
+                        }
 
                         axios({
                             method: 'post',

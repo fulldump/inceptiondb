@@ -33,9 +33,11 @@ func (b *IndexBtree) RemoveRow(r *Row) error {
 }
 
 type IndexBtreeTraverse struct {
-	Reverse bool `json:"reverse"`
-	Limit   int64
-	Skip    int64
+	Reverse bool                   `json:"reverse"`
+	Limit   int64                  `json:"limit"`
+	Skip    int64                  `json:"skip"`
+	From    map[string]interface{} `json:"from"`
+	To      map[string]interface{} `json:"to"`
 }
 
 type RowOrdered struct {
@@ -117,14 +119,9 @@ func (b *IndexBtree) Traverse(optionsData []byte, f func(*Row) bool) {
 	}
 	json.Unmarshal(optionsData, options) // todo: handle error
 
-	traverse := b.Btree.Ascend
-	if options.Reverse {
-		traverse = b.Btree.Descend
-	}
-
 	skip := options.Skip
 	limit := options.Limit
-	traverse(func(r *RowOrdered) bool {
+	iterator := func(r *RowOrdered) bool {
 		if skip > 0 {
 			skip--
 			return true
@@ -134,5 +131,49 @@ func (b *IndexBtree) Traverse(optionsData []byte, f func(*Row) bool) {
 		}
 		limit--
 		return f(r.Row)
-	})
+	}
+
+	hasFrom := len(options.From) > 0
+	hasTo := len(options.To) > 0
+
+	pivotFrom := &RowOrdered{}
+	if hasFrom {
+		for _, field := range b.Options.Fields {
+			pivotFrom.Values = append(pivotFrom.Values, options.From[field])
+		}
+	}
+
+	pivotTo := &RowOrdered{}
+	if hasFrom {
+		for _, field := range b.Options.Fields {
+			pivotTo.Values = append(pivotTo.Values, options.To[field])
+		}
+	}
+
+	if !hasFrom && !hasTo {
+		if options.Reverse {
+			b.Btree.Descend(iterator)
+		} else {
+			b.Btree.Ascend(iterator)
+		}
+	} else if hasFrom && !hasTo {
+		if options.Reverse {
+			b.Btree.DescendGreaterThan(pivotFrom, iterator)
+		} else {
+			b.Btree.AscendGreaterOrEqual(pivotFrom, iterator)
+		}
+	} else if !hasFrom && hasTo {
+		if options.Reverse {
+			b.Btree.DescendLessOrEqual(pivotTo, iterator)
+		} else {
+			b.Btree.AscendLessThan(pivotTo, iterator)
+		}
+	} else {
+		if options.Reverse {
+			b.Btree.DescendRange(pivotTo, pivotFrom, iterator)
+		} else {
+			b.Btree.AscendRange(pivotFrom, pivotTo, iterator)
+		}
+	}
+
 }
