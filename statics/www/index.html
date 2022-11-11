@@ -281,22 +281,6 @@
                             <table>
                                 <tr>
                                     <td>
-                                        skip
-                                    </td>
-                                    <td>
-                                        <input type="number" min="0" v-model="find_btree.skip" @change="findByIndexBtree()">
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        limit
-                                    </td>
-                                    <td>
-                                        <input type="number" min="1" v-model="find_btree.limit" @change="findByIndexBtree()">
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
                                         Reverse order
                                     </td>
                                     <td>
@@ -304,6 +288,51 @@
                                     </td>
                                 </tr>
                             </table>
+
+
+                            <form @submit.prevent="findByIndexBtree()" style="width: 460px; margin: 0 auto;">
+                                <div class="input-group mb-3">
+                                    <div class="input-group-prepend">
+                                        <button
+                                                :disabled="find_btree.skip==0"
+                                                class="btn btn-secondary"
+                                                type="button"
+                                                @click="find_btree.skip -= find_btree.limit; if (find_btree.skip <0) {find_btree.skip=0}; findByIndexBtree();"
+                                        >Previous</button>
+                                    </div>
+                                    <div class="input-group-prepend">
+                                        <label class="input-group-text" for="fullscan-pagination-skip">skip</label>
+                                    </div>
+                                    <input
+                                            type="number"
+                                            class="form-control"
+                                            id="fullscan-pagination-skip"
+                                            v-model="find_btree.skip"
+                                            @keyup="findByIndexBtree()"
+                                            min="0"
+                                    >
+                                    <div class="input-group-prepend">
+                                        <label class="input-group-text" for="fullscan-pagination-limit">limit</label>
+                                    </div>
+                                    <input
+                                            type="number"
+                                            class="form-control"
+                                            id="fullscan-pagination-limit"
+                                            v-model="find_btree.limit"
+                                            @keyup="findByIndexBtree()"
+                                            min="0"
+                                    >
+                                    <div class="input-group-append">
+                                        <button
+                                                :disabled="rows.length < find_btree.limit"
+                                                class="btn btn-secondary"
+                                                type="button"
+                                                @click="find_btree.skip += parseInt(find_btree.limit); findByIndexBtree();"
+                                        >Next</button>
+                                    </div>
+                                </div>
+                            </form>
+
 
                             <table class="table table-striped" v-if="rows">
                                 <tr>
