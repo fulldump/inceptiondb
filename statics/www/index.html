@@ -233,12 +233,93 @@
                     </div>
 
                     <div v-if="panels.indexsearch">
-                        Find by index
-                        <select v-model="find_by_index" @change="find_by_value=''">
-                            <option v-for="index in indexes" :value="index.name">{{index.name}}</option>
+                        Select index
+                        <select v-model="find_by_index" @change="selectIndex()">
+                            <option v-for="index in indexes" :value="index.name">{{index.name}} (type {{ index.type }})</option>
                         </select>
-                        :
-                        <input type="text" v-model="find_by_value" @keyup="findByIndex(collection_name, find_by_index, find_by_value)"> <br>
+                        <span @click="index_see_details = !index_see_details;" style="cursor: pointer; font-size: 10px;">see details</span>
+
+<!--                        {{ indexes }}<br>-->
+<!--                        {{find_by_index}}-->
+<!--                        {{selected_index}}-->
+                        <div v-if="selected_index.type == 'map'">
+
+                            <div v-if="index_see_details" style="border: solid silver 1px; background-color: #F8F8F8; padding: 4px; border-radius: 2px;">
+                                <div style="font-family: monospace;">
+                                    Field: {{ selected_index.field }}<br>
+                                    Sparse: {{ selected_index.sparse }}<br>
+                                </div>
+                            </div>
+
+                            Find by field <span style="font-family: monospace">"{{selected_index.field}}"</span>
+                            <input type="text" v-model="find_by_value" @keyup="findByIndex(collection_name, find_by_index, find_by_value)"> <br>
+
+                        </div>
+                        <div v-if="selected_index.type == 'btree'">
+                            <div v-if="index_see_details" style="border: solid silver 1px; background-color: #F8F8F8; padding: 4px; border-radius: 2px;">
+                                <div style="font-family: monospace;">
+                                    Fields: {{ selected_index.fields }}<br>
+                                    Sparse: {{ selected_index.sparse }}<br>
+                                    Unique: {{ selected_index.unique }}<br>
+                                </div>
+                            </div>
+
+                            <!--
+                            <div>
+                                From
+                                <div v-for="field in selected_index.fields" style="padding-left: 20px;">
+                                    <span style="font-family: monospace;">{{field}}</span> <input type="text" v-model="find_btree.from[field]" @keyup="findByIndexBtree()"><br>
+                                </div>
+                            </div>
+
+                            <div>
+                                To
+                                <div v-for="field in selected_index.fields" style="padding-left: 20px;">
+                                    <span style="font-family: monospace;">{{field}}</span> <input type="text" v-model="find_btree.to[field]" @keyup="findByIndexBtree()"><br>
+                                </div>
+                            </div>
+                            -->
+
+
+                            <table>
+                                <tr>
+                                    <td>
+                                        skip
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" v-model="find_btree.skip" @change="findByIndexBtree()">
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        limit
+                                    </td>
+                                    <td>
+                                        <input type="number" min="1" v-model="find_btree.limit" @change="findByIndexBtree()">
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        Reverse order
+                                    </td>
+                                    <td>
+                                        <input type="checkbox" v-model="find_btree.reverse" @change="findByIndexBtree()">
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <table class="table table-striped" v-if="rows">
+                                <tr>
+                                    <th v-for="field in selected_index.fields"> {{ field }}</th>
+                                    <th>{ document }</th>
+                                </tr>
+                                <tr v-for="row in rows">
+                                    <td v-for="field in selected_index.fields"> {{ row[field] }}</td>
+                                    <td style="font-family: monospace;">{{ row }}</td>
+                                </tr>
+                            </table>
+
+                        </div>
                         <div v-if="find_by_error" class="alert alert-danger" role="alert" style="margin-top: 16px;">{{find_by_error}}</div>
                         <pre v-if="item">{{ item }}</pre>
                         <button v-if="item" class="btn btn-primary" @click="findByIndex(collection_name, find_by_index, find_by_value)">Reload</button>
@@ -403,9 +484,18 @@
                     collections: [],
                     rows: [],
                     indexes: [],
+                    selected_index: {},
+                    index_see_details: false,
                     find_by_value: '',
                     find_by_index: '',
                     find_by_error: '',
+                    find_btree: {
+                        from: {},
+                        to: {},
+                        reverse: false,
+                        skip: 0,
+                        limit: 10,
+                    },
                     item: '',
                     panels: {
                         fullscan: false,
@@ -674,11 +764,52 @@
                         }
                         return n
                     },
-            },
+                    selectIndex() {
+                        this.rows = [];
+                        for (i in this.indexes) {
+                            console.log(i);
+                            const index = this.indexes[i];
+                            if (index.name == this.find_by_index) {
+                                this.selected_index = index;
+                                break;
+                            }
+                        }
+                        if (this.selected_index.type == 'btree') {
+                            this.find_btree.skip = 0;
+                            this.findByIndexBtree();
+                        }
+                    },
+                    findByIndexBtree() {
+                        let that = this;
+                        let payload = {
+                            index: this.selected_index.name,
+//                            filter: {},
+                            reverse: this.find_btree.reverse,
+                            limit: parseInt(this.find_btree.limit),
+                            skip: parseInt(this.find_btree.skip),
+                        };
+
+                        axios({
+                            method: 'post',
+                            url: '/v1/collections/'+ encodeURIComponent(this.collection_name)+':find',
+                            data: payload,
+                            transformResponse: (res) => {return res;},
+                            responseType: 'text',
+                        })
+                            .then(function(resp) {
+                                var rows = [];
+                                resp.data.split("\n").forEach(function(line) {
+                                    if (line == '') return;
+                                    rows.push(JSON.parse(line));
+                                });
+                                that.rows = rows;
+                            });
+
+                    },
+                },
                 beforeMount() {
                     this.listCollections();
                 },
-
             });
 
         </script>
