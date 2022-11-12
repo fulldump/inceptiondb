@@ -138,7 +138,7 @@
                                             :disabled="full_scan.skip==0"
                                             class="btn btn-secondary"
                                             type="button"
-                                            @click="full_scan.skip -= full_scan.limit; if (full_scan.skip <0) {full_scan.skip=0}; fetchFullScan(collection_name);"
+                                            @click="full_scan.skip = parseInt(full_scan.skip); full_scan.limit = parseInt(full_scan.limit);   full_scan.skip -= full_scan.limit; if (full_scan.skip <0) {full_scan.skip=0}; fetchFullScan(collection_name);"
                                         >Previous</button>
                                     </div>
                                     <div class="input-group-prepend">
@@ -710,7 +710,7 @@
                             mode: "fullscan",
                             filter: {},
                             limit: parseInt(that.full_scan.limit),
-                            skip: that.full_scan.skip,
+                            skip: parseInt(that.full_scan.skip),
                         };
 
                         try {

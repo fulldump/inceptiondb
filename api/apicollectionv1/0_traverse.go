@@ -26,32 +26,36 @@ func traverseFullscan(input []byte, col *collection.Collection, f func(row *coll
 		return err
 	}
 
-	i := int64(0)
-	from := params.Skip
-	to := params.Skip + params.Limit
+	hasFilter := params.Filter != nil && len(params.Filter) > 0
+
+	skip := params.Skip
+	limit := params.Limit
 	for _, row := range col.Rows {
 
-		rowData := map[string]interface{}{}
-		json.Unmarshal(row.Payload, &rowData)
-
-		if match, err := connor.Match(params.Filter, rowData); err != nil {
-			// TODO: wrap with http error: w.WriteHeader(http.StatusBadRequest)
-			return err
-		} else if match {
-			if i < from {
-				i++
-				continue
-			}
-			if to == 0 || i < to {
-				i++
-				f(row)
-				continue
-			}
+		if limit == 0 {
 			break
-		} else {
+		}
+
+		if hasFilter {
+			rowData := map[string]interface{}{}
+			json.Unmarshal(row.Payload, &rowData) // todo: handle error here?
+
+			match, err := connor.Match(params.Filter, rowData)
+			if err != nil {
+				return fmt.Errorf("match: %w", err)
+			}
+			if !match {
+				continue
+			}
+		}
+
+		if skip > 0 {
+			skip--
 			continue
 		}
 
+		limit--
+		f(row)
 	}
 
 	return nil

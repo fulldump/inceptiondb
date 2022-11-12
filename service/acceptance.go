@@ -95,8 +95,8 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				resp := apiRequest("POST", "/collections/my-collection:find").
 					WithBodyJson(JSON{
 						"mode":  "fullscan",
-						"limit": 0,
 						"skip":  0,
+						"limit": 1,
 						"filter": JSON{
 							"name": "Fulanez",
 						},
