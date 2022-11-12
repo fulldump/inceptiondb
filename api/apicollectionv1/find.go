@@ -38,34 +38,20 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	index, exists := col.Indexes[input.Index]
 	if !exists {
 		traverseFullscan(rquestBody, col, func(row *collection.Row) {
-			w.Write(row.Payload)
-			w.Write([]byte("\n"))
+			writeRow(w, row)
 		})
 		return nil
 	}
 
 	index.Traverse(rquestBody, func(row *collection.Row) bool {
-		w.Write(row.Payload)
-		w.Write([]byte("\n"))
+		writeRow(w, row)
 		return true
 	})
 
 	return nil
 }
 
-// TODO: remove this
-var findModes = map[string]func(input []byte, col *collection.Collection, w http.ResponseWriter) error{
-	"fullscan": func(input []byte, col *collection.Collection, w http.ResponseWriter) error {
-		return traverseFullscan(input, col, writeRow(w))
-	},
-	"unique": func(input []byte, col *collection.Collection, w http.ResponseWriter) error {
-		return traverseUnique(input, col, writeRow(w))
-	},
-}
-
-func writeRow(w http.ResponseWriter) func(r *collection.Row) {
-	return func(row *collection.Row) {
-		w.Write(row.Payload)
-		w.Write([]byte("\n"))
-	}
+func writeRow(w http.ResponseWriter, row *collection.Row) {
+	w.Write(row.Payload)
+	w.Write([]byte("\n"))
 }
