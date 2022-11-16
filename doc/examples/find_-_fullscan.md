@@ -8,7 +8,7 @@ curl -X POST "https://example.com/v1/collections/my-collection:find" \
     "filter": {
         "name": "Fulanez"
     },
-    "limit": 0,
+    "limit": 1,
     "mode": "fullscan",
     "skip": 0
 }'
@@ -25,7 +25,7 @@ Host: example.com
     "filter": {
         "name": "Fulanez"
     },
-    "limit": 0,
+    "limit": 1,
     "mode": "fullscan",
     "skip": 0
 }

@@ -348,6 +348,25 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				biff.AssertEqual(resp.StatusCode, http.StatusOK)
 			})
 
+			a.Alternative("Find - index not found", func(a *biff.A) {
+				resp := apiRequest("POST", "/collections/my-collection:find").
+					WithBodyJson(JSON{
+						"index": "invented",
+						"value": "my-id",
+					}).Do()
+				Save(resp, "Find - index not found", ``)
+
+				expectedBody := JSON{
+					"error": JSON{
+						"description": "Unexpected error",
+						"message":     "index 'invented' not found, available indexes [my-index]",
+					},
+				}
+
+				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
+				biff.AssertEqual(resp.StatusCode, 500) // todo: should be 400
+			})
+
 		})
 
 		a.Alternative("Create index - btree", func(a *biff.A) {

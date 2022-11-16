@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -19,10 +20,8 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}
 
 	input := struct {
-		Index string
-	}{
-		"",
-	}
+		Index *string
+	}{}
 	err = json.Unmarshal(rquestBody, &input)
 	if err != nil {
 		return err
@@ -35,12 +34,17 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		return err // todo: handle/wrap this properly
 	}
 
-	index, exists := col.Indexes[input.Index]
-	if !exists {
+	if input.Index == nil {
 		traverseFullscan(rquestBody, col, func(row *collection.Row) {
 			writeRow(w, row)
 		})
 		return nil
+	}
+
+	// todo: if index not found: return error
+	index, exists := col.Indexes[*input.Index]
+	if !exists {
+		return fmt.Errorf("index '%s' not found, available indexes %v", *input.Index, GetKeys(col.Indexes))
 	}
 
 	index.Traverse(rquestBody, func(row *collection.Row) bool {
