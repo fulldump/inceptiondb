@@ -415,6 +415,88 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 						biff.AssertEqual(item["id"], expectedOrderIDs[i])
 						i++
 					}
+					biff.AssertEqual(i, len(expectedOrderIDs))
+				})
+
+				a.Alternative("Find with BTree with filter", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:find").
+						WithBodyJson(JSON{
+							"index": "my-index",
+							"skip":  0,
+							"limit": 10,
+							"filter": JSON{
+								"category": "fruit",
+							},
+						}).Do()
+					Save(resp, "Find - by BTree with filter", ``)
+
+					expectedOrderIDs := []string{"4", "1"}
+
+					d := json.NewDecoder(bytes.NewReader(resp.BodyBytes()))
+					i := 0
+					for {
+						item := JSON{}
+						err := d.Decode(&item)
+						if err == io.EOF {
+							break
+						}
+						biff.AssertEqual(item["id"], expectedOrderIDs[i])
+						i++
+					}
+					biff.AssertEqual(i, len(expectedOrderIDs))
+				})
+
+				a.Alternative("Remove - BTree ", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:find").
+						WithBodyJson(JSON{
+							"index": "my-index",
+							"skip":  0,
+							"limit": 10,
+						}).Do()
+					Save(resp, "Remove - by BTree with filter", ``)
+
+					expectedOrderIDs := []string{"3", "2", "4", "1"}
+
+					d := json.NewDecoder(bytes.NewReader(resp.BodyBytes()))
+					i := 0
+					for {
+						item := JSON{}
+						err := d.Decode(&item)
+						if err == io.EOF {
+							break
+						}
+						biff.AssertEqual(item["id"], expectedOrderIDs[i])
+						i++
+					}
+					biff.AssertEqual(i, len(expectedOrderIDs))
+				})
+
+				a.Alternative("Remove - BTree with filter", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:find").
+						WithBodyJson(JSON{
+							"index": "my-index",
+							"skip":  0,
+							"limit": 10,
+							"filter": JSON{
+								"category": "fruit",
+							},
+						}).Do()
+					Save(resp, "Remove - by BTree with filter", ``)
+
+					expectedOrderIDs := []string{"4", "1"}
+
+					d := json.NewDecoder(bytes.NewReader(resp.BodyBytes()))
+					i := 0
+					for {
+						item := JSON{}
+						err := d.Decode(&item)
+						if err == io.EOF {
+							break
+						}
+						biff.AssertEqual(item["id"], expectedOrderIDs[i])
+						i++
+					}
+					biff.AssertEqual(i, len(expectedOrderIDs))
 				})
 
 				a.Alternative("Find with BTree - reverse order", func(a *biff.A) {

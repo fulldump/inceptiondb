@@ -35,28 +35,19 @@ func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		return err // todo: handle/wrap this properly
 	}
 
-	index, exists := col.Indexes[input.Index]
-	if !exists {
-		traverseFullscan(requestBody, col, func(row *collection.Row) {
-			removeRow(col, row, w)
-		})
-		return nil
-	}
+	var result error
 
-	index.Traverse(requestBody, func(row *collection.Row) bool {
-		removeRow(col, row, w)
+	traverse(requestBody, col, func(row *collection.Row) bool {
+		err := col.Remove(row)
+		if err != nil {
+			result = err
+			return false
+		}
+
+		w.Write(row.Payload)
+		w.Write([]byte("\n"))
 		return true
 	})
 
-	return nil
-}
-
-func removeRow(col *collection.Collection, row *collection.Row, w http.ResponseWriter) {
-	err := col.Remove(row)
-	if err != nil {
-		return
-	}
-
-	w.Write(row.Payload)
-	w.Write([]byte("\n"))
+	return result
 }

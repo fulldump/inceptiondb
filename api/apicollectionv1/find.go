@@ -3,14 +3,12 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/fulldump/box"
 
 	"github.com/fulldump/inceptiondb/collection"
-	"github.com/fulldump/inceptiondb/utils"
 )
 
 func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -35,27 +33,9 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		return err // todo: handle/wrap this properly
 	}
 
-	if input.Index == nil {
-		traverseFullscan(requestBody, col, func(row *collection.Row) {
-			writeRow(w, row)
-		})
-		return nil
-	}
-
-	index, exists := col.Indexes[*input.Index]
-	if !exists {
-		return fmt.Errorf("index '%s' not found, available indexes %v", *input.Index, utils.GetKeys(col.Indexes))
-	}
-
-	index.Traverse(requestBody, func(row *collection.Row) bool {
-		writeRow(w, row)
+	return traverse(requestBody, col, func(row *collection.Row) bool {
+		w.Write(row.Payload)
+		w.Write([]byte("\n"))
 		return true
 	})
-
-	return nil
-}
-
-func writeRow(w http.ResponseWriter, row *collection.Row) {
-	w.Write(row.Payload)
-	w.Write([]byte("\n"))
 }
