@@ -1,6 +1,6 @@
 
 test:
-	go test ./...
+	go test -cover ./...
 
 run:
 	go run .

@@ -10,6 +10,7 @@ import (
 	"github.com/fulldump/box"
 
 	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/utils"
 )
 
 func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -41,10 +42,9 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 
-	// todo: if index not found: return error
 	index, exists := col.Indexes[*input.Index]
 	if !exists {
-		return fmt.Errorf("index '%s' not found, available indexes %v", *input.Index, GetKeys(col.Indexes))
+		return fmt.Errorf("index '%s' not found, available indexes %v", *input.Index, utils.GetKeys(col.Indexes))
 	}
 
 	index.Traverse(requestBody, func(row *collection.Row) bool {

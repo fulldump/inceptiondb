@@ -3,7 +3,6 @@ package apicollectionv1
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 
 	"github.com/SierraSoftworks/connor"
 
@@ -59,45 +58,4 @@ func traverseFullscan(input []byte, col *collection.Collection, f func(row *coll
 	}
 
 	return nil
-}
-
-func traverseUnique(input []byte, col *collection.Collection, f func(row *collection.Row)) error {
-
-	params := &struct {
-		Index string
-		Value string
-	}{}
-	err := json.Unmarshal(input, &params)
-	if err != nil {
-		return err
-	}
-
-	index, exist := col.Indexes[params.Index]
-	if !exist {
-		return fmt.Errorf("index '%s' does not exist", params.Index)
-	}
-
-	traverseOptions, err := json.Marshal(collection.IndexMapTraverse{
-		Value: params.Value,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal traverse options: %s", err.Error())
-	}
-
-	index.Traverse(traverseOptions, func(row *collection.Row) bool {
-		f(row)
-		return true
-	})
-
-	return nil
-}
-
-// TODO: move to package utils/diogenes
-func GetKeys[T any](m map[string]T) []string {
-	keys := []string{}
-	for k, _ := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
