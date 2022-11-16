@@ -369,6 +369,53 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		})
 
+		a.Alternative("Create index - btree compound", func(a *biff.A) {
+			resp := apiRequest("POST", "/collections/my-collection:createIndex").
+				WithBodyJson(JSON{"name": "my-index", "type": "btree", "fields": []string{"category", "-product"}}).Do()
+			Save(resp, "Create index - btree compound", ``)
+
+			a.Alternative("Insert some documents", func(a *biff.A) {
+				documents := []JSON{
+					{"id": "1", "category": "fruit", "product": "orange"},
+					{"id": "2", "category": "drink", "product": "water"},
+					{"id": "3", "category": "drink", "product": "milk"},
+					{"id": "4", "category": "fruit", "product": "apple"},
+				}
+
+				for _, document := range documents {
+					resp := apiRequest("POST", "/collections/my-collection:insert").
+						WithBodyJson(document).Do()
+					fmt.Println(resp.StatusCode, resp.BodyString())
+				}
+
+				a.Alternative("Find with BTree", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:find").
+						WithBodyJson(JSON{
+							"index": "my-index",
+							"skip":  0,
+							"limit": 10,
+						}).Do()
+					Save(resp, "Find - by BTree", ``)
+
+					expectedOrderIDs := []string{"2", "3", "1", "4"}
+
+					d := json.NewDecoder(bytes.NewReader(resp.BodyBytes()))
+					i := 0
+					for {
+						item := JSON{}
+						err := d.Decode(&item)
+						if err == io.EOF {
+							break
+						}
+						biff.AssertEqual(item["id"], expectedOrderIDs[i])
+						i++
+					}
+					biff.AssertEqual(i, len(expectedOrderIDs))
+				})
+
+			})
+		})
+
 		a.Alternative("Create index - btree", func(a *biff.A) {
 			resp := apiRequest("POST", "/collections/my-collection:createIndex").
 				WithBodyJson(JSON{"name": "my-index", "type": "btree", "fields": []string{"category", "product"}}).Do()

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/google/btree"
 )
@@ -51,7 +52,7 @@ type IndexBTreeOptions struct {
 	Unique bool     `json:"unique"`
 }
 
-func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree { // todo: group all arguments into a BTreeConfig struct
+func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 
 	index := btree.NewG(32, func(a, b *RowOrdered) bool {
 
@@ -61,24 +62,36 @@ func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree { // todo: group all 
 				continue
 			}
 
+			field := options.Fields[i]
+			reverse := strings.HasPrefix(field, "-")
+			field = strings.TrimPrefix(field, "-")
+
 			switch valA := valA.(type) {
 			case string:
 				valB, ok := valB.(string)
 				if !ok {
-					panic("Type B should be string for field " + options.Fields[i])
+					panic("Type B should be string for field " + field)
 				}
-				return valA < valB
+				if reverse {
+					return !(valA < valB)
+				} else {
+					return valA < valB
+				}
 
 			case float64:
 				valB, ok := valB.(float64)
 				if !ok {
-					panic("Type B should be float64 for field " + options.Fields[i])
+					panic("Type B should be float64 for field " + field)
 				}
-				return valA < valB
+				if reverse {
+					return !(valA < valB)
+				} else {
+					return valA < valB
+				}
 
 				// todo: case bool
 			default:
-				panic("Type A not supported, field " + options.Fields[i])
+				panic("Type A not supported, field " + field)
 			}
 		}
 
@@ -97,6 +110,7 @@ func (b *IndexBtree) AddRow(r *Row) error {
 	json.Unmarshal(r.Payload, &data)
 
 	for _, field := range b.Options.Fields {
+		field = strings.TrimPrefix(field, "-")
 		values = append(values, data[field])
 	}
 
