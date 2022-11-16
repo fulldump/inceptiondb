@@ -35,8 +35,6 @@ func (b *IndexBtree) RemoveRow(r *Row) error {
 
 type IndexBtreeTraverse struct {
 	Reverse bool                   `json:"reverse"`
-	Limit   int64                  `json:"limit"`
-	Skip    int64                  `json:"skip"`
 	From    map[string]interface{} `json:"from"`
 	To      map[string]interface{} `json:"to"`
 }
@@ -105,17 +103,34 @@ func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 }
 
 func (b *IndexBtree) AddRow(r *Row) error {
-	values := []interface{}{}
+	var values []interface{}
 	data := map[string]interface{}{}
 	json.Unmarshal(r.Payload, &data)
 
 	for _, field := range b.Options.Fields {
 		field = strings.TrimPrefix(field, "-")
-		values = append(values, data[field])
+		value, exists := data[field]
+		if exists {
+			values = append(values, value)
+			continue
+		}
+		if b.Options.Sparse {
+			return nil
+		}
+		return fmt.Errorf("field '%s' not defined", field)
 	}
 
 	if b.Btree.Has(&RowOrdered{Values: values}) {
-		return fmt.Errorf("already exists")
+		errKey := ""
+		for i, field := range b.Options.Fields {
+			pair := fmt.Sprint(field, ":", values[i])
+			if errKey != "" {
+				errKey += "," + pair
+			} else {
+				errKey = pair
+			}
+		}
+		return fmt.Errorf("key (%s) already exists", errKey)
 	}
 
 	b.Btree.ReplaceOrInsert(&RowOrdered{
@@ -128,22 +143,10 @@ func (b *IndexBtree) AddRow(r *Row) error {
 
 func (b *IndexBtree) Traverse(optionsData []byte, f func(*Row) bool) {
 
-	options := &IndexBtreeTraverse{
-		Limit: 1,
-	}
+	options := &IndexBtreeTraverse{}
 	json.Unmarshal(optionsData, options) // todo: handle error
 
-	skip := options.Skip
-	limit := options.Limit
 	iterator := func(r *RowOrdered) bool {
-		if skip > 0 {
-			skip--
-			return true
-		}
-		if limit == 0 {
-			return false
-		}
-		limit--
 		return f(r.Row)
 	}
 

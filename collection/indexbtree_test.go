@@ -56,6 +56,119 @@ func Test_IndexBTree_HappyPath(t *testing.T) {
 
 }
 
+func TestIndexBtree_AddRow_Sparse(t *testing.T) {
+
+	index := NewIndexBTree(&IndexBTreeOptions{
+		Fields: []string{"year"},
+		Sparse: true,
+	})
+
+	payloads := []string{
+		`{"name":"Fulanez"}`,
+		`{"name":"Menganez", "year": 1985}`,
+		`{"name":"Zutanez"}`,
+	}
+
+	for i, document := range payloads {
+		err := index.AddRow(&Row{
+			I:       i,
+			Payload: json.RawMessage(document),
+		})
+		biff.AssertNil(err)
+	}
+
+	expectedPayloads := []string{
+		payloads[1],
+	}
+	obtainedPayloads := []string{}
+	index.Traverse([]byte(`{}`), func(row *Row) bool {
+		obtainedPayloads = append(obtainedPayloads, string(row.Payload))
+		return true
+	})
+	biff.AssertEqual(obtainedPayloads, expectedPayloads)
+}
+
+func TestIndexBtree_RemoveRow(t *testing.T) {
+
+	index := NewIndexBTree(&IndexBTreeOptions{
+		Fields: []string{"name"},
+	})
+
+	documents := []string{
+		`{"name":"a"}`,
+		`{"name":"b"}`,
+		`{"name":"c"}`,
+	}
+
+	for _, document := range documents {
+		err := index.AddRow(&Row{
+			Payload: json.RawMessage(document),
+		})
+		biff.AssertNil(err)
+	}
+
+	errFirst := index.RemoveRow(&Row{
+		Payload: json.RawMessage(`{"name":"b"}`),
+	})
+	biff.AssertNil(errFirst)
+
+	errSecond := index.RemoveRow(&Row{
+		Payload: json.RawMessage(`{"name":"b"}`),
+	})
+	biff.AssertNil(errSecond)
+
+	expectedDocuments := []string{
+		`{"name":"a"}`,
+		`{"name":"c"}`,
+	}
+	obtainedPayloads := []string{}
+	index.Traverse([]byte(`{}`), func(row *Row) bool {
+		obtainedPayloads = append(obtainedPayloads, string(row.Payload))
+		return true
+	})
+	biff.AssertEqual(obtainedPayloads, expectedDocuments)
+}
+
+func TestIndexBtree_AddRow_NonSparse(t *testing.T) {
+
+	index := NewIndexBTree(&IndexBTreeOptions{
+		Fields: []string{"year"},
+		Sparse: false,
+	})
+
+	// Insert defined field
+	errValid := index.AddRow(&Row{
+		Payload: json.RawMessage(`{"name":"Fulanez", "year":1986}`),
+	})
+	biff.AssertNil(errValid)
+
+	// Insert undefined field
+	errInvalid := index.AddRow(&Row{
+		Payload: json.RawMessage(`{"name":"Fulanez"}`),
+	})
+	biff.AssertEqual(errInvalid.Error(), "field 'year' not defined")
+}
+
+func TestIndexBtree_AddRow_Conflict(t *testing.T) {
+
+	index := NewIndexBTree(&IndexBTreeOptions{
+		Fields: []string{"product_code", "product_category"},
+		Unique: true,
+	})
+
+	// Insert first
+	errValid := index.AddRow(&Row{
+		Payload: json.RawMessage(`{"product_code":1,"product_category":"cat1"}`),
+	})
+	biff.AssertNil(errValid)
+
+	// Insert same value
+	errConflict := index.AddRow(&Row{
+		Payload: json.RawMessage(`{"product_code":1,"product_category":"cat1"}`),
+	})
+	biff.AssertEqual(errConflict.Error(), "key (product_code:1,product_category:cat1) already exists")
+}
+
 // TODO: remove this:
 func TestRRRR(t *testing.T) {
 
