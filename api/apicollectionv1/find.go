@@ -14,7 +14,7 @@ import (
 
 func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
-	rquestBody, err := io.ReadAll(r.Body)
+	requestBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		return err
 	}
@@ -22,7 +22,7 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	input := struct {
 		Index *string
 	}{}
-	err = json.Unmarshal(rquestBody, &input)
+	err = json.Unmarshal(requestBody, &input)
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if input.Index == nil {
-		traverseFullscan(rquestBody, col, func(row *collection.Row) {
+		traverseFullscan(requestBody, col, func(row *collection.Row) {
 			writeRow(w, row)
 		})
 		return nil
@@ -47,7 +47,7 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("index '%s' not found, available indexes %v", *input.Index, GetKeys(col.Indexes))
 	}
 
-	index.Traverse(rquestBody, func(row *collection.Row) bool {
+	index.Traverse(requestBody, func(row *collection.Row) bool {
 		writeRow(w, row)
 		return true
 	})

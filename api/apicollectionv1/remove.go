@@ -13,7 +13,7 @@ import (
 
 func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
-	rquestBody, err := io.ReadAll(r.Body)
+	requestBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		return err
 	}
@@ -23,7 +23,7 @@ func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}{
 		Index: "",
 	}
-	err = json.Unmarshal(rquestBody, &input)
+	err = json.Unmarshal(requestBody, &input)
 	if err != nil {
 		return err
 	}
@@ -37,13 +37,13 @@ func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	index, exists := col.Indexes[input.Index]
 	if !exists {
-		traverseFullscan(rquestBody, col, func(row *collection.Row) {
+		traverseFullscan(requestBody, col, func(row *collection.Row) {
 			removeRow(col, row, w)
 		})
 		return nil
 	}
 
-	index.Traverse(rquestBody, func(row *collection.Row) bool {
+	index.Traverse(requestBody, func(row *collection.Row) bool {
 		removeRow(col, row, w)
 		return true
 	})

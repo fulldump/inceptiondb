@@ -21,7 +21,7 @@ type CreateIndexRequest struct {
 
 func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error) {
 
-	rquestBody, err := io.ReadAll(r.Body)
+	requestBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 		"",
 		"", // todo: put default index here (if any)
 	}
-	err = json.Unmarshal(rquestBody, &input)
+	err = json.Unmarshal(requestBody, &input)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 		return nil, fmt.Errorf("unexpected type '%s' instead of [map|btree]", input.Type)
 	}
 
-	err = json.Unmarshal(rquestBody, &options)
+	err = json.Unmarshal(requestBody, &options)
 	if err != nil {
 		return nil, err
 	}

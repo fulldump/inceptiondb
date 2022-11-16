@@ -13,7 +13,7 @@ import (
 
 func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
-	rquestBody, err := io.ReadAll(r.Body)
+	requestBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		return err
 	}
@@ -23,7 +23,7 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}{
 		Index: "",
 	}
-	err = json.Unmarshal(rquestBody, &input)
+	err = json.Unmarshal(requestBody, &input)
 	if err != nil {
 		return err
 	}
@@ -39,14 +39,14 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	index, exists := col.Indexes[input.Index]
 	if !exists {
-		traverseFullscan(rquestBody, col, func(row *collection.Row) {
-			patchRow(rquestBody, col, row, e)
+		traverseFullscan(requestBody, col, func(row *collection.Row) {
+			patchRow(requestBody, col, row, e)
 		})
 		return nil
 	}
 
-	index.Traverse(rquestBody, func(row *collection.Row) bool {
-		patchRow(rquestBody, col, row, e)
+	index.Traverse(requestBody, func(row *collection.Row) bool {
+		patchRow(requestBody, col, row, e)
 		return true
 	})
 
