@@ -7,7 +7,7 @@
 * ~~Authentication and logical collection groups (databases)~~
 * Index management in UI
 * BUGFIX: when document is modified to remove field from non-sparse index, it should NOT remove the field!!!
-* BTree index
+* ~~BTree index~~
 
 ## Should have
 
@@ -27,7 +27,7 @@
 * Filter by JS function
 * Patch by JS function
 * ~~Support UTF-8 in collection names~~
-* Composed indexes (key is made by multiple fields combined)
+* ~~Compound indexes (key is made by multiple fields combined)~~
 * Automatic _id index can have multiple value sources (configured at collection level)
   * uuid
   * autoincrement
