@@ -21,10 +21,6 @@ func getBoxContext(ctx context.Context) *box.C {
 	return nil
 }
 
-func getParam(ctx context.Context, name string) (value string) {
-	return getBoxContext(ctx).Parameters[name]
-}
-
 func interceptorPrintError(next box.H) box.H {
 	return func(ctx context.Context) {
 		next(ctx)
@@ -35,6 +31,23 @@ func interceptorPrintError(next box.H) box.H {
 			})
 		}
 	}
+}
+
+type PrettyError struct {
+	Message     string `json:"message"`
+	Description string `json:"description"`
+}
+
+func (p PrettyError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"error": struct {
+			Message     string `json:"message"`
+			Description string `json:"description"`
+		}{
+			p.Message,
+			p.Description,
+		},
+	})
 }
 
 func InterceptorUnavailable(db *database.Database) box.I {

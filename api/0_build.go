@@ -2,25 +2,38 @@ package api
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/fulldump/box"
 
 	"github.com/fulldump/inceptiondb/api/apicollectionv1"
-	"github.com/fulldump/inceptiondb/database"
 	"github.com/fulldump/inceptiondb/service"
 	"github.com/fulldump/inceptiondb/statics"
 )
 
-func Build(db *database.Database, staticsDir string) *box.B { // TODO: remove datadir
+func Build(s service.Servicer, staticsDir, version string) *box.B { // TODO: remove datadir
 
 	b := box.NewBox()
 
 	v1 := b.Resource("/v1")
-	s := service.NewService(db)
 	apicollectionv1.BuildV1Collection(v1, s).
 		WithInterceptors(
 			injectServicer(s),
 		)
+
+	b.Resource("/v1/*").
+		WithActions(box.AnyMethod(func(w http.ResponseWriter) interface{} {
+			w.WriteHeader(http.StatusNotImplemented)
+			return PrettyError{
+				Message:     "not implemented",
+				Description: "this endpoint does not exist, please check the documentation",
+			}
+		}))
+
+	b.Resource("/release").
+		WithActions(box.Get(func() string {
+			return version
+		}))
 
 	// Mount statics
 	b.Resource("/*").

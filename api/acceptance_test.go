@@ -21,7 +21,9 @@ func TestAcceptance(t *testing.T) {
 		biff.AssertNil(db.Load())
 		biff.AssertEqual(db.GetStatus(), database.StatusOperating)
 
-		b := Build(db, "")
+		s := service.NewService(db)
+
+		b := Build(s, "", "test")
 		b.WithInterceptors(
 			InterceptorUnavailable(db),
 			RecoverFromPanic,

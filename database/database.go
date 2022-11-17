@@ -46,7 +46,7 @@ func (db *Database) GetStatus() string {
 
 func (db *Database) CreateCollection(name string) (*collection.Collection, error) {
 
-	col, exists := db.Collections[name]
+	_, exists := db.Collections[name]
 	if exists {
 		return nil, fmt.Errorf("collection '%s' already exists", name)
 	}

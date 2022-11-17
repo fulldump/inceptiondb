@@ -1,5 +1,11 @@
 # InceptionDB
 
+<p align="center">
+<img src="https://github.com/fulldump/inceptiondb/actions/workflows/go.yml/badge.svg">
+<a href="https://goreportcard.com/report/github.com/fulldump/inceptiondb"><img src="https://goreportcard.com/badge/github.com/fulldump/inceptiondb"></a>
+<a href="https://godoc.org/github.com/fulldump/inceptiondb"><img src="https://godoc.org/github.com/fulldump/inceptiondb?status.svg" alt="GoDoc"></a>
+</p>
+
 A durable in-memory database to store JSON documents.
 
 Write operations are stored into an append-only journal file. The state (documents and indexes) is maintained in memory.
