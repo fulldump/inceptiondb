@@ -27,7 +27,7 @@
                             v-for="collection in collections"
                             class="list-group-item"
                             :class="{active: collection_name == collection}"
-                            @click="selectCollection(collection.name); showPanel('fullscan'); fetchFullScan(collection.name);"
+                            @click="selectCollection(collection.name); showPanel('find'); apiFind();"
                         >
                             <div style="float: right; font-size: 12px;">
                                 <span v-if="collection.indexes">🔑 {{ collection.indexes }}</span>
@@ -105,11 +105,116 @@
                     <h2 id="collectionTitle">{{ collection_name }}</h2>
 
                     <div class="line2">
+                        <a href="#" :class="{active: panels.find}" @click.prevent.stop="showPanel('find'); fetchFullScan(collection_name);">Find</a>
+                        |
                         <a href="#" :class="{active: panels.fullscan}" @click.prevent.stop="showPanel('fullscan'); fetchFullScan(collection_name);">Fullscan</a>
                         |
                         <a href="#" :class="{active: panels.indexsearch}" @click.prevent.stop="showPanel('indexsearch'); fetchIndexes(collection_name);">IndexSearch</a>
                         |
                         <a href="#" :class="{active: panels.delete}"  @click.prevent.stop="showPanel('delete');">Drop collection</a>
+                    </div>
+
+                    <div v-if="panels.find">
+
+                        <form @submit.prevent="apiFind()">
+
+                            <div class="form-group">
+                                <select class="form-control" v-model="find.index_name" @change="findSelectIndex(find.index_name)">
+                                    <option selected value="">No index (fullscan)</option>
+                                    <option v-for="index in indexes" :value="index.name">{{index.name}} (type {{ index.type }})</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="find_filter" class="form-label">Filter (MongoDB style):</label>
+                                <textarea v-model="find.filter" class="form-control" id="find_filter" rows="3" style="font-family: monospace;"></textarea>
+                            </div>
+
+                            <div v-if="find.index && find.index.type == 'btree' ">
+                                From (included)
+                                <div v-for="field in find.index.fields" style="padding-left: 20px;">
+                                    <span style="font-family: monospace;">"{{field}}"</span> <input type="text" v-model="find.from[field]" @keyup="apiFind()"><br>
+                                </div>
+                            </div>
+
+                            <div v-if="find.index && find.index.type == 'btree' ">
+                                To (excluded)
+                                <div v-for="field in find.index.fields" style="padding-left: 20px;">
+                                    <span style="font-family: monospace;">"{{field}}"</span> <input type="text" v-model="find.to[field]" @keyup="apiFind()"><br>
+                                </div>
+                            </div>
+
+                            <div class="form-check" v-if="find.index && find.index.type == 'btree' ">
+                                <input class="form-check-input" type="checkbox" value="" id="find_reverse" v-model="find.reverse" @change="apiFind()">
+                                <label class="form-check-label" for="find_reverse">Reverse order</label>
+                            </div>
+
+                        </form>
+
+                        <form @submit.prevent="apiFind()" style="width: 560px; margin: 0 auto;">
+                            <div class="input-group mb-3">
+                                <div class="input-group-prepend">
+                                    <button
+                                            :disabled="find.skip==0"
+                                            class="btn btn-secondary"
+                                            type="button"
+                                            @click="find.skip =  parseInt(find.skip) - parseInt(find.limit); if (find.skip <0) {find.skip=0}; apiFind();"
+                                    >Previous</button>
+                                </div>
+                                <div class="input-group-prepend">
+                                    <label class="input-group-text" for="find-pagination-skip">skip</label>
+                                </div>
+                                <input
+                                        type="number"
+                                        class="form-control"
+                                        id="find-pagination-skip"
+                                        v-model="find.skip"
+                                        @keyup="apiFind()"
+                                        @change="apiFind()"
+                                        min="0"
+                                >
+                                <div class="input-group-prepend">
+                                    <label class="input-group-text" for="find-pagination-limit">limit</label>
+                                </div>
+                                <input
+                                        type="number"
+                                        class="form-control"
+                                        id="find-pagination-limit"
+                                        v-model="find.limit"
+                                        @keyup="apiFind()"
+                                        @change="apiFind()"
+                                        min="0"
+                                >
+                                <div class="input-group-append">
+                                    <button
+                                            :disabled="find.result.rows.length < find.limit"
+                                            class="btn btn-secondary"
+                                            type="button"
+                                            @click="find.skip =  parseInt(find.skip) + parseInt(find.limit); apiFind();"
+                                    >Next</button>
+                                </div>
+                            </div>
+                            <div style="font-size: 80%;    margin-top: -15px;    text-align: center;    padding-bottom: 15px;">
+                                {{ find_btree.elapsed }}
+                            </div>
+                        </form>
+
+                        <div v-if="find.result.elapsed" style="font-size: 80%; color: gray;">
+                            Elapsed: {{ find.result.elapsed }}
+                        </div>
+
+                        <div id="find_result">
+                            <table class="table table-striped" v-if="find.result.rows">
+                                <tr>
+                                    <th v-for="field in find.columns"> {{ field }}</th>
+                                    <th>{ document }</th>
+                                </tr>
+                                <tr v-for="row in find.result.rows">
+                                    <td v-for="field in find.columns"> {{ row[field] }}</td>
+                                    <td style="font-family: monospace;">{{ row }}</td>
+                                </tr>
+                            </table>
+                        </div>
                     </div>
 
                     <div v-if="panels.fullscan">
@@ -554,6 +659,7 @@
                         delete: false,
                         insert: false,
                         home: true,
+                        find: false,
                     },
                     item_patch: '{\n\n}',
 
@@ -582,6 +688,24 @@
                         filter: '{\n\n}',
                         request: {
                             payload: {},
+                        },
+                    },
+
+                    // Operation find
+                    find: {
+                        columns: [],
+                        filter: '{\n\n}',
+                        skip: 0,
+                        limit: 10,
+                        index: null,
+                        index_name: '',
+                        from: {},
+                        to: {},
+                        reverse: false,
+                        result: {
+                            loading: false,
+                            rows: [],
+                            elapsed: '',
                         },
                     },
                 },
@@ -685,8 +809,12 @@
                             });
                     },
                     showPanel(panel) {
-                        for (var key in this.panels) {
-                            this.panels[key] = key == panel;
+                        for (let key in this.panels) {
+                            let show = key == panel;
+                            this.panels[key] = show;
+                            if (show && key == 'find') {
+                                this.fetchIndexes(this.collection_name);
+                            }
                         }
                     },
                     fetchFullScanExperimental(collection) {
@@ -775,6 +903,7 @@
                         axios.post('/v1/collections/'+ encodeURIComponent(collection) + ":listIndexes")
                             .then(function(resp) {
                                 that.indexes = resp.data;
+                                that.find.indexes = resp.data;
                             });
                     },
                     applyPatchClick() {
@@ -831,6 +960,84 @@
                             this.find_btree.skip = 0;
                             this.findByIndexBtree();
                         }
+                    },
+                    findSelectIndex(name) {
+                        for (let key in this.find.indexes) {
+                            let index = this.find.indexes[key];
+                            if (index.name == name) {
+                                this.find.index = index;
+                                if (index.type == 'btree') {
+                                    this.find.columns = index.fields;
+                                } else {
+                                    this.find.columns = [];
+                                }
+                                return;
+                            }
+                        }
+                        this.find.index = null;
+                    },
+                    apiFind() {
+                        let that = this;
+                        let payload = {
+                            limit: parseInt(that.find.limit),
+                            skip: parseInt(that.find.skip),
+                        };
+
+                        try {
+                            payload.filter = JSON.parse(that.find.filter);
+                        } catch (e) {
+                            console.log(e)
+                            // Nothing happen :D
+                        }
+
+                        if (this.find.index) {
+                            payload.index = this.find.index.name;
+                        }
+
+                        if (this.find.index && this.find.index.type == 'btree') {
+
+                            payload.reverse = this.find.reverse;
+
+                            let fromCount = 0;
+                            for (let field in this.find.from) {
+                                if (this.find.from[field]) {
+                                    fromCount++;
+                                }
+                            }
+                            if (fromCount = this.find.index.fields.length) {
+                                payload.from = this.find.from
+                            }
+
+                            let toCount = 0;
+                            for (let field in this.find.to) {
+                                if (this.find.to[field]) {
+                                    toCount++;
+                                }
+                            }
+                            if (toCount = this.find.index.fields.length) {
+                                payload.to = this.find.to
+                            }
+                        }
+
+
+                        let t0 = new Date();
+                        axios({
+                            method: 'post',
+                            url: '/v1/collections/'+ encodeURIComponent(this.collection_name)+':find',
+                            data: payload,
+                            transformResponse: (res) => {return res;},
+                            responseType: 'text',
+                        })
+                            .then(function(resp) {
+                                let t1 = new Date();
+                                that.find.result.elapsed = (t1.getTime()-t0.getTime()) + 'ms';
+                                var rows = [];
+                                resp.data.split("\n").forEach(function(line) {
+                                    if (line == '') return;
+                                    rows.push(JSON.parse(line)); // todo: try-catch
+                                });
+                                that.find.result.rows = rows;
+                            });
                     },
                     findByIndexBtree() {
                         let that = this;

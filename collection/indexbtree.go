@@ -164,6 +164,7 @@ func (b *IndexBtree) Traverse(optionsData []byte, f func(*Row) bool) {
 	pivotTo := &RowOrdered{}
 	if hasFrom {
 		for _, field := range b.Options.Fields {
+			field = strings.TrimPrefix(field, "-")
 			pivotTo.Values = append(pivotTo.Values, options.To[field])
 		}
 	}
