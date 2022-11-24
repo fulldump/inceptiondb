@@ -107,10 +107,10 @@
                     <div class="line2">
                         <a href="#" :class="{active: panels.find}" @click.prevent.stop="showPanel('find'); fetchFullScan(collection_name);">Find</a>
                         |
-                        <a href="#" :class="{active: panels.fullscan}" @click.prevent.stop="showPanel('fullscan'); fetchFullScan(collection_name);">Fullscan</a>
-                        |
-                        <a href="#" :class="{active: panels.indexsearch}" @click.prevent.stop="showPanel('indexsearch'); fetchIndexes(collection_name);">IndexSearch</a>
-                        |
+<!--                        <a href="#" :class="{active: panels.fullscan}" @click.prevent.stop="showPanel('fullscan'); fetchFullScan(collection_name);">Fullscan</a>-->
+<!--                        |-->
+<!--                        <a href="#" :class="{active: panels.indexsearch}" @click.prevent.stop="showPanel('indexsearch'); fetchIndexes(collection_name);">IndexSearch</a>-->
+<!--                        |-->
                         <a href="#" :class="{active: panels.delete}"  @click.prevent.stop="showPanel('delete');">Drop collection</a>
                     </div>
 
@@ -119,7 +119,7 @@
                         <form @submit.prevent="apiFind()">
 
                             <div class="form-group">
-                                <select class="form-control" v-model="find.index_name" @change="findSelectIndex(find.index_name)">
+                                <select class="form-control" v-model="find.index_name" @change="findSelectIndex(find.index_name); apiFind();">
                                     <option selected value="">No index (fullscan)</option>
                                     <option v-for="index in indexes" :value="index.name">{{index.name}} (type {{ index.type }})</option>
                                 </select>
@@ -127,20 +127,37 @@
 
                             <div class="mb-3">
                                 <label for="find_filter" class="form-label">Filter (MongoDB style):</label>
-                                <textarea v-model="find.filter" class="form-control" id="find_filter" rows="3" style="font-family: monospace;"></textarea>
+                                <textarea v-model="find.filter" class="form-control" id="find_filter" rows="3" style="font-family: monospace;" @keyup="apiFind();"></textarea>
+                            </div>
+
+                            <div class="form-group row" v-if="find.index && find.index.type == 'map' ">
+                                <label for="find_value" class="col-sm-1 col-form-label">Value</label>
+                                <div class="col-sm-11">
+                                    <input type="text" v-model="find.value" class="form-control" id="find_value" @change="apiFind()" @keyup="apiFind()">
+                                </div>
                             </div>
 
                             <div v-if="find.index && find.index.type == 'btree' ">
                                 From (included)
                                 <div v-for="field in find.index.fields" style="padding-left: 20px;">
-                                    <span style="font-family: monospace;">"{{field}}"</span> <input type="text" v-model="find.from[field]" @keyup="apiFind()"><br>
+                                    <span style="font-family: monospace;">"{{field}}"</span>
+                                    <input
+                                            type="text"
+                                            :value='find.from[field]'
+                                            @input='evt=> {find.from[field]=evt.target.value;apiFind();}'
+                                    >
                                 </div>
                             </div>
 
                             <div v-if="find.index && find.index.type == 'btree' ">
                                 To (excluded)
                                 <div v-for="field in find.index.fields" style="padding-left: 20px;">
-                                    <span style="font-family: monospace;">"{{field}}"</span> <input type="text" v-model="find.to[field]" @keyup="apiFind()"><br>
+                                    <span style="font-family: monospace;">"{{field}}"</span>
+                                    <input
+                                            type="text"
+                                            :value='find.to[field]'
+                                            @input='evt=> {find.to[field]=evt.target.value;apiFind();}'
+                                    >
                                 </div>
                             </div>
 
@@ -151,7 +168,7 @@
 
                         </form>
 
-                        <form @submit.prevent="apiFind()" style="width: 560px; margin: 0 auto;">
+                        <form @submit.prevent="apiFind()" style="max-width: 560px; margin: 0 auto;">
                             <div class="input-group mb-3">
                                 <div class="input-group-prepend">
                                     <button
@@ -199,8 +216,13 @@
                             </div>
                         </form>
 
-                        <div v-if="find.result.elapsed" style="font-size: 80%; color: gray;">
-                            Elapsed: {{ find.result.elapsed }}
+                        <div style="font-size: 80%; color: gray;">
+                            <span>
+                                Returned documents: {{ find.result.rows.length }}
+                            </span>
+                            <span v-if="find.result.elapsed">
+                                | Elapsed: {{ find.result.elapsed }}
+                            </span>
                         </div>
 
                         <div id="find_result">
@@ -702,6 +724,7 @@
                         from: {},
                         to: {},
                         reverse: false,
+                        value: '',
                         result: {
                             loading: false,
                             rows: [],
@@ -994,6 +1017,10 @@
                             payload.index = this.find.index.name;
                         }
 
+                        if (this.find.index && this.find.index.type == 'map') {
+                            payload.value = this.find.value;
+                        }
+
                         if (this.find.index && this.find.index.type == 'btree') {
 
                             payload.reverse = this.find.reverse;
@@ -1004,7 +1031,7 @@
                                     fromCount++;
                                 }
                             }
-                            if (fromCount = this.find.index.fields.length) {
+                            if (fromCount == this.find.index.fields.length) {
                                 payload.from = this.find.from
                             }
 
@@ -1014,7 +1041,7 @@
                                     toCount++;
                                 }
                             }
-                            if (toCount = this.find.index.fields.length) {
+                            if (toCount == this.find.index.fields.length) {
                                 payload.to = this.find.to
                             }
                         }
