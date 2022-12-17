@@ -13,7 +13,7 @@ import (
 
 func RecoverFromPanic(next box.H) box.H {
 	return func(ctx context.Context) {
-		go func() {
+		defer func() {
 			if err := recover(); err != nil {
 				debug.PrintStack()
 			}
