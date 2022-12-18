@@ -19,7 +19,7 @@ type Collection struct {
 	file      *os.File
 	Rows      []*Row
 	rowsMutex *sync.Mutex
-	Indexes   map[string]*collectionIndex
+	Indexes   map[string]*collectionIndex // todo: protect access with mutex or use sync.Map
 	// buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
 }
 
@@ -67,7 +67,16 @@ func OpenCollection(filename string) (*Collection, error) {
 			if err != nil {
 				return nil, err
 			}
-		case "index":
+		case "drop_index":
+			dropIndexCommand := &DropIndexCommand{}
+			json.Unmarshal(command.Payload, dropIndexCommand) // Todo: handle error properly
+
+			err := collection.dropIndex(dropIndexCommand.Name, false)
+			if err != nil {
+				fmt.Printf("WARNING: drop index '%s': %s\n", dropIndexCommand.Name, err.Error())
+				// TODO: stop process? if error might get inconsistent state
+			}
+		case "index": // todo: rename to create_index
 			indexCommand := &CreateIndexCommand{}
 			json.Unmarshal(command.Payload, indexCommand) // Todo: handle error properly
 
@@ -215,7 +224,7 @@ type CreateIndexCommand struct {
 
 // IndexMap create a unique index with a name
 // Constraints: values can be only scalar strings or array of strings
-func (c *Collection) Index(name string, options interface{}) error {
+func (c *Collection) Index(name string, options interface{}) error { // todo: rename to CreateIndex
 	return c.createIndex(name, options, true)
 }
 
@@ -265,7 +274,7 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 	}
 
 	command := &Command{
-		Name:      "index",
+		Name:      "index", // todo: rename to create_index
 		Uuid:      uuid.New().String(),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
@@ -444,6 +453,48 @@ func (c *Collection) Drop() error {
 	err = os.Remove(c.Filename)
 	if err != nil {
 		return fmt.Errorf("remove: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Collection) DropIndex(name string) error {
+	return c.dropIndex(name, true)
+}
+
+type DropIndexCommand struct {
+	Name string `json:"name"`
+}
+
+func (c *Collection) dropIndex(name string, persist bool) error {
+	_, exists := c.Indexes[name]
+	if !exists {
+		return fmt.Errorf("dropIndex: index '%s' not found", name)
+	}
+	delete(c.Indexes, name)
+
+	if !persist {
+		return nil
+	}
+
+	payload, err := json.Marshal(&CreateIndexCommand{
+		Name: name,
+	})
+	if err != nil {
+		return fmt.Errorf("json encode payload: %w", err)
+	}
+
+	command := &Command{
+		Name:      "drop_index",
+		Uuid:      uuid.New().String(),
+		Timestamp: time.Now().UnixNano(),
+		StartByte: 0,
+		Payload:   payload,
+	}
+
+	err = json.NewEncoder(c.file).Encode(command)
+	if err != nil {
+		return fmt.Errorf("json encode command: %w", err)
 	}
 
 	return nil

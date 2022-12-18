@@ -284,6 +284,37 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
+			a.Alternative("Drop index", func(a *biff.A) {
+
+				resp := apiRequest("POST", "/collections/my-collection:dropIndex").
+					WithBodyJson(JSON{"name": "my-index"}).Do()
+
+				Save(resp, "Drop index", ``)
+
+				biff.AssertEqual(resp.StatusCode, http.StatusNoContent)
+
+				a.Alternative("Insert twice", func(a *biff.A) {
+
+					{
+						resp := apiRequest("GET", "/collections/my-collection").Do()
+						biff.AssertEqualJson(resp.BodyJson().(JSON)["total"], 0)
+					}
+
+					myDocument := JSON{"id": "duplicated-id"}
+
+					apiRequest("POST", "/collections/my-collection:insert").
+						WithBodyJson(myDocument).Do()
+					apiRequest("POST", "/collections/my-collection:insert").
+						WithBodyJson(myDocument).Do()
+
+					{
+						resp := apiRequest("GET", "/collections/my-collection").Do()
+						biff.AssertEqualJson(resp.BodyJson().(JSON)["total"], 2)
+					}
+				})
+
+			})
+
 			a.Alternative("Get index", func(a *biff.A) {
 				resp := apiRequest("POST", "/collections/my-collection:getIndex").
 					WithBodyJson(JSON{
