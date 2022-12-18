@@ -34,6 +34,7 @@
   * unixnano
 * Ensure thread safety and improve performance with Map from standard library
 * ~~Insert multiple documents per request~~
+* Return http.StatusServiceUnavailable while loading collections
 
 ## Won't have
 
