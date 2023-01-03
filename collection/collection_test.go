@@ -2,6 +2,7 @@ package collection
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"strconv"
@@ -343,6 +344,65 @@ func TestPersistenceUpdate(t *testing.T) {
 
 		AssertEqual(len(c.Rows), 1)
 	})
+}
+
+type MockIndex struct {
+	AddRowCallback    func(row *Row) error
+	RemoveRowCallback func(row *Row) error
+}
+
+func (m *MockIndex) AddRow(row *Row) error {
+	return m.AddRowCallback(row)
+}
+
+func (m *MockIndex) RemoveRow(row *Row) error {
+	return m.RemoveRowCallback(row)
+}
+
+func (m *MockIndex) Traverse(options []byte, f func(row *Row) bool) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func TestIndexInsert_Rollback(t *testing.T) {
+
+	adds := []string{}
+	removes := []string{}
+
+	newMock := func(name string) Index {
+		return &MockIndex{
+			AddRowCallback: func(row *Row) error {
+				adds = append(adds, name)
+				if len(adds) == 2 {
+					return errors.New("mock error")
+				}
+				return nil
+			},
+			RemoveRowCallback: func(row *Row) error {
+				removes = append(removes, name)
+				return nil
+			},
+		}
+	}
+
+	indexes := map[string]*collectionIndex{
+		"a": &collectionIndex{
+			Index: newMock("a"),
+		},
+		"b": &collectionIndex{
+			Index: newMock("b"),
+		},
+		"c": &collectionIndex{
+			Index: newMock("c"),
+		},
+	}
+
+	row := &Row{}
+
+	indexInsert(indexes, row)
+
+	AssertEqual(removes, adds)
+	AssertEqual(len(removes), 2)
 }
 
 func TestInsert1M_serial(t *testing.T) {

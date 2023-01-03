@@ -290,10 +290,29 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 }
 
 func indexInsert(indexes map[string]*collectionIndex, row *Row) (err error) {
+
+	// Note: rollbacks array should be kept in stack if it is smaller than 65536 bytes, so
+	// our recommended maximum number of indexes should NOT exceed 8192 indexes
+
+	rollbacks := make([]*collectionIndex, len(indexes))
+	c := 0
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		for i := 0; i < c; i++ {
+			rollbacks[i].RemoveRow(row)
+		}
+	}()
+
 	for key, index := range indexes {
+
+		rollbacks[c] = index
+		c++
+
 		err = index.AddRow(row)
 		if err != nil {
-			// TODO: undo previous work? two phases (check+commit) ?
 			return fmt.Errorf("index add '%s': %s", key, err.Error())
 		}
 	}
