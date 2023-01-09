@@ -21,7 +21,8 @@ release: clean
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(FLAGS) -o bin/inceptiondb.win.amd64.exe ./cmd/...
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build $(FLAGS) -o bin/inceptiondb.mac.arm64 ./cmd/...
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build $(FLAGS) -o bin/inceptiondb.mac.amd64 ./cmd/...
-	md5sum bin/* > bin/checksum
+	md5sum bin/inceptiondb.* > bin/checksum-md5
+	sha256sum bin/inceptiondb.* > bin/checksum-sha256
 
 .PHONY: clean
 clean:
