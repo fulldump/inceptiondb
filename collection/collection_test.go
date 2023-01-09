@@ -372,10 +372,10 @@ func TestIndexInsert_Rollback(t *testing.T) {
 	newMock := func(name string) Index {
 		return &MockIndex{
 			AddRowCallback: func(row *Row) error {
-				adds = append(adds, name)
 				if len(adds) == 2 {
 					return errors.New("mock error")
 				}
+				adds = append(adds, name)
 				return nil
 			},
 			RemoveRowCallback: func(row *Row) error {
@@ -403,6 +403,31 @@ func TestIndexInsert_Rollback(t *testing.T) {
 
 	AssertEqual(removes, adds)
 	AssertEqual(len(removes), 2)
+}
+
+func TestIndexInsert_Rollback_BlackBox(t *testing.T) {
+
+	indexes := map[string]*collectionIndex{
+		"a": &collectionIndex{
+			Index: NewIndexMap(&IndexMapOptions{
+				Field: "id",
+			}),
+		},
+	}
+
+	row := &Row{
+		Payload: []byte(`{"id":"my-id"}`),
+	}
+
+	err1 := indexInsert(indexes, row)
+	AssertNil(err1)
+
+	err2 := indexInsert(indexes, row)
+	AssertNotNil(err2)
+
+	err3 := indexInsert(indexes, row)
+	AssertNotNil(err3)
+
 }
 
 func TestInsert1M_serial(t *testing.T) {

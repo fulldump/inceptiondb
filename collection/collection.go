@@ -307,14 +307,13 @@ func indexInsert(indexes map[string]*collectionIndex, row *Row) (err error) {
 	}()
 
 	for key, index := range indexes {
-
-		rollbacks[c] = index
-		c++
-
 		err = index.AddRow(row)
 		if err != nil {
 			return fmt.Errorf("index add '%s': %s", key, err.Error())
 		}
+
+		rollbacks[c] = index
+		c++
 	}
 
 	return
