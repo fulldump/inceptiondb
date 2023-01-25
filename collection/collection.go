@@ -415,6 +415,10 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 		return fmt.Errorf("cannot diff: %w", err)
 	}
 
+	if len(diff) == 2 { // diff == '{}'
+		return nil
+	}
+
 	// index update
 	err = indexRemove(c.Indexes, row)
 	if err != nil {
