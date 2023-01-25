@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"sync"
 	"testing"
@@ -343,6 +345,41 @@ func TestPersistenceUpdate(t *testing.T) {
 		AssertEqual(user.Name, "Jaime")
 
 		AssertEqual(len(c.Rows), 1)
+	})
+}
+
+func TestPersistenceUpdate_TwiceOptimization(t *testing.T) {
+	Environment(func(filename string) {
+
+		// Setup
+		c, _ := OpenCollection(filename)
+		c.Index("my-index", &IndexMapOptions{
+			Field: "id",
+		})
+		row, _ := c.Insert(map[string]interface{}{"id": "1", "name": "Pablo"})
+
+		// Run
+		for i := 0; i < 10; i++ {
+			c.Patch(row, map[string]interface{}{"name": "Jaime"})
+		}
+		c.Close()
+
+		// Check
+		numPatchCommands := 0
+		f, _ := os.Open(filename)
+		d := json.NewDecoder(f)
+		for {
+			c := Command{}
+			if decodeErr := d.Decode(&c); decodeErr == io.EOF {
+				break
+			}
+
+			if c.Name == "patch" {
+				numPatchCommands++
+			}
+		}
+
+		AssertEqual(numPatchCommands, 1)
 	})
 }
 
