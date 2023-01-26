@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -71,6 +73,20 @@ func main() {
 		Handler: box.Box2Http(b),
 	}
 
+	if c.HttpsSelfsigned {
+		log.Println("HTTPS Selfsigned")
+		s.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{selfSignedCertificate()},
+		}
+	}
+
+	ln, err := net.Listen("tcp", c.HttpAddr)
+	if err != nil {
+		log.Println("ERROR:", err.Error())
+		os.Exit(-1)
+	}
+	log.Println("listening on", c.HttpAddr)
+
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
@@ -96,8 +112,12 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fmt.Println("listening on", s.Addr)
-		err := s.ListenAndServe()
+		var err error
+		if c.HttpsEnabled {
+			err = s.ServeTLS(ln, "", "")
+		} else {
+			err = s.Serve(ln)
+		}
 		if err != nil {
 			fmt.Println(err.Error())
 		}
