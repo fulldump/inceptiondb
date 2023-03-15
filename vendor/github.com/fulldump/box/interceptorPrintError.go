@@ -2,7 +2,7 @@ package box
 
 import "context"
 
-func InterceptorPrintError(next H) H {
+func PrettyError(next H) H {
 	return func(ctx context.Context) {
 		next(ctx)
 		err := GetError(ctx)

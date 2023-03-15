@@ -40,3 +40,7 @@ func GetRequest(ctx context.Context) *http.Request {
 func GetUrlParameter(ctx context.Context, param string) string {
 	return GetBoxContext(ctx).Parameters[param]
 }
+
+func Param(r *http.Request, param string) string {
+	return GetUrlParameter(r.Context(), param)
+}

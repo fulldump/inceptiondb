@@ -60,9 +60,11 @@ func main() {
 	})
 
 	b := api.Build(service.NewService(db), c.Statics, VERSION)
-	accessLogger := log.New(os.Stdout, "ACCESS: ", log.Lshortfile)
+	if c.EnableCompression {
+		b.WithInterceptors(api.Compression)
+	}
 	b.WithInterceptors(
-		api.AccessLog(accessLogger),
+		api.AccessLog(log.New(os.Stdout, "ACCESS: ", log.Lshortfile)),
 		api.InterceptorUnavailable(db),
 		api.RecoverFromPanic,
 		api.PrettyErrorInterceptor,

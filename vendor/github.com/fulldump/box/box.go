@@ -3,6 +3,7 @@ package box
 import (
 	"fmt"
 	"net/http"
+	"os"
 )
 
 type B struct {
@@ -39,7 +40,7 @@ func (b *B) ListenAndServe() error {
 		Addr:    ":8080",
 		Handler: b,
 	}
-	fmt.Println("Listening to ", server.Addr)
+	fmt.Fprintln(os.Stderr, "Listening to", server.Addr)
 
 	return server.ListenAndServe()
 }

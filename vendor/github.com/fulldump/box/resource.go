@@ -1,6 +1,7 @@
 package box
 
 import (
+	"net/http"
 	"net/url"
 	"reflect"
 	"runtime"
@@ -11,13 +12,13 @@ import (
 type R struct {
 	Attr
 
-	// Path is a literal or placehoder that matches with a portion of the path
+	// Path is a literal or placeholder that matches with a portion of the path
 	Path string
 
 	// Parent is a reference to parent resource
 	Parent *R
 
-	// Children is the list of desdendent resources
+	// Children is the list of descendent resources
 	Children []*R
 
 	// Interceptors is the list of actions that will be executed before each
@@ -117,6 +118,11 @@ func (r *R) Resource(locator string) *R {
 	return r.resourceParts(parts)
 }
 
+// Group is an alias of Resource
+func (r *R) Group(path string) *R {
+	return r.Resource(path)
+}
+
 // Add action to this resource
 func (r *R) WithActions(action ...*A) *R {
 
@@ -162,6 +168,21 @@ func (r *R) WithInterceptors(interceptor ...I) *R {
 func (r *R) WithAttribute(key string, value interface{}) *R {
 	r.SetAttribute(key, value)
 	return r
+}
+
+func (r *R) HandleFunc(method string, path string, handler http.HandlerFunc) *A {
+	return r.Handle(method, path, handler)
+}
+
+func (r *R) Handle(method string, path string, handler interface{}) *A {
+	a := actionBound(handler, method)
+	r.Resource(path).WithActions(a)
+	return a
+}
+
+// Use is an alias of WithInterceptors
+func (r *R) Use(interceptor ...I) *R {
+	return r.WithInterceptors(interceptor...)
 }
 
 func actionNameNormalizer(u string) string {

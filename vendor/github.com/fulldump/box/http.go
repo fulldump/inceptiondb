@@ -80,6 +80,8 @@ func Box2Http(b *B) http.Handler {
 			interceptors = append(interceptors, c.Action.Interceptors...)
 		}
 
+		r = r.WithContext(ctx)
+
 		hi := func(ctx context.Context) {
 
 			switch h := handler.(type) {
