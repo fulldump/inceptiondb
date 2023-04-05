@@ -32,10 +32,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 		biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
 		a.Alternative("Retrieve collection", func(a *biff.A) {
-			resp := apiRequest("GET", "/collections/my-collection").
-				WithBodyJson(JSON{
-					"name": "my-collection", // TODO: remove
-				}).Do()
+			resp := apiRequest("GET", "/collections/my-collection").Do()
 			Save(resp, "Retrieve collection", ``)
 
 			biff.AssertEqual(resp.StatusCode, http.StatusOK)

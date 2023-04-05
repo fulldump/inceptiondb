@@ -3,10 +3,7 @@
 Curl example:
 
 ```sh
-curl "https://example.com/v1/collections/my-collection" \
--d '{
-    "name": "my-collection"
-}'
+curl "https://example.com/v1/collections/my-collection"
 ```
 
 
@@ -16,9 +13,7 @@ HTTP request/response example:
 GET /v1/collections/my-collection HTTP/1.1
 Host: example.com
 
-{
-    "name": "my-collection"
-}
+
 
 HTTP/1.1 200 OK
 Content-Length: 47
