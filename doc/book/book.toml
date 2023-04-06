@@ -1,0 +1,21 @@
+[book]
+authors = ["fulldump", "GPT-4"]
+language = "en"
+multilingual = false
+src = "src"
+title = "InceptionDB"
+
+[output.html]
+mathjax-support = true
+site-url = "/book/"
+git-repository-url = "https://github.com/fulldump/inceptiondb/tree/master/doc/book"
+edit-url-template = "https://github.com/fulldump/inceptiondb/edit/master/doc/book/{path}"
+
+[output.html.search]
+limit-results = 20
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 2
+boost-paragraph = 1
+expand = true
+heading-split-level = 2

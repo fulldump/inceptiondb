@@ -39,6 +39,10 @@ doc:
 	go clean -testcache
 	API_EXAMPLES_PATH="../doc/examples" go test ./api/...
 
+.PHONY: book
+book:
+	mdbook build -d ../../statics/www/book/ ./doc/book/
+
 .PHONY: version
 version:
 	@echo $(VERSION)
