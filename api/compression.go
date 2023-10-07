@@ -38,10 +38,16 @@ func Compression(next box.H) box.H {
 
 // Gzip Compression
 type gzipResponseWriter struct {
-	io.Writer
 	http.ResponseWriter
+	io.Writer
 }
 
 func (w gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
+}
+
+func (w gzipResponseWriter) EnableFullDuplex() error {
+
+	wc := http.NewResponseController(w.ResponseWriter)
+	return wc.EnableFullDuplex()
 }

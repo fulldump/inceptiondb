@@ -34,11 +34,18 @@ func insertFullduplex(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	jsonWriter := json.NewEncoder(w)
 
 	flusher, ok := w.(http.Flusher)
+	_ = flusher
 	if ok {
 		fmt.Println("FLUSHER!")
 	} else {
 		fmt.Println("NO FLUSHER")
 	}
+
+	c := 0
+
+	defer func() {
+		fmt.Println("received for insert:", c)
+	}()
 
 	for {
 		item := map[string]interface{}{}
@@ -59,10 +66,10 @@ func insertFullduplex(ctx context.Context, w http.ResponseWriter, r *http.Reques
 			w.WriteHeader(http.StatusConflict)
 			return err
 		}
-
+		c++
 		// fmt.Println("item inserted")
 		if ok {
-			flusher.Flush()
+			// flusher.Flush()
 		}
 
 		err = jsonWriter.Encode(item)

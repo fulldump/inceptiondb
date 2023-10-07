@@ -17,16 +17,18 @@ func main() {
 	e := json.NewEncoder(w)
 
 	go func() {
-		for i := 0; i < 1000; i++ {
+
+		payload := strings.Repeat("fake ", 10)
+		for i := 0; i < 80_000; i++ {
 
 			e.Encode(map[string]any{
 				"id":      i,
-				"payload": strings.Repeat("fake ", 1000),
+				"payload": payload,
 			})
 
 			fmt.Println("sent", i)
 
-			// time.Sleep(10 * time.Millisecond)
+			// time.Sleep(1000 * time.Millisecond)
 		}
 		w.Close()
 	}()
@@ -53,7 +55,10 @@ func main() {
 
 	{
 
-		req, err := http.NewRequest("POST", "http://localhost:8080/v1/collections/streammm:insertFullduplex", r)
+		u := "http://localhost:8080/v1/collections/streammm:insertFullduplex"
+		u = "https://inceptiondb.io/v1/collections/streammm:insertFullduplex"
+
+		req, err := http.NewRequest("POST", u, r)
 		if err != nil {
 			fmt.Println("ERROR: new request:", err.Error())
 			os.Exit(3)
@@ -65,19 +70,26 @@ func main() {
 			os.Exit(4)
 		}
 
+		// io.Copy(os.Stdout, resp.Body)
+		// fmt.Println("")
+
 		d := json.NewDecoder(resp.Body)
-
+		receivedCounter := 0
 		var o json.RawMessage
-
 		for {
 			err := d.Decode(&o)
+			if err == io.EOF {
+				break
+			}
 			if err != nil {
 				fmt.Println("ERROR: response body:", err.Error())
 				os.Exit(5)
 			}
 
 			fmt.Println("RECEIVED:", string(o))
+			receivedCounter++
 		}
 
+		fmt.Println("received:", receivedCounter)
 	}
 }
