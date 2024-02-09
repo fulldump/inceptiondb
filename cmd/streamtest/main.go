@@ -19,7 +19,7 @@ func main() {
 	go func() {
 
 		payload := strings.Repeat("fake ", 10)
-		for i := 0; i < 80_000; i++ {
+		for i := 0; i < 1_000_000; i++ {
 
 			e.Encode(map[string]any{
 				"id":      i,
@@ -56,7 +56,9 @@ func main() {
 	{
 
 		u := "http://localhost:8080/v1/collections/streammm:insertFullduplex"
-		u = "https://inceptiondb.io/v1/collections/streammm:insertFullduplex"
+		// u = "https://inceptiondb.io/v1/collections/streammm:insertFullduplex"
+		// u = "http://localhost:8080/v1/collections/streammm:insert"
+		// u = "http://inceptiondb.io:8080/v1/collections/streammm:insertFullduplex"
 
 		req, err := http.NewRequest("POST", u, r)
 		if err != nil {
