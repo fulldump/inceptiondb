@@ -19,34 +19,52 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	collection, err := s.GetCollection(collectionName)
 	if err == service.ErrorCollectionNotFound {
 		collection, err = s.CreateCollection(collectionName)
+		if err != nil {
+			return err // todo: handle/wrap this properly
+		}
+		err = collection.SetDefaults(newCollectionDefaults())
+		if err != nil {
+			return err // todo: handle/wrap this properly
+		}
 	}
 	if err != nil {
 		return err // todo: handle/wrap this properly
 	}
 
 	jsonReader := json.NewDecoder(r.Body)
+	jsonWriter := json.NewEncoder(w)
 
-	for {
-		item := map[string]interface{}{}
+	for i := 0; true; i++ {
+		item := map[string]any{}
 		err := jsonReader.Decode(&item)
 		if err == io.EOF {
-			w.WriteHeader(http.StatusCreated)
+			if i == 0 {
+				w.WriteHeader(http.StatusNoContent)
+			}
 			return nil
 		}
 		if err != nil {
 			// TODO: handle error properly
 			fmt.Println("ERROR:", err.Error())
-			w.WriteHeader(http.StatusBadRequest)
+			if i == 0 {
+				w.WriteHeader(http.StatusBadRequest)
+			}
 			return err
 		}
-		_, err = collection.Insert(item)
+		row, err := collection.Insert(item)
 		if err != nil {
 			// TODO: handle error properly
-			w.WriteHeader(http.StatusConflict)
+			if i == 0 {
+				w.WriteHeader(http.StatusConflict)
+			}
 			return err
 		}
 
-		// jsonWriter.Encode(item)
+		if i == 0 {
+			w.WriteHeader(http.StatusCreated)
+		}
+		jsonWriter.Encode(row.Payload)
 	}
 
+	return nil
 }

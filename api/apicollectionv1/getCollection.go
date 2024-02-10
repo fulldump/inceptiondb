@@ -23,8 +23,9 @@ func getCollection(ctx context.Context) (*CollectionResponse, error) {
 	}
 
 	return &CollectionResponse{
-		Name:    collectionName,
-		Total:   len(collection.Rows),
-		Indexes: len(collection.Indexes),
+		Name:     collectionName,
+		Total:    len(collection.Rows),
+		Indexes:  len(collection.Indexes),
+		Defaults: collection.Defaults,
 	}, nil
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	jsonpatch "github.com/evanphx/json-patch"
@@ -21,6 +22,8 @@ type Collection struct {
 	rowsMutex *sync.Mutex
 	Indexes   map[string]*collectionIndex // todo: protect access with mutex or use sync.Map
 	// buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
+	Defaults map[string]any
+	count    int64
 }
 
 type collectionIndex struct {
@@ -118,6 +121,10 @@ func OpenCollection(filename string) (*Collection, error) {
 			if err != nil {
 				fmt.Printf("WARNING: patch item %d: %s\n", params.I, err.Error())
 			}
+		case "set_defaults":
+			defaults := map[string]any{}
+			json.Unmarshal(command.Payload, &defaults)
+			collection.setDefaults(defaults, false)
 		}
 	}
 
@@ -159,6 +166,33 @@ func (c *Collection) Insert(item interface{}) (*Row, error) {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return nil, fmt.Errorf("json encode payload: %w", err)
+	}
+
+	auto := atomic.AddInt64(&c.count, 1)
+
+	if c.Defaults != nil {
+		item := map[string]any{} // todo: item is shadowed, choose a better name
+		for k, v := range c.Defaults {
+			switch v {
+			case "uuid()":
+				item[k] = uuid.NewString()
+			case "unixnano()":
+				item[k] = time.Now().UnixNano()
+			case "auto()":
+				item[k] = auto
+			default:
+				item[k] = v
+			}
+		}
+		err := json.Unmarshal(payload, &item)
+		if err != nil {
+			return nil, fmt.Errorf("json encode defaults: %w", err)
+		}
+
+		payload, err = json.Marshal(item)
+		if err != nil {
+			return nil, fmt.Errorf("json encode payload: %w", err)
+		}
 	}
 
 	// Add row
@@ -220,6 +254,39 @@ type CreateIndexCommand struct {
 	Name    string      `json:"name"`
 	Type    string      `json:"type"`
 	Options interface{} `json:"options"`
+}
+
+func (c *Collection) SetDefaults(defaults map[string]any) error {
+	return c.setDefaults(defaults, true)
+}
+
+func (c *Collection) setDefaults(defaults map[string]any, persist bool) error {
+
+	c.Defaults = defaults
+
+	if !persist {
+		return nil
+	}
+
+	payload, err := json.Marshal(defaults)
+	if err != nil {
+		return fmt.Errorf("json encode payload: %w", err)
+	}
+
+	command := &Command{
+		Name:      "set_defaults", // todo: rename to create_index
+		Uuid:      uuid.New().String(),
+		Timestamp: time.Now().UnixNano(),
+		StartByte: 0,
+		Payload:   payload,
+	}
+
+	err = json.NewEncoder(c.file).Encode(command)
+	if err != nil {
+		return fmt.Errorf("json encode command: %w", err)
+	}
+
+	return nil
 }
 
 // IndexMap create a unique index with a name

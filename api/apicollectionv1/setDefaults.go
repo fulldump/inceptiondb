@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -9,11 +10,9 @@ import (
 	"github.com/fulldump/inceptiondb/service"
 )
 
-type dropIndexRequest struct {
-	Name string `json:"name"`
-}
+type setDefaultsInput map[string]any
 
-func dropIndex(ctx context.Context, w http.ResponseWriter, input *dropIndexRequest) error {
+func setDefaults(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
@@ -32,13 +31,32 @@ func dropIndex(ctx context.Context, w http.ResponseWriter, input *dropIndexReque
 		return err // todo: handle/wrap this properly
 	}
 
-	err = col.DropIndex(input.Name)
+	defaults := col.Defaults
+
+	err = json.NewDecoder(r.Body).Decode(&defaults)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		return err // todo: handle/wrap this properly
+	}
+
+	for k, v := range defaults {
+		if v == nil {
+			delete(defaults, k)
+		}
+	}
+
+	if len(defaults) == 0 {
+		defaults = nil
+	}
+
+	err = col.SetDefaults(defaults)
+	if err != nil {
 		return err
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	err = json.NewEncoder(w).Encode(col.Defaults)
+	if err != nil {
+		return err // todo: handle/wrap this properly
+	}
 
 	return nil
 }

@@ -43,6 +43,13 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 	col, err := s.GetCollection(collectionName)
 	if err == service.ErrorCollectionNotFound {
 		col, err = s.CreateCollection(collectionName)
+		if err != nil {
+			return nil, err // todo: handle/wrap this properly
+		}
+		err = col.SetDefaults(newCollectionDefaults())
+		if err != nil {
+			return nil, err // todo: handle/wrap this properly
+		}
 	}
 	if err != nil {
 		return nil, err // todo: handle/wrap this properly

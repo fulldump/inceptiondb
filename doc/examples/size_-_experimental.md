@@ -25,7 +25,7 @@ Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
-    "disk": 640,
+    "disk": 783,
     "index.my-index": 192,
     "memory": 248
 }

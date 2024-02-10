@@ -8,7 +8,14 @@ import (
 )
 
 type createCollectionRequest struct {
-	Name string `json:"name"`
+	Name     string         `json:"name"`
+	Defaults map[string]any `json:"defaults"`
+}
+
+func newCollectionDefaults() map[string]any {
+	return map[string]any{
+		"id": "uuid()",
+	}
 }
 
 func createCollection(ctx context.Context, w http.ResponseWriter, input *createCollectionRequest) (*CollectionResponse, error) {
@@ -25,9 +32,15 @@ func createCollection(ctx context.Context, w http.ResponseWriter, input *createC
 		return nil, err // todo: wrap error?
 	}
 
+	if input.Defaults == nil {
+		input.Defaults = newCollectionDefaults()
+	}
+	collection.SetDefaults(input.Defaults)
+
 	w.WriteHeader(http.StatusCreated)
 	return &CollectionResponse{
-		Name:  input.Name,
-		Total: len(collection.Rows),
+		Name:     input.Name,
+		Total:    len(collection.Rows),
+		Defaults: collection.Defaults,
 	}, nil
 }

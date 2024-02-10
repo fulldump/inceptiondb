@@ -133,7 +133,7 @@ func writeFile(filename, text string) {
 func md_description(d string) string {
 	d = md_crop_tabs(d)
 	d = strings.Replace(d, "\n´´´", "\n```", -1)
-	// d = strings.Replace(d, "´", "`", -1)
+	d = strings.Replace(d, "´", "`", -1)
 	return d
 }
 

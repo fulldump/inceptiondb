@@ -25,10 +25,15 @@ Host: example.com
 }
 
 HTTP/1.1 201 Created
-Content-Length: 0
+Content-Length: 58
+Content-Type: text/plain; charset=utf-8
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
-
+{
+    "address": "Elm Street 11",
+    "id": "my-id",
+    "name": "Fulanez"
+}
 ```
 
 

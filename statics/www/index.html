@@ -800,13 +800,20 @@
                     },
                     insertItem(collection, payload) {
                         var that = this;
-                        axios.post('/v1/collections/'+ encodeURIComponent(collection)+':insert', payload)
-                            .then(function(resp) {
+                        fetch('/v1/collections/'+ encodeURIComponent(collection)+':insert', {
+													method: 'POST',
+													body: JSON.stringify(payload),
+												})
+														.then(resp => resp.json() )
+                            .then(function(body) {
+															console.log('lalala');
+															console.log(body);
                                 that.insert_item.error = '';
-                                that.rows.push(JSON.stringify(payload));
+                                that.rows.push(JSON.stringify(body));
                                 that.insert_item.request.payload = '{\n\n}';
                             })
                             .catch(function(error) {
+															console.log(error);
                                 if (!error.response) {
                                     that.insert_item.error = 'network error';
                                     return
