@@ -1,4 +1,4 @@
-package main
+package streamtest
 
 import (
 	"encoding/json"
@@ -7,9 +7,12 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"testing"
 )
 
-func main() {
+func Test_Streamtest(t *testing.T) {
+
+	t.Skip()
 
 	r, w := io.Pipe()
 
