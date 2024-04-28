@@ -113,3 +113,8 @@ func (a *A) WithInterceptors(interceptor ...I) *A {
 func (a *A) Use(interceptor ...I) *A {
 	return a.WithInterceptors(interceptor...)
 }
+
+// GetHandler overwrite default action name
+func (a *A) GetHandler() any {
+	return a.handler
+}

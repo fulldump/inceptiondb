@@ -1,6 +1,6 @@
 PROJECT=github.com/fulldump/apitest
 
-GO = GOFLAGS=-mod=vendor go
+GO = go
 
 .PHONY: test
 test:

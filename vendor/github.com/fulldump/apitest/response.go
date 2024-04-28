@@ -64,7 +64,7 @@ func (r *Response) BodyJson() interface{} {
 	return body
 }
 
-func (r *Response) BodyJsonMap() *map[string]interface{} {
+func (r *Response) BodyJsonMap() map[string]interface{} {
 
 	b := bytes.NewBuffer(r.BodyBytes())
 
@@ -75,5 +75,5 @@ func (r *Response) BodyJsonMap() *map[string]interface{} {
 		panic(err)
 	}
 	r.BodyClose()
-	return &body
+	return body
 }
