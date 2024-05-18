@@ -7,8 +7,8 @@ github.com/fulldump/apitest v1.2.3 h1:4SCbkFYz+Bk4k1ulmv4ofrv3/FKrQquTb/W3EUasG/
 github.com/fulldump/apitest v1.2.3/go.mod h1:UZ/2tr5LhMNXZLgEG9tdz+ekUN8JtBHEn84d8zOm5p4=
 github.com/fulldump/biff v1.3.0 h1:FZDqvP8lkrCMDv/oNEH+j2unpuAY+8aXZ44GIvXYOx4=
 github.com/fulldump/biff v1.3.0/go.mod h1:TnBce9eRITmnv3otdmITKeU/zmC08DxotA9s0VcJELg=
-github.com/fulldump/box v0.3.1 h1:E7xbNu5VgdzX4kaw4T/9F9i8PRbWKe07UkyXXunc0o4=
-github.com/fulldump/box v0.3.1/go.mod h1:k1dcwIeNOar6zLlP9D8oF/4FjQeK8kAt7BtRUh/SrMg=
+github.com/fulldump/box v0.4.0 h1:hgKk/oBgzDHc0iTPv6Wk5nHLF5jvq+WaJUUJrL+qE88=
+github.com/fulldump/box v0.4.0/go.mod h1:k1dcwIeNOar6zLlP9D8oF/4FjQeK8kAt7BtRUh/SrMg=
 github.com/fulldump/goconfig v1.5.0 h1:YMTkg0F1BGxTOWbyn0/vOQfoULZ/vDrBfiDPajR+SVs=
 github.com/fulldump/goconfig v1.5.0/go.mod h1:lOEl7YJDeKsAM/CnKUV0vnmDt5ZhHBuqFT/9SdQjWKo=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=

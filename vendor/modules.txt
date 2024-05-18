@@ -12,9 +12,10 @@ github.com/fulldump/apitest
 # github.com/fulldump/biff v1.3.0
 ## explicit; go 1.14
 github.com/fulldump/biff
-# github.com/fulldump/box v0.3.1
+# github.com/fulldump/box v0.4.0
 ## explicit; go 1.19
 github.com/fulldump/box
+github.com/fulldump/box/boxopenapi
 # github.com/fulldump/goconfig v1.5.0
 ## explicit
 github.com/fulldump/goconfig

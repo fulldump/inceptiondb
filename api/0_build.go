@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/fulldump/box"
+	"github.com/fulldump/box/boxopenapi"
 
 	"github.com/fulldump/inceptiondb/api/apicollectionv1"
 	"github.com/fulldump/inceptiondb/service"
@@ -34,6 +35,27 @@ func Build(s service.Servicer, staticsDir, version string) *box.B { // TODO: rem
 		WithActions(box.Get(func() string {
 			return version
 		}))
+
+	spec := boxopenapi.Spec(b)
+	spec.Info.Title = "InceptionDB"
+	spec.Info.Description = "A durable in-memory database to store JSON documents."
+	spec.Info.Contact = &boxopenapi.Contact{
+		Url: "https://github.com/fulldump/inceptiondb/issues/new",
+	}
+	b.Handle("GET", "/openapi.json", func(r *http.Request) any {
+
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		spec.Servers = []boxopenapi.Server{
+			{
+				Url: scheme + "://" + r.Host,
+			},
+		}
+
+		return spec
+	})
 
 	// Mount statics
 	b.Resource("/*").
