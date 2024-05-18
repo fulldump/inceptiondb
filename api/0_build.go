@@ -17,6 +17,8 @@ func Build(s service.Servicer, staticsDir, version string) *box.B { // TODO: rem
 	b := box.NewBox()
 
 	v1 := b.Resource("/v1")
+	v1.WithInterceptors(box.SetResponseHeader("Content-Type", "application/json"))
+
 	apicollectionv1.BuildV1Collection(v1, s).
 		WithInterceptors(
 			injectServicer(s),
@@ -44,13 +46,12 @@ func Build(s service.Servicer, staticsDir, version string) *box.B { // TODO: rem
 	}
 	b.Handle("GET", "/openapi.json", func(r *http.Request) any {
 
-		scheme := "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
 		spec.Servers = []boxopenapi.Server{
 			{
-				Url: scheme + "://" + r.Host,
+				Url: "https://" + r.Host,
+			},
+			{
+				Url: "http://" + r.Host,
 			},
 		}
 
