@@ -30,9 +30,9 @@ clean:
 
 .PHONY: deps
 deps:
-	go mod tidy -v;
-	go mod download;
-	go mod vendor;
+	go get -t -u ./...
+	go mod tidy
+	go mod vendor
 
 .PHONY: doc
 doc:

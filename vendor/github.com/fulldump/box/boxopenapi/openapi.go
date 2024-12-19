@@ -96,19 +96,41 @@ func Spec(api *box.B) OpenAPI {
 	}
 }
 
-func schemaStruct(item reflect.Type) JSON {
+func schemaStruct(schemas JSON, item reflect.Type) JSON {
+
+	name := item.Name()
+	{
+		// Normalize name:
+		name = strings.TrimRight(name, "]")
+		parts := strings.Split(name, ".")
+		name = parts[len(parts)-1]
+	}
+
+	result := JSON{
+		"$ref": "#/components/schemas/" + name,
+	}
+
+	if _, exists := schemas[name]; exists {
+		return result
+	}
+
+	properties := JSON{}
+	definition := JSON{
+		"type":       "object",
+		"required":   []string{},
+		"properties": properties,
+	}
+	schemas[name] = definition
 
 	// follow pointers
 	for item.Kind() == reflect.Ptr {
 		item = item.Elem()
 	}
 
-	properties := JSON{}
-
 	for i := 0; i < item.NumField(); i++ {
 		f := item.Field(i)
 
-		definition := schemaAny(f.Type)
+		definition := schemaAny(schemas, f.Type)
 
 		if v, ok := f.Tag.Lookup("description"); ok {
 			definition["description"] = v
@@ -122,20 +144,27 @@ func schemaStruct(item reflect.Type) JSON {
 		properties[name] = definition
 	}
 
-	definition := JSON{
-		"type":       "object",
-		"required":   []string{},
-		"properties": properties,
-	}
-
-	return definition
+	return result
 }
 
-func schemaAny(item reflect.Type) JSON {
+func schemaAny(schemas JSON, item reflect.Type) JSON {
+
+	// follow pointers
+	for item.Kind() == reflect.Ptr {
+		item = item.Elem()
+	}
+
+	if item.String() == "time.Time" {
+		return JSON{
+			"type":     "string",
+			"format":   "date-time",
+			"examples": []any{"2006-01-02T15:04:05Z07:00"},
+		}
+	}
 
 	switch item.Kind() {
 	case reflect.Struct:
-		return schemaStruct(item)
+		return schemaStruct(schemas, item)
 
 	case reflect.Array, reflect.Slice:
 
@@ -148,7 +177,7 @@ func schemaAny(item reflect.Type) JSON {
 
 		return JSON{
 			"type":  "array",
-			"items": schemaAny(item),
+			"items": schemaAny(schemas, item),
 		}
 
 	case reflect.String:
@@ -177,14 +206,9 @@ func schema(schemas JSON, item reflect.Type) any {
 		item = item.Elem()
 	}
 
-	name := item.Name()
-
 	switch item.Kind() {
 	case reflect.Struct:
-		schemas[name] = schemaStruct(item)
-		return JSON{
-			"$ref": "#/components/schemas/" + name,
-		}
+		return schemaStruct(schemas, item)
 
 	case reflect.Array, reflect.Slice:
 
@@ -195,17 +219,12 @@ func schema(schemas JSON, item reflect.Type) any {
 			item = item.Elem()
 		}
 
-		name := item.Name()
-		schemas[name] = schemaAny(item)
-
 		return JSON{
-			"type": "array",
-			"items": JSON{
-				"$ref": "#/components/schemas/" + name,
-			},
+			"type":  "array",
+			"items": schemaAny(schemas, item),
 		}
 	default:
-		return schemaAny(item)
+		return schemaAny(schemas, item)
 	}
 
 }
