@@ -11,7 +11,7 @@ run:
 	STATICS=statics/www/ go run $(FLAGS) ./cmd/inceptiondb/...
 
 build:
-	go build $(FLAGS) -o bin/ ./cmd/inceptiondb/...
+	CGO_ENABLED=0 go build $(FLAGS) -o bin/ ./cmd/inceptiondb/...
 
 .PHONY: release
 release: clean
@@ -23,6 +23,12 @@ release: clean
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build $(FLAGS) -o bin/inceptiondb.mac.amd64 ./cmd/...
 	md5sum bin/inceptiondb.* > bin/checksum-md5
 	sha256sum bin/inceptiondb.* > bin/checksum-sha256
+
+
+.PHONY: release-docker
+release-docker: clean
+	docker build -t fulldumpnet/inceptiondb:latest -t fulldumpnet/inceptiondb:$(VERSION) .
+	docker push -a fulldumpnet/inceptiondb
 
 .PHONY: clean
 clean:

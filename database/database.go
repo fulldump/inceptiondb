@@ -119,6 +119,8 @@ func (db *Database) Load() error {
 		return err
 	}
 
+	fmt.Println("Ready")
+
 	db.status = StatusOperating
 
 	return nil
