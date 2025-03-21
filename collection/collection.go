@@ -33,8 +33,9 @@ type collectionIndex struct {
 }
 
 type Row struct {
-	I       int // position in Rows
-	Payload json.RawMessage
+	I          int // position in Rows
+	Payload    json.RawMessage
+	PatchMutex sync.Mutex
 }
 
 func OpenCollection(filename string) (*Collection, error) {
