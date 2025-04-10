@@ -118,7 +118,9 @@ func (i *IndexMap) Traverse(optionsData []byte, f func(row *Row) bool) {
 	options := &IndexMapTraverse{}
 	json.Unmarshal(optionsData, options) // todo: handle error
 
+	i.RWmutex.RLock()
 	row, ok := i.Entries[options.Value]
+	i.RWmutex.RUnlock()
 	if !ok {
 		return
 	}
