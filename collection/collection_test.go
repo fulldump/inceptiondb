@@ -193,7 +193,20 @@ func TestIndexSparse(t *testing.T) {
 		AssertNil(errIndex)
 		AssertNotNil(row)
 		AssertNil(err)
-		AssertEqual(len(c.Indexes["my-index"].Index.(*IndexMap).Entries), 0)
+
+		index := c.Indexes["my-index"].Index
+		if i, ok := index.(*IndexMap); ok {
+			AssertEqual(len(i.Entries), 0)
+		}
+		if i, ok := index.(*IndexSyncMap); ok {
+			counter := 0
+			i.Entries.Range(func(key, value interface{}) bool {
+				counter++
+				return true
+			})
+			AssertEqual(counter, 0)
+		}
+
 	})
 }
 

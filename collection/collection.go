@@ -307,7 +307,7 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 	switch value := options.(type) {
 	case *IndexMapOptions:
 		index.Type = "map"
-		index.Index = NewIndexMap(value)
+		index.Index = NewIndexSyncMap(value)
 		index.Options = value
 	case *IndexBTreeOptions:
 		index.Type = "btree"
