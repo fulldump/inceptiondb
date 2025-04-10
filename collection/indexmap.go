@@ -13,6 +13,14 @@ type IndexMap struct {
 	Options *IndexMapOptions
 }
 
+func NewIndexMap(options *IndexMapOptions) *IndexMap {
+	return &IndexMap{
+		Entries: map[string]*Row{},
+		RWmutex: &sync.RWMutex{},
+		Options: options,
+	}
+}
+
 func (i *IndexMap) RemoveRow(row *Row) error {
 
 	item := map[string]interface{}{}
@@ -45,14 +53,6 @@ func (i *IndexMap) RemoveRow(row *Row) error {
 	}
 
 	return nil
-}
-
-func NewIndexMap(options *IndexMapOptions) *IndexMap {
-	return &IndexMap{
-		Entries: map[string]*Row{},
-		RWmutex: &sync.RWMutex{},
-		Options: options,
-	}
 }
 
 func (i *IndexMap) AddRow(row *Row) error {

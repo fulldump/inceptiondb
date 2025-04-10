@@ -14,6 +14,12 @@ import (
 
 func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
+	wc := http.NewResponseController(w)
+	wcerr := wc.EnableFullDuplex()
+	if wcerr != nil {
+		return wcerr
+	}
+
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
 	collection, err := s.GetCollection(collectionName)
