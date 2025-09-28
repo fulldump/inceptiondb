@@ -134,25 +134,17 @@
                   <p v-if="filterError" class="mt-2 text-sm text-rose-400">{{ filterError }}</p>
                 </div>
 
-                <div class="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label class="block text-xs uppercase tracking-wide text-slate-400">Skip</label>
-                    <input
-                      type="number"
-                      min="0"
-                      v-model.number="pagination.skip"
-                      class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <label class="block text-xs uppercase tracking-wide text-slate-400">
+                    Elementos por página
+                    <select
+                      v-model.number="pageSize"
+                      class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                     >
-                  </div>
-                  <div>
-                    <label class="block text-xs uppercase tracking-wide text-slate-400">Limit</label>
-                    <input
-                      type="number"
-                      min="0"
-                      v-model.number="pagination.limit"
-                      class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    >
-                  </div>
+                      <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
+                    </select>
+                  </label>
+                  <p class="text-xs text-slate-400 md:text-right">{{ pageInfo }}</p>
                 </div>
 
                 <div>
@@ -233,6 +225,7 @@
 
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
                 <div class="border-b border-slate-800 px-5 py-3 text-sm font-semibold text-slate-200">Resultados</div>
+                <p class="px-5 pt-3 text-xs text-slate-400">Vista por defecto: listado JSON de los primeros documentos de la colección seleccionada.</p>
                 <div class="p-5 space-y-4">
                   <div v-if="queryLoading" class="text-sm text-slate-400">Ejecutando consulta…</div>
                   <div v-else-if="queryError" class="text-sm text-rose-400">{{ queryError }}</div>
@@ -244,7 +237,7 @@
                       class="rounded-lg border border-slate-800 bg-slate-950 p-4"
                     >
                       <div class="flex items-center justify-between text-xs text-slate-500 mb-3">
-                        <span>Documento #{{ pagination.skip + idx + 1 }}</span>
+                        <span>Documento #{{ offset + idx + 1 }}</span>
                         <button
                           v-if="canDeleteRow(row)"
                           type="button"
@@ -325,7 +318,9 @@
           const indexesLoading = ref(false);
           const filterText = ref('{\n\n}');
           const filterError = ref('');
-          const pagination = reactive({ skip: 0, limit: 25 });
+          const page = ref(1);
+          const pageSize = ref(25);
+          const pageSizeOptions = [10, 25, 50, 100];
           const queryRows = ref([]);
           const queryLoading = ref(false);
           const queryError = ref('');
@@ -340,11 +335,25 @@
 
           const selectedCollection = computed(() => collections.value.find(c => c.name === selectedCollectionName.value) || null);
           const activeIndex = computed(() => indexes.value.find(idx => idx.name === selectedIndexName.value) || null);
-          const disablePrev = computed(() => pagination.skip <= 0);
+          const offset = computed(() => Math.max(0, (Number(page.value) - 1) * Number(pageSize.value || 0)));
+          const disablePrev = computed(() => page.value <= 1);
           const disableNext = computed(() => {
-            const limit = Number(pagination.limit) || 0;
+            const limit = Number(pageSize.value) || 0;
             if (limit === 0) return true;
             return queryRows.value.length < limit;
+          });
+          const pageInfo = computed(() => {
+            const count = queryRows.value.length;
+            if (count === 0) {
+              return 'Sin resultados en esta página.';
+            }
+            const start = offset.value + 1;
+            const end = offset.value + count;
+            const total = selectedCollection.value?.total;
+            if (typeof total === 'number') {
+              return `Mostrando ${start}–${end} de ${total}`;
+            }
+            return `Mostrando ${start}–${end}`;
           });
 
           const prettyTotal = (n) => {
@@ -395,7 +404,7 @@
             resetRangeFields();
             filterText.value = '{\n\n}';
             filterError.value = '';
-            pagination.skip = 0;
+            page.value = 1;
             queryRows.value = [];
             queryError.value = '';
             queryStats.elapsed = '';
@@ -469,8 +478,8 @@
             }
             const payload = {
               filter: parsedFilter,
-              limit: Number(pagination.limit) || 0,
-              skip: Number(pagination.skip) || 0,
+              limit: Number(pageSize.value) || 0,
+              skip: offset.value,
             };
             const index = activeIndex.value;
             if (index) {
@@ -551,18 +560,22 @@
           };
 
           const nextPage = () => {
-            const limit = Number(pagination.limit) || 0;
-            if (limit <= 0) return;
-            pagination.skip = Number(pagination.skip) + limit;
+            if (disableNext.value) return;
+            page.value = Number(page.value) + 1;
             runQuery();
           };
 
           const prevPage = () => {
-            const limit = Number(pagination.limit) || 0;
-            if (limit <= 0) return;
-            pagination.skip = Math.max(0, Number(pagination.skip) - limit);
+            if (disablePrev.value) return;
+            page.value = Math.max(1, Number(page.value) - 1);
             runQuery();
           };
+
+          watch(pageSize, (value, old) => {
+            if (value === old) return;
+            page.value = 1;
+            runQuery();
+          });
 
           const canDeleteRow = (row) => {
             const index = activeIndex.value;
@@ -679,7 +692,6 @@
             indexesLoading,
             filterText,
             filterError,
-            pagination,
             queryRows,
             queryLoading,
             queryError,
@@ -694,6 +706,11 @@
             createForm,
             disablePrev,
             disableNext,
+            page,
+            pageSize,
+            pageSizeOptions,
+            offset,
+            pageInfo,
             // methods
             prettyTotal,
             isSelected,
