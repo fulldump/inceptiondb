@@ -1,100 +1,88 @@
 package streamtest
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
+
+type Item struct {
+	Id      int64  `json:"id"`
+	Payload string `json:"payload"`
+}
+
+func Parallel(workers int, f func()) {
+	wg := &sync.WaitGroup{}
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f()
+		}()
+	}
+	wg.Wait()
+}
 
 func Test_Streamtest(t *testing.T) {
 
-	t.Skip()
+	t.SkipNow()
 
-	r, w := io.Pipe()
+	counter := int64(0)
+	t0 := time.Now()
+	load_per_worker := 100_000
 
-	// d := json.NewDecoder(os.Stdin)
-	e := json.NewEncoder(w)
+	payload := strings.Repeat("fake ", 0)
+	_ = payload
 
-	go func() {
+	Parallel(16, func() {
 
-		payload := strings.Repeat("fake ", 10)
-		for i := 0; i < 1_000_000; i++ {
+		r, w := io.Pipe()
 
-			e.Encode(map[string]any{
-				"id":      i,
-				"payload": payload,
-			})
+		// wb := bufio.NewWriterSize(w, 1*1024*1024)
 
-			fmt.Println("sent", i)
-
-			// time.Sleep(1000 * time.Millisecond)
-		}
-		w.Close()
-	}()
-
-	// go func() {
-	//
-	// 	var o json.RawMessage
-	//
-	// 	for {
-	// 		err := d.Decode(&o)
-	// 		if err != nil {
-	// 			fmt.Println("ERROR: stdin:", err.Error())
-	// 			os.Exit(1)
-	// 		}
-	//
-	// 		fmt.Println("READ:", string(o))
-	// 		err = e.Encode(o)
-	// 		if err != nil {
-	// 			fmt.Println("ERROR: encode:", err.Error())
-	// 			os.Exit(2)
-	// 		}
-	// 	}
-	// }()
-
-	{
-
-		u := "http://localhost:8080/v1/collections/streammm:insertFullduplex"
-		// u = "https://inceptiondb.io/v1/collections/streammm:insertFullduplex"
-		// u = "http://localhost:8080/v1/collections/streammm:insert"
-		// u = "http://inceptiondb.io:8080/v1/collections/streammm:insertFullduplex"
-
-		req, err := http.NewRequest("POST", u, r)
-		if err != nil {
-			fmt.Println("ERROR: new request:", err.Error())
-			os.Exit(3)
-		}
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			fmt.Println("ERROR: do request:", err.Error())
-			os.Exit(4)
-		}
-
-		// io.Copy(os.Stdout, resp.Body)
-		// fmt.Println("")
-
-		d := json.NewDecoder(resp.Body)
-		receivedCounter := 0
-		var o json.RawMessage
-		for {
-			err := d.Decode(&o)
-			if err == io.EOF {
-				break
+		go func() {
+			// e := json.NewEncoder(w)
+			for i := 0; i < load_per_worker; i++ {
+				// e.Encode(Item{
+				// 	Id:      atomic.AddInt64(&counter, 1),
+				// 	Payload: payload,
+				// })
+				n := atomic.AddInt64(&counter, 1)
+				fmt.Fprintf(w, "{\"id\":%d,\"n\":\"%d\"}\n", n, n)
 			}
+			// wb.Flush()
+			w.Close()
+		}()
+
+		{
+
+			u := "http://localhost:8080/v1/collections/streammm:insertFullduplex"
+			u = "https://inceptiondb.io/v1/collections/streammm:insert"
+			u = "http://localhost:8080/v1/collections/streammm:insert"
+			// u = "http://inceptiondb.io:8080/v1/collections/streammm:insertFullduplex"
+
+			req, err := http.NewRequest("POST", u, r)
 			if err != nil {
-				fmt.Println("ERROR: response body:", err.Error())
-				os.Exit(5)
+				fmt.Println("ERROR: new request:", err.Error())
+				os.Exit(3)
 			}
 
-			fmt.Println("RECEIVED:", string(o))
-			receivedCounter++
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				fmt.Println("ERROR: do request:", err.Error())
+				os.Exit(4)
+			}
+			io.Copy(io.Discard, resp.Body)
 		}
+	})
 
-		fmt.Println("received:", receivedCounter)
-	}
+	fmt.Println("received:", counter)
+	fmt.Println("took:", time.Since(t0))
+
 }
