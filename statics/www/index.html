@@ -1,1144 +1,733 @@
 <!doctype html>
-<html>
-    <head>
-        <meta charset="utf-8">
-        <title>InceptionDB -  αlpha</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
-        <link rel="stylesheet" href="/lib/bootstrap.min.css">
-        <link rel="stylesheet" href="style.css?a">
-        <script src="/lib/axios.min.js"></script>
-        <script src="/lib/vue.js"></script>
-    </head>
-    <body>
-        <div id="app" :collection="collection_name">
-            <div id="frame-top">
-                <a href="https://github.com/fulldump/inceptiondb" style="display: block; float: right; margin: 8px;">
-                    <svg aria-hidden="true" height="24" viewBox="0 0 16 16" version="1.1" width="24" data-view-component="true" class="octicon octicon-mark-github" style="vertical-align: middle; height: 2em;">
-                        <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
-                    </svg>
-                </a>
-                <h1 style="padding: 8px 16px;">InceptionDB</h1>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <title>InceptionDB Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <link rel="stylesheet" href="/lib/tailwind.min.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%230f172a'/><text x='50' y='58' font-size='52' text-anchor='middle' fill='white'>IDB</text></svg>">
+    <script src="/lib/axios.min.js"></script>
+    <script src="/lib/vue.global.prod.js"></script>
+  </head>
+  <body class="bg-slate-950 text-slate-100 min-h-screen">
+    <div id="app" class="min-h-screen flex">
+      <aside class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col">
+        <div class="px-6 py-5 border-b border-slate-800">
+          <div class="flex items-center justify-between">
+            <h1 class="text-xl font-semibold tracking-wide">InceptionDB</h1>
+            <a
+              class="text-slate-400 hover:text-slate-200"
+              href="https://github.com/fulldump/inceptiondb"
+              target="_blank"
+              rel="noopener"
+              aria-label="Repositorio en GitHub"
+            >
+              <svg class="w-6 h-6" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path
+                  fill-rule="evenodd"
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </a>
+          </div>
+          <button
+            type="button"
+            class="mt-5 w-full rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-100 bg-slate-800 hover:bg-slate-700 transition"
+            @click="toggleCreateForm"
+          >
+            {{ createForm.open ? 'Cancelar' : 'Nueva colección' }}
+          </button>
+          <form v-if="createForm.open" class="mt-4 space-y-3" @submit.prevent="createCollection">
+            <div>
+              <label for="new-collection" class="block text-xs uppercase tracking-wide text-slate-400">Nombre</label>
+              <input
+                id="new-collection"
+                v-model="createForm.name"
+                type="text"
+                required
+                class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                placeholder="clientes"
+              >
             </div>
-            <div id="frame-center">
-                <div id="frame-left">
-                    <h2 id="collectionsTitle">Collections</h2>
-                    <ul id="collectionsList" style="margin: 0; padding: 0; list-style-type: none;">
-                        <li
-                            v-for="collection in collections"
-                            class="list-group-item"
-                            :class="{active: collection_name == collection}"
-                            @click="selectCollection(collection.name); showPanel('find'); apiFind();"
-                        >
-                            <div style="float: right; font-size: 12px;">
-                                <span v-if="collection.indexes">🔑 {{ collection.indexes }}</span>
-                                <span :title="collection.total">📃 {{ prettyTotal(collection.total) }}</span>
-                            </div>
-                            <h5 :title="collection" class="mb-1 text-truncate">{{ collection.name }}</h5>
-                            <div class="line2" style="font-size: 90%;">
-                                <a href="#" >Fullscan</a>
-                                |
-                                <a href="#" @click.prevent.stop="selectCollection(collection.name); showPanel('indexsearch'); fetchIndexes(collection);">IndexSearch</a>
-                            </div>
-                        </li>
-                    </ul>
-                    <br>
-                    <div id="collectionsButtons" style="text-align: center;">
-                        <button class="btn btn-primary" @click="create_collection.show = true">Create collection</button>
-                    </div>
-                </div>
+            <button
+              type="submit"
+              class="w-full rounded-md bg-sky-600 hover:bg-sky-500 px-3 py-2 text-sm font-semibold text-white transition"
+            >
+              Crear colección
+            </button>
+            <p v-if="createForm.error" class="text-sm text-rose-400">{{ createForm.error }}</p>
+          </form>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <div v-if="collectionsLoading" class="px-6 py-4 text-sm text-slate-400">Cargando colecciones…</div>
+          <div v-else-if="collectionsError" class="px-6 py-4 text-sm text-rose-400">{{ collectionsError }}</div>
+          <nav v-else class="py-2">
+            <button
+              v-for="collection in collections"
+              :key="collection.name"
+              type="button"
+              class="w-full px-6 py-3 text-left hover:bg-slate-800 transition"
+              :class="{
+                'bg-slate-800 text-sky-300': isSelected(collection.name),
+                'text-slate-200': !isSelected(collection.name)
+              }"
+              @click="selectCollection(collection.name)"
+            >
+              <div class="flex items-center justify-between text-sm font-medium">
+                <span class="truncate">{{ collection.name }}</span>
+                <span class="text-xs text-slate-400" v-if="collection.total !== undefined">{{ prettyTotal(collection.total) }}</span>
+              </div>
+              <p class="mt-1 text-xs text-slate-500" v-if="collection.indexes">{{ collection.indexes }} índices</p>
+            </button>
+            <p v-if="collections.length === 0" class="px-6 py-4 text-sm text-slate-500">No hay colecciones registradas.</p>
+          </nav>
+        </div>
+      </aside>
 
-                <div class="frame-right" v-if="panels.home">
-                    <div style="max-width: 800px; margin: auto;">
-
-                        <div style="text-align: center;">
-                            <h1>InceptionDB</h1>
-                            <h2 style="color: silver; font-size: 24px; margin-top: -20px; font-weight: bold;">community edition</h2>
-                        </div>
-
-                        <br>
-
-                        <p>A database based on journal to store JSON documents.</p>
-
-                        <h2>Motivation</h2>
-
-                        <p>InceptionDB was born to be the persistence layer of another project called Bitumen. Bitumen is a distributed NAS that should store family memories, pictures and videos that should last for 50 or 100 years.</p>
-
-                        <p>One of the biggest motivations is the code should be simple and easy to maintain (yes, even the database itself) and also 100% free of license restrictions.</p>
-
-                        <p>The second biggest motivation is to have fun and learn some things :D.</p>
-
-                        <h2>Contribute</h2>
-
-                        <p>InceptionDB is free software.</p>
-
-                        <p>
-                            Here is the source:
-                            <a href="https://github.com/fulldump/inceptiondb">
-                                <svg aria-hidden="true" height="24" viewBox="0 0 16 16" version="1.1" width="24" data-view-component="true" class="octicon octicon-mark-github" style="vertical-align: middle; height: 14px;">
-                                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
-                                </svg>github.com/fulldump/inceptiondb
-                            </a>
-                        </p>
-
-                        <p>
-                            <ul>
-                                <li>Use it in your project (as an independent process or embedded into your software)</li>
-                                <li>Modify to cover your own needs</li>
-                                <li>Learn how other software is built</li>
-                            </ul>
-                        </p>
-
-                        <p>
-                            Find documentation examples here:
-                            <a href="https://github.com/fulldump/inceptiondb/tree/master/doc/examples">
-                                <svg aria-hidden="true" height="24" viewBox="0 0 16 16" version="1.1" width="24" data-view-component="true" class="octicon octicon-mark-github" style="vertical-align: middle; height: 14px;">
-                                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
-                                </svg>github.com/fulldump/inceptiondb/tree/master/doc/examples
-                            </a> and in <a href="/book/">the book</a>.
-                        </p>
-
-                    </div>
-
-                </div>
-
-                <div class="frame-right" v-if="collection_name">
-                    <h2 id="collectionTitle">{{ collection_name }}</h2>
-
-                    <div class="line2">
-                        <a href="#" :class="{active: panels.find}" @click.prevent.stop="showPanel('find'); fetchFullScan(collection_name);">Find</a>
-                        |
-<!--                        <a href="#" :class="{active: panels.fullscan}" @click.prevent.stop="showPanel('fullscan'); fetchFullScan(collection_name);">Fullscan</a>-->
-<!--                        |-->
-<!--                        <a href="#" :class="{active: panels.indexsearch}" @click.prevent.stop="showPanel('indexsearch'); fetchIndexes(collection_name);">IndexSearch</a>-->
-<!--                        |-->
-                        <a href="#" :class="{active: panels.delete}"  @click.prevent.stop="showPanel('delete');">Drop collection</a>
-                    </div>
-
-                    <div v-if="panels.find">
-
-                        <form @submit.prevent="apiFind()">
-
-                            <div class="form-group">
-                                <select class="form-control" v-model="find.index_name" @change="findSelectIndex(find.index_name); apiFind();">
-                                    <option selected value="">No index (fullscan)</option>
-                                    <option v-for="index in indexes" :value="index.name">{{index.name}} (type {{ index.type }})</option>
-                                </select>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="find_filter" class="form-label">Filter (MongoDB style):</label>
-                                <textarea v-model="find.filter" class="form-control" id="find_filter" rows="3" style="font-family: monospace;" @keyup="apiFind();"></textarea>
-                            </div>
-
-                            <div class="form-group row" v-if="find.index && find.index.type == 'map' ">
-                                <label for="find_value" class="col-sm-1 col-form-label">Value</label>
-                                <div class="col-sm-11">
-                                    <input type="text" v-model="find.value" class="form-control" id="find_value" @change="apiFind()" @keyup="apiFind()">
-                                </div>
-                            </div>
-
-                            <div v-if="find.index && find.index.type == 'btree' ">
-                                From (included)
-                                <div v-for="field in find.index.fields" style="padding-left: 20px;">
-                                    <span style="font-family: monospace;">"{{field}}"</span>
-                                    <input
-                                            type="text"
-                                            :value='find.from[field]'
-                                            @input='evt=> {find.from[field]=evt.target.value;apiFind();}'
-                                    >
-                                </div>
-                            </div>
-
-                            <div v-if="find.index && find.index.type == 'btree' ">
-                                To (excluded)
-                                <div v-for="field in find.index.fields" style="padding-left: 20px;">
-                                    <span style="font-family: monospace;">"{{field}}"</span>
-                                    <input
-                                            type="text"
-                                            :value='find.to[field]'
-                                            @input='evt=> {find.to[field]=evt.target.value;apiFind();}'
-                                    >
-                                </div>
-                            </div>
-
-                            <div class="form-check" v-if="find.index && find.index.type == 'btree' ">
-                                <input class="form-check-input" type="checkbox" value="" id="find_reverse" v-model="find.reverse" @change="apiFind()">
-                                <label class="form-check-label" for="find_reverse">Reverse order</label>
-                            </div>
-
-                        </form>
-
-                        <form @submit.prevent="apiFind()" style="max-width: 560px; margin: 0 auto;">
-                            <div class="input-group mb-3">
-                                <div class="input-group-prepend">
-                                    <button
-                                            :disabled="find.skip==0"
-                                            class="btn btn-secondary"
-                                            type="button"
-                                            @click="find.skip =  parseInt(find.skip) - parseInt(find.limit); if (find.skip <0) {find.skip=0}; apiFind();"
-                                    >Previous</button>
-                                </div>
-                                <div class="input-group-prepend">
-                                    <label class="input-group-text" for="find-pagination-skip">skip</label>
-                                </div>
-                                <input
-                                        type="number"
-                                        class="form-control"
-                                        id="find-pagination-skip"
-                                        v-model="find.skip"
-                                        @keyup="apiFind()"
-                                        @change="apiFind()"
-                                        min="0"
-                                >
-                                <div class="input-group-prepend">
-                                    <label class="input-group-text" for="find-pagination-limit">limit</label>
-                                </div>
-                                <input
-                                        type="number"
-                                        class="form-control"
-                                        id="find-pagination-limit"
-                                        v-model="find.limit"
-                                        @keyup="apiFind()"
-                                        @change="apiFind()"
-                                        min="0"
-                                >
-                                <div class="input-group-append">
-                                    <button
-                                            :disabled="find.result.rows.length < find.limit"
-                                            class="btn btn-secondary"
-                                            type="button"
-                                            @click="find.skip =  parseInt(find.skip) + parseInt(find.limit); apiFind();"
-                                    >Next</button>
-                                </div>
-                            </div>
-                            <div style="font-size: 80%;    margin-top: -15px;    text-align: center;    padding-bottom: 15px;">
-                                {{ find_btree.elapsed }}
-                            </div>
-                        </form>
-
-                        <div style="font-size: 80%; color: gray;">
-                            <span>
-                                Returned documents: {{ find.result.rows.length }}
-                            </span>
-                            <span v-if="find.result.elapsed">
-                                | Elapsed: {{ find.result.elapsed }}
-                            </span>
-                        </div>
-
-                        <div id="find_result">
-                            <table class="table table-striped" v-if="find.result.rows">
-                                <tr>
-                                    <th v-for="field in find.columns"> {{ field }}</th>
-                                    <th>{ document }</th>
-                                </tr>
-                                <tr v-for="row in find.result.rows">
-                                    <td v-for="field in find.columns"> {{ row[field] }}</td>
-                                    <td style="font-family: monospace;">{{ row }}</td>
-                                </tr>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div v-if="panels.fullscan">
-                        <div v-if="rows === null">loading...</div>
-                        <div v-else-if="rows.length === 0">
-                            <div class="alert alert-info" role="alert">
-                                Result is empty, try inserting some rows.
-                            </div>
-                        </div>
-                        <form @submit.prevent="fetchFullScan(collection_name)">
-                            <div class="form-group">
-                                <label for="fullscan-filter">Type filter in MongoDB style:</label>
-                                <textarea class="form-control" v-model="full_scan.filter" id="fullscan-filter" rows="3" style="font-family: monospace;" @keyup="fullscanFilterKeyup()"></textarea>
-                            </div>
-                        </form>
-                        <table class="table table-striped" >
-                            <tr v-for="row in rows">
-                                <td style="font-family: monospace;">{{ row }}</td>
-                            </tr>
-                        </table>
-                        <div v-if="rows.length || full_scan.skip">
-                            <form @submit.prevent="fetchFullScan(collection_name)" style="width: 460px; margin: 0 auto;">
-                               <div class="input-group mb-3">
-                                    <div class="input-group-prepend">
-                                        <button
-                                            :disabled="full_scan.skip==0"
-                                            class="btn btn-secondary"
-                                            type="button"
-                                            @click="full_scan.skip = parseInt(full_scan.skip); full_scan.limit = parseInt(full_scan.limit);   full_scan.skip -= full_scan.limit; if (full_scan.skip <0) {full_scan.skip=0}; fetchFullScan(collection_name);"
-                                        >Previous</button>
-                                    </div>
-                                    <div class="input-group-prepend">
-                                        <label class="input-group-text" for="fullscan-pagination-skip">skip</label>
-                                    </div>
-                                    <input
-                                            type="number"
-                                            class="form-control"
-                                            id="fullscan-pagination-skip"
-                                            v-model="full_scan.skip"
-                                            @keyup="fetchFullScan(collection_name)"
-                                            min="0"
-                                    >
-                                    <div class="input-group-prepend">
-                                        <label class="input-group-text" for="fullscan-pagination-limit">limit</label>
-                                    </div>
-                                    <input
-                                            type="number"
-                                            class="form-control"
-                                            id="fullscan-pagination-limit"
-                                            v-model="full_scan.limit"
-                                            @keyup="fetchFullScan(collection_name)"
-                                            min="0"
-                                    >
-                                    <div class="input-group-append">
-                                        <button
-                                            :disabled="rows.length < full_scan.limit"
-                                            class="btn btn-secondary"
-                                            type="button"
-                                            @click="full_scan.skip += parseInt(full_scan.limit); fetchFullScan(collection_name);"
-                                        >Next</button>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="examples">
-                            <div class="examples_client_selector">
-                                <span
-                                    v-for="client in examples.clients"
-                                    :class="{active: client == examples.client}"
-                                    @click="examples.client = client"
-                                >[{{client}}]</span>
-                            </div>
-                            <div class="code" v-if="examples.client=='curl'">
-                                <code>curl '{{base_url}}/v1/collections/{{collection_name}}:find' -d '{{  {mode:'fullscan', limit: full_scan.limit, skip: full_scan.skip, filter: JSON.parse(full_scan.filter) } }}'</code>
-                            </div>
-                            <div class="code" v-else-if="examples.client=='js'">
-                                <code>fetch('{{base_url}}/v1/collections/{{collection_name}}:find', {method: 'POST'})
-    .then(response => response.json())
-    .then(data => console.log(data));</code>
-                            </div>
-                            <div class="code" v-else>
-                                <code>// No sample available at this moment</code>
-                                You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
-                            </div>
-                        </div>
-                        <br>
-                        <br>
-                        <h2>Insert</h2>
-                        <form @submit.prevent="insertItemSubmit">
-                            <div class="form-group">
-                                <label for="insertPayload">Type the document you want to insert in JSON:</label>
-                                <textarea class="form-control" v-model="insert_item.request.payload" id="insertPayload" rows="3" style="font-family: monospace;"></textarea>
-                            </div>
-                            <div style="text-align: center;">
-                                <button class="btn btn-primary" type="submit">Insert item</button>
-                            </div>
-                            <div v-if="insert_item.error" class="alert alert-danger" role="alert" style="margin-top: 16px;">{{ insert_item.error }}</div>
-                        </form>
-                        <br>
-                        <div class="examples">
-                            <div class="examples_client_selector">
-                                <span
-                                    v-for="client in examples.clients"
-                                    :class="{active: client == examples.client}"
-                                    @click="examples.client = client"
-                                >[{{client}}]</span>
-                            </div>
-                            <div class="code" v-if="examples.client=='curl'">
-                                <code>curl {{base_url}}/v1/collections/{{collection_name}} -d '{{ JSON.parse(insert_item.request.payload) }}'</code>
-                            </div>
-                            <div class="code" v-else-if="examples.client=='js'">
-                                <code>fetch('{{base_url}}/v1/collections/{{collection_name}}')
-                                    .then(response => response.json())
-                                    .then(data => console.log(data));</code>
-                            </div>
-                            <div class="code" v-else>
-                                <code>// No sample available at this moment</code>
-                                You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div v-if="panels.indexsearch">
-                        Select index
-                        <select v-model="find_by_index" @change="selectIndex()">
-                            <option v-for="index in indexes" :value="index.name">{{index.name}} (type {{ index.type }})</option>
-                        </select>
-                        <span @click="index_see_details = !index_see_details;" style="cursor: pointer; font-size: 10px;">see details</span>
-
-<!--                        {{ indexes }}<br>-->
-<!--                        {{find_by_index}}-->
-<!--                        {{selected_index}}-->
-
-                        <div v-if="selected_index.type == 'map'">
-
-                            <div v-if="index_see_details" style="border: solid silver 1px; background-color: #F8F8F8; padding: 4px; border-radius: 2px;">
-                                <div style="font-family: monospace;">
-                                    Field: {{ selected_index.field }}<br>
-                                    Sparse: {{ selected_index.sparse }}<br>
-                                </div>
-                            </div>
-
-                            Find by field <span style="font-family: monospace">"{{selected_index.field}}"</span>
-                            <input type="text" v-model="find_by_value" @keyup="findByIndex(collection_name, find_by_index, find_by_value)"> <br>
-
-                        </div>
-                        <div v-if="selected_index.type == 'btree'">
-                            <div v-if="index_see_details" style="border: solid silver 1px; background-color: #F8F8F8; padding: 4px; border-radius: 2px;">
-                                <div style="font-family: monospace;">
-                                    Fields: {{ selected_index.fields }}<br>
-                                    Sparse: {{ selected_index.sparse }}<br>
-                                    Unique: {{ selected_index.unique }}<br>
-                                </div>
-                            </div>
-
-                            <div>
-                                From (included)
-                                <div v-for="field in selected_index.fields" style="padding-left: 20px;">
-                                    <span style="font-family: monospace;">{{field}}</span> <input type="text" v-model="find_btree.from[field]" @keyup="findByIndexBtree()"><br>
-                                </div>
-                            </div>
-
-                            <div>
-                                To (excluded)
-                                <div v-for="field in selected_index.fields" style="padding-left: 20px;">
-                                    <span style="font-family: monospace;">{{field}}</span> <input type="text" v-model="find_btree.to[field]" @keyup="findByIndexBtree()"><br>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="index-filter">Type filter in MongoDB style:</label>
-                                <textarea class="form-control" v-model="find_btree.filter" id="index-filter" rows="3" style="font-family: monospace;" @keyup="findByIndexBtree()"></textarea>
-                            </div>
-
-                            <table>
-                                <tr>
-                                    <td>
-                                        Reverse order
-                                    </td>
-                                    <td>
-                                        <input type="checkbox" v-model="find_btree.reverse" @change="findByIndexBtree()">
-                                    </td>
-                                </tr>
-                            </table>
-
-
-                            <form @submit.prevent="findByIndexBtree()" style="width: 560px; margin: 0 auto;">
-                                <div class="input-group mb-3">
-                                    <div class="input-group-prepend">
-                                        <button
-                                                :disabled="find_btree.skip==0"
-                                                class="btn btn-secondary"
-                                                type="button"
-                                                @click="find_btree.skip =  parseInt(find_btree.skip) - parseInt(find_btree.limit); if (find_btree.skip <0) {find_btree.skip=0}; findByIndexBtree();"
-                                        >Previous</button>
-                                    </div>
-                                    <div class="input-group-prepend">
-                                        <label class="input-group-text" for="fullscan-pagination-skip">skip</label>
-                                    </div>
-                                    <input
-                                            type="number"
-                                            class="form-control"
-                                            id="fullscan-pagination-skip"
-                                            v-model="find_btree.skip"
-                                            @keyup="findByIndexBtree()"
-                                            @change="findByIndexBtree()"
-                                            min="0"
-                                    >
-                                    <div class="input-group-prepend">
-                                        <label class="input-group-text" for="fullscan-pagination-limit">limit</label>
-                                    </div>
-                                    <input
-                                            type="number"
-                                            class="form-control"
-                                            id="fullscan-pagination-limit"
-                                            v-model="find_btree.limit"
-                                            @keyup="findByIndexBtree()"
-                                            @change="findByIndexBtree()"
-                                            min="0"
-                                    >
-                                    <div class="input-group-append">
-                                        <button
-                                                :disabled="rows.length < find_btree.limit"
-                                                class="btn btn-secondary"
-                                                type="button"
-                                                @click="find_btree.skip =  parseInt(find_btree.skip) + parseInt(find_btree.limit); findByIndexBtree();"
-                                        >Next</button>
-                                    </div>
-                                </div>
-                                <div style="font-size: 80%;    margin-top: -15px;    text-align: center;    padding-bottom: 15px;">
-                                    {{ find_btree.elapsed }}
-                                </div>
-                            </form>
-
-
-
-                            <table class="table table-striped" v-if="rows">
-                                <tr>
-                                    <th v-for="field in selected_index.fields"> {{ field }}</th>
-                                    <th>{ document }</th>
-                                </tr>
-                                <tr v-for="row in rows">
-                                    <td v-for="field in selected_index.fields"> {{ row[field] }}</td>
-                                    <td style="font-family: monospace;">{{ row }}</td>
-                                </tr>
-                            </table>
-
-                        </div>
-                        <div v-if="find_by_error" class="alert alert-danger" role="alert" style="margin-top: 16px;">{{find_by_error}}</div>
-                        <pre v-if="item">{{ item }}</pre>
-                        <button v-if="item" class="btn btn-primary" @click="findByIndex(collection_name, find_by_index, find_by_value)">Reload</button>
-                        <br>
-                        <br>
-                        <div class="examples" v-if="item">
-                            <div class="examples_client_selector">
-                                <span
-                                    v-for="client in examples.clients"
-                                    :class="{active: client == examples.client}"
-                                    @click="examples.client = client"
-                                >[{{client}}]</span>
-                            </div>
-                            <div class="code" v-if="examples.client=='curl'">
-                                <code>curl {{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}</code>
-                            </div>
-                            <div class="code" v-else-if="examples.client=='js'">
-                                <code>fetch('{{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}')
-    .then(response => response.json())
-    .then(data => console.log(data));</code>
-                            </div>
-                            <div class="code" v-else>
-                                <code>// No sample available at this moment</code>
-                                You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
-                            </div>
-                        </div>
-
-                        <div v-if="item">
-                            <br><br>
-                            <h2>Patch</h2>
-                            <textarea style="width: 98%; height: 180px; font-family: monospace;" v-model="item_patch"></textarea>
-                            <button class="btn btn-primary" @click="applyPatchClick()">Apply patch</button>
-                            <br>
-                            <br>
-                            <div class="examples">
-                                <div class="examples_client_selector">
-                                <span
-                                    v-for="client in examples.clients"
-                                    :class="{active: client == examples.client}"
-                                    @click="examples.client = client"
-                                >[{{client}}]</span>
-                                </div>
-                                <div class="code" v-if="examples.client=='curl'">
-                                    <code>curl {{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}:patch -X PATCH -d '{{ JSON.parse(this.item_patch) }}'</code>
-                                </div>
-                                <div class="code" v-else-if="examples.client=='js'">
-                                    <code>fetch('{{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}:patch', {{ {"method":"PATCH", "body":JSON.parse(this.item_patch)} }})
-    .then(response => response.json())
-    .then(data => console.log(data));</code>
-                                </div>
-                                <div class="code" v-else>
-                                    <code>// No sample available at this moment</code>
-                                    You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
-                                </div>
-                            </div>
-
-                            <br>
-                            <br>
-                            <h2>Delete</h2>
-                            <div style="text-align: center;">
-                                Press this button to delete the item <code>{{find_by_index}}="{{find_by_value}}"</code>
-                                <br>
-                                <br>
-                                <button class="btn btn-danger" @click="deleteItemClick">Delete</button>
-                            </div>
-
-                            <br>
-                            <div class="examples">
-                                <div class="examples_client_selector">
-                                <span
-                                        v-for="client in examples.clients"
-                                        :class="{active: client == examples.client}"
-                                        @click="examples.client = client"
-                                >[{{client}}]</span>
-                                </div>
-                                <div class="code" v-if="examples.client=='curl'">
-                                    <code>curl {{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}} -X DELETE</code>
-                                </div>
-                                <div class="code" v-else-if="examples.client=='js'">
-                                    <code>fetch('{{base_url}}/v1/collections/{{encodeURIComponent(collection_name)}}/index/{{encodeURIComponent(find_by_index)}}/findBy/{{encodeURIComponent(find_by_value)}}', {{ {"method":"DELETE"} }})
-                                        .then(response => response.json())
-                                        .then(data => console.log(data));</code>
-                                </div>
-                                <div class="code" v-else>
-                                    <code>// No sample available at this moment</code>
-                                    You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
-                                </div>
-                            </div>
-
-                        </div>
-                        <br><br><br><br><br><br>
-                    </div>
-
-                    <div v-if="panels.delete" style="text-align: center;">
-                        <br>
-                        Press the following button to drop the collection <code>{{collection_name}}</code>: <br>
-                        <br>
-                        <button class="btn btn-danger" @click="deleteCollectionClick()">Drop</button>
-                    </div>
-
-                </div>
-            </div>
-
-            <div class="popup" v-if="create_collection.show">
-                <div class="popup-window">
-                    <div class="popup-decoration">
-                        <form @submit.prevent="createCollectionSubmit">
-                            <header>
-                                <h1>Create collection</h1>
-                            </header>
-                            <section>
-                                <div class="form-group">
-                                    <label for="collection_name">Collection name</label>
-                                    <input type="text" v-model="create_collection.request.payload.name" class="form-control" id="collection_name" placeholder="Enter collection name">
-                                    <small id="collection_name_help" class="form-text text-muted">Just alphanumeric text.</small>
-                                </div>
-                                <div class="examples">
-                                    <div class="examples_client_selector">
-                                        <span
-                                            v-for="client in examples.clients"
-                                            :class="{active: client == examples.client}"
-                                            @click="examples.client = client"
-                                        >[{{client}}]</span>
-                                    </div>
-                                    <div class="code" v-if="examples.client=='curl'">
-                                        <code>curl {{base_url}}/v1/collections -d '{{create_collection.request.payload}}' </code>
-                                    </div>
-                                    <div class="code" v-else-if="examples.client=='js'">
-                                        <code>fetch('{{base_url}}/v1/collections', {{ {"method":"POST", "body":create_collection.request.payload} }})
-    .then(response => response.json())
-    .then(data => console.log(data));</code>
-                                    </div>
-                                    <div class="code" v-else>
-                                        <code>// No sample available at this moment</code>
-                                        You can contribute at <a href="https://github.com/fulldump/inceptiondb">https://github.com/fulldump/inceptiondb</a>
-                                    </div>
-                                </div>
-
-                            </section>
-                            <footer>
-                                <button type="button" class="btn btn-secondary" @click="create_collection.show = false">Cancel</button>
-                                <button type="submit" class="btn btn-primary">Create collection</button>
-                            </footer>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
+      <main class="flex-1">
+        <div v-if="!selectedCollection" class="flex h-full flex-col items-center justify-center text-center gap-3 px-6">
+          <h2 class="text-2xl font-semibold text-slate-200">Bienvenido a InceptionDB</h2>
+          <p class="text-slate-400 max-w-md">Selecciona o crea una colección en el panel lateral para comenzar a consultar, insertar o eliminar documentos.</p>
         </div>
 
-        <script>
+        <div v-else class="flex flex-col gap-6 p-6">
+          <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-2xl font-semibold text-slate-100">Colección {{ selectedCollection.name }}</h2>
+              <p class="text-sm text-slate-400 flex flex-wrap items-center gap-3">
+                <span v-if="selectedCollection.total !== undefined">Total: {{ selectedCollection.total }}</span>
+                <span v-if="queryStats.elapsed">Última consulta: {{ queryStats.elapsed }}</span>
+                <span v-if="queryStats.returned">Documentos listados: {{ queryStats.returned }}</span>
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 transition"
+                @click="runQuery"
+              >
+                Ejecutar consulta
+              </button>
+              <button
+                type="button"
+                class="rounded-md border border-rose-500/40 bg-rose-600/20 px-3 py-2 text-sm font-medium text-rose-300 hover:bg-rose-600/30 transition"
+                @click="dropCollection"
+              >
+                Eliminar colección
+              </button>
+            </div>
+          </header>
 
-            function compare( a, b ) {
-                if ( a < b ){
-                    return -1;
-                }
-                if ( a > b ){
-                    return 1;
-                }
-                return 0;
+          <section class="grid gap-6 lg:grid-cols-[2fr_1fr]">
+            <div class="space-y-6">
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-5">
+                <div>
+                  <label for="filter" class="block text-xs uppercase tracking-wide text-slate-400">Filtro (JSON)</label>
+                  <textarea
+                    id="filter"
+                    v-model="filterText"
+                    rows="4"
+                    class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="{ }"
+                  ></textarea>
+                  <p v-if="filterError" class="mt-2 text-sm text-rose-400">{{ filterError }}</p>
+                </div>
+
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <label class="block text-xs uppercase tracking-wide text-slate-400">
+                    Elementos por página
+                    <select
+                      v-model.number="pageSize"
+                      class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    >
+                      <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
+                    </select>
+                  </label>
+                  <p class="text-xs text-slate-400 md:text-right">{{ pageInfo }}</p>
+                </div>
+
+                <div>
+                  <label class="block text-xs uppercase tracking-wide text-slate-400">Índice</label>
+                  <select
+                    v-model="selectedIndexName"
+                    class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  >
+                    <option value="">Sin índice (full scan)</option>
+                    <option v-for="index in indexes" :key="index.name" :value="index.name">
+                      {{ index.name }} · {{ index.type }}
+                    </option>
+                  </select>
+                </div>
+
+                <div v-if="activeIndex && activeIndex.type === 'map'" class="grid gap-2">
+                  <label class="block text-xs uppercase tracking-wide text-slate-400">Valor del índice</label>
+                  <input
+                    type="text"
+                    v-model="mapValue"
+                    class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="Introduce un valor único"
+                  >
+                </div>
+
+                <div v-if="activeIndex && activeIndex.type === 'btree'" class="space-y-4">
+                  <div>
+                    <span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">Desde (incluido)</span>
+                    <div class="grid gap-3 md:grid-cols-2">
+                      <label v-for="field in activeIndex.fields" :key="'from-' + field" class="text-sm text-slate-300">
+                        <span class="block text-xs uppercase tracking-wide text-slate-500">{{ field }}</span>
+                        <input
+                          type="text"
+                          v-model="rangeFrom[field]"
+                          class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        >
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">Hasta (excluido)</span>
+                    <div class="grid gap-3 md:grid-cols-2">
+                      <label v-for="field in activeIndex.fields" :key="'to-' + field" class="text-sm text-slate-300">
+                        <span class="block text-xs uppercase tracking-wide text-slate-500">{{ field }}</span>
+                        <input
+                          type="text"
+                          v-model="rangeTo[field]"
+                          class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        >
+                      </label>
+                    </div>
+                  </div>
+                  <label class="inline-flex items-center gap-2 text-sm text-slate-300">
+                    <input type="checkbox" v-model="reverse" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
+                    Orden inverso
+                  </label>
+                </div>
+
+                <div class="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 transition"
+                    :disabled="disablePrev"
+                    @click="prevPage"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 transition"
+                    :disabled="disableNext"
+                    @click="nextPage"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
+                <div class="border-b border-slate-800 px-5 py-3 text-sm font-semibold text-slate-200">Resultados</div>
+                <p class="px-5 pt-3 text-xs text-slate-400">Vista por defecto: listado JSON de los primeros documentos de la colección seleccionada.</p>
+                <div class="p-5 space-y-4">
+                  <div v-if="queryLoading" class="text-sm text-slate-400">Ejecutando consulta…</div>
+                  <div v-else-if="queryError" class="text-sm text-rose-400">{{ queryError }}</div>
+                  <div v-else-if="queryRows.length === 0" class="text-sm text-slate-400">No se encontraron documentos.</div>
+                  <div v-else class="space-y-4">
+                    <div
+                      v-for="(row, idx) in queryRows"
+                      :key="idx"
+                      class="rounded-lg border border-slate-800 bg-slate-950 p-4"
+                    >
+                      <div class="flex items-center justify-between text-xs text-slate-500 mb-3">
+                        <span>Documento #{{ offset + idx + 1 }}</span>
+                        <button
+                          v-if="canDeleteRow(row)"
+                          type="button"
+                          class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
+                          @click="deleteRow(row)"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                      <pre class="whitespace-pre-wrap break-words text-sm text-slate-200 font-mono">{{ formatDocument(row) }}</pre>
+                      <p v-if="!canDeleteRow(row) && activeIndex && activeIndex.type === 'map'" class="mt-3 text-xs text-slate-500">
+                        El documento no contiene el campo «{{ activeIndex.field }}» requerido para eliminarlo.
+                      </p>
+                      <p v-else-if="activeIndex && activeIndex.type !== 'map'" class="mt-3 text-xs text-slate-500">
+                        Selecciona un índice de tipo "map" para habilitar la eliminación directa.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-6">
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
+                <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Insertar documento</h3>
+                <textarea
+                  v-model="insertForm.payload"
+                  rows="8"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  placeholder='{"name": "Ada"}'
+                ></textarea>
+                <div class="flex justify-end">
+                  <button
+                    type="button"
+                    class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 transition"
+                    @click="insertDocument"
+                  >
+                    Insertar
+                  </button>
+                </div>
+                <p v-if="insertForm.error" class="text-sm text-rose-400">{{ insertForm.error }}</p>
+                <p v-else-if="insertForm.success" class="text-sm text-emerald-400">{{ insertForm.success }}</p>
+              </div>
+
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
+                <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Índices</h3>
+                <div v-if="indexesLoading" class="text-sm text-slate-400">Cargando índices…</div>
+                <div v-else-if="indexes.length === 0" class="text-sm text-slate-400">La colección no tiene índices definidos.</div>
+                <ul v-else class="space-y-3 text-sm text-slate-300">
+                  <li v-for="index in indexes" :key="index.name" class="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold">{{ index.name }}</span>
+                      <span class="text-xs uppercase tracking-wide text-slate-500">{{ index.type }}</span>
+                    </div>
+                    <p v-if="index.type === 'map'" class="mt-1 text-xs text-slate-400">Campo: {{ index.field }}</p>
+                    <p v-else-if="index.type === 'btree'" class="mt-1 text-xs text-slate-400">Campos: {{ index.fields.join(', ') }}</p>
+                    <p v-if="index.unique" class="mt-1 text-xs text-emerald-400">Único</p>
+                    <p v-if="index.sparse" class="mt-1 text-xs text-slate-500">Sparse</p>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
+
+      createApp({
+        setup() {
+          const collections = ref([]);
+          const collectionsLoading = ref(false);
+          const collectionsError = ref('');
+          const selectedCollectionName = ref('');
+          const indexes = ref([]);
+          const indexesLoading = ref(false);
+          const filterText = ref('{\n\n}');
+          const filterError = ref('');
+          const page = ref(1);
+          const pageSize = ref(25);
+          const pageSizeOptions = [10, 25, 50, 100];
+          const queryRows = ref([]);
+          const queryLoading = ref(false);
+          const queryError = ref('');
+          const queryStats = reactive({ elapsed: '', returned: 0 });
+          const selectedIndexName = ref('');
+          const mapValue = ref('');
+          const reverse = ref(false);
+          const rangeFrom = reactive({});
+          const rangeTo = reactive({});
+          const insertForm = reactive({ payload: '{\n\n}', error: '', success: '' });
+          const createForm = reactive({ open: false, name: '', error: '' });
+
+          const selectedCollection = computed(() => collections.value.find(c => c.name === selectedCollectionName.value) || null);
+          const activeIndex = computed(() => indexes.value.find(idx => idx.name === selectedIndexName.value) || null);
+          const offset = computed(() => Math.max(0, (Number(page.value) - 1) * Number(pageSize.value || 0)));
+          const disablePrev = computed(() => page.value <= 1);
+          const disableNext = computed(() => {
+            const limit = Number(pageSize.value) || 0;
+            if (limit === 0) return true;
+            return queryRows.value.length < limit;
+          });
+          const pageInfo = computed(() => {
+            const count = queryRows.value.length;
+            if (count === 0) {
+              return 'Sin resultados en esta página.';
             }
+            const start = offset.value + 1;
+            const end = offset.value + count;
+            const total = selectedCollection.value?.total;
+            if (typeof total === 'number') {
+              return `Mostrando ${start}–${end} de ${total}`;
+            }
+            return `Mostrando ${start}–${end}`;
+          });
 
+          const prettyTotal = (n) => {
+            if (typeof n !== 'number') return n;
+            if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+            return n;
+          };
 
-            var app = new Vue({
-                el: '#app',
-                data: {
-                    base_url: window.location.protocol + '//' + window.location.host,
-                    examples: {
-                        clients: ['curl', 'js', 'go'],
-                        client: 'curl',
-                    },
-                    collection_name: "",
-                    collections: [],
-                    rows: [],
-                    indexes: [],
-                    selected_index: {},
-                    index_see_details: false,
-                    find_by_value: '',
-                    find_by_index: '',
-                    find_by_error: '',
-                    find_btree: {
-                        from: {},
-                        to: {},
-                        reverse: false,
-                        skip: 0,
-                        limit: 10,
-                        filter: '{\n\n}',
-                        elapsed: '',
-                    },
-                    item: '',
-                    panels: {
-                        fullscan: false,
-                        indexsearch: false,
-                        delete: false,
-                        insert: false,
-                        home: true,
-                        find: false,
-                    },
-                    item_patch: '{\n\n}',
+          const isSelected = (name) => selectedCollectionName.value === name;
 
-                    // Operation create collection
-                    create_collection: {
-                        show: false,
-                        request: {
-                            payload: {
-                                name: '',
-                            },
-                        },
-                    },
+          const toggleCreateForm = () => {
+            createForm.open = !createForm.open;
+            createForm.error = '';
+          };
 
-                    // Operation insert item
-                    insert_item: {
-                        error: '',
-                        request: {
-                            payload: '{\n\n}',
-                        },
-                    },
+          const selectCollection = (name) => {
+            if (selectedCollectionName.value === name) {
+              selectedCollectionName.value = '';
+            } else {
+              selectedCollectionName.value = name;
+            }
+          };
 
-                    // Operation full scan
-                    full_scan: {
-                        skip: 0,
-                        limit: 10,
-                        filter: '{\n\n}',
-                        request: {
-                            payload: {},
-                        },
-                    },
+          const resetRangeFields = () => {
+            Object.keys(rangeFrom).forEach((key) => delete rangeFrom[key]);
+            Object.keys(rangeTo).forEach((key) => delete rangeTo[key]);
+            const index = activeIndex.value;
+            if (index && index.type === 'btree') {
+              (index.fields || []).forEach((field) => {
+                rangeFrom[field] = '';
+                rangeTo[field] = '';
+              });
+            }
+          };
 
-                    // Operation find
-                    find: {
-                        columns: [],
-                        filter: '{\n\n}',
-                        skip: 0,
-                        limit: 10,
-                        index: null,
-                        index_name: '',
-                        from: {},
-                        to: {},
-                        reverse: false,
-                        value: '',
-                        result: {
-                            loading: false,
-                            rows: [],
-                            elapsed: '',
-                        },
-                    },
-                },
-                methods: {
-                    listCollections() {
-                        var that = this;
-                        axios.get('/v1/collections')
-                            .then(function(resp) {
-                                that.collections = resp.data.sort( (a,b) => {
-                                    return compare( a.name, b.name);
-                                });
-                            });
-                    },
-                    selectCollection(collection) {
-                        this.rows = [];
-                        this.indexes = [];
-                        this.collection_name = (this.collection_name == collection) ? '' : collection;
-                        this.full_scan.skip = 0;
-                        this.full_scan.filter = '{\n\n}';
-                    },
-                    findByIndex(collection, index, value) {
-                        var that = this;
-                        that.find_by_error = '';
-                        axios({
-                            method: 'POST',
-                            url: '/v1/collections/'+ encodeURIComponent(collection) + ':find',
-                            data: {
-                                mode: "unique",
-                                index: index,
-                                value: value,
-                            }
-                        })
-                            .then(function(resp) {
-                                that.item = resp.data;
-                                if (resp.data == '') {
-                                    that.find_by_error = `No match for ${value}`
-                                }
-                            })
-                            .catch(function (error) {
-                                that.item = '';
-                                if (error.response) {
-                                    that.find_by_error = error.response.data.error;
-                                    return
-                                }
-                                that.find_by_error = 'Network error';
-                            });
-                    },
-                    createCollectionSubmit() {
-                        // this.showPanel('');
-                        var that = this;
-                        axios.post('/v1/collections', this.create_collection.request.payload)
-                            .then(function(resp) {
-                                console.log('createcollectionresp', resp);
-                                var newCollection = resp.data;
-                                that.collections.push(newCollection);
-                                that.selectCollection(newCollection.name);
-                                that.create_collection.show = false;
-                                that.showPanel('fullscan');
-                            })
-                            .catch(function(error) {
-                                // TODO: put this error somewhere
-                                if (!error.response) return;
-                                alert(error.response.data.error);
-                            });
-                    },
-                    insertItemSubmit() {
-                        var payloadJson = JSON.parse(this.insert_item.request.payload);
-                        this.insertItem(this.collection_name, payloadJson)
-                    },
-                    insertItem(collection, payload) {
-                        var that = this;
-                        fetch('/v1/collections/'+ encodeURIComponent(collection)+':insert', {
-													method: 'POST',
-													body: JSON.stringify(payload),
-												})
-														.then(resp => resp.json() )
-                            .then(function(body) {
-															console.log('lalala');
-															console.log(body);
-                                that.insert_item.error = '';
-                                that.rows.push(JSON.stringify(body));
-                                that.insert_item.request.payload = '{\n\n}';
-                            })
-                            .catch(function(error) {
-															console.log(error);
-                                if (!error.response) {
-                                    that.insert_item.error = 'network error';
-                                    return
-                                }
-                                that.insert_item.error = error.response.data.error;
-                            });
-                    },
-                    createCollectionClick() {
-                        this.create_collection.show = true;
-                    },
-                    deleteCollectionClick() { // Todo: rename to dropCollection
-                        collection = this.collection_name;
-                        var ok = confirm("Collection '"+collection+"' will be deleted, continue?");
-                        if (!ok) return;
-                        this.deleteCollection(collection)
-                    },
-                    deleteCollection(collection) { // Todo: rename to dropCollection
-                        var that = this;
-                        axios.post('/v1/collections/'+ encodeURIComponent(collection)+':dropCollection')
-                            .then(function(resp) {
-                                that.collection_name = '';
-                                that.collections.splice(that.collections.indexOf(collection), 1);
-                            });
-                    },
-                    showPanel(panel) {
-                        for (let key in this.panels) {
-                            let show = key == panel;
-                            this.panels[key] = show;
-                            if (show && key == 'find') {
-                                this.fetchIndexes(this.collection_name);
-                            }
-                        }
-                    },
-                    fetchFullScanExperimental(collection) {
-                        var that = this;
-                        that.rows = [];
-                        const fileURL = '/v1/collections/'+ encodeURIComponent(collection) + ':find';
-                        const utf8Decoder = new TextDecoder("utf-8");
-                        fetch(fileURL).then(response => {
-                            let re = /\r\n|\n|\r/gm;
-                            let startIndex = 0;
-                            let reader = response.body.getReader();
+          watch(activeIndex, () => {
+            mapValue.value = '';
+            reverse.value = false;
+            resetRangeFields();
+          });
 
+          watch(selectedCollection, async (collection) => {
+            indexes.value = [];
+            selectedIndexName.value = '';
+            mapValue.value = '';
+            reverse.value = false;
+            resetRangeFields();
+            filterText.value = '{\n\n}';
+            filterError.value = '';
+            page.value = 1;
+            queryRows.value = [];
+            queryError.value = '';
+            queryStats.elapsed = '';
+            queryStats.returned = 0;
+            if (collection) {
+              await loadIndexes();
+              await runQuery();
+            }
+          });
 
-                            var readCallback = function({value, done}) {
-                                chunk = value
-                                chunk = chunk ? utf8Decoder.decode(chunk, {stream: true}) : "";
-                                for (;;) {
-                                    let result = re.exec(chunk);
-                                    if (!result) {
-                                        if (done) {
-                                            break;
-                                        }
-                                        let remainder = chunk.substr(startIndex);
-                                        reader.read().then(readCallback);
-                                        chunk = remainder + (chunk ? utf8Decoder.decode(chunk, {stream: true}) : "");
-                                        startIndex = re.lastIndex = 0;
-                                        continue;
-                                    }
-                                    var line = chunk.substring(startIndex, result.index);
-                                    that.rows.push(line)
-                                    console.log(line);
-                                    startIndex = re.lastIndex;
-                                }
-                                if (startIndex < chunk.length) {
-                                    // last line didn't end in a newline char
-                                    console.log(chunk.substr(startIndex));
-                                }
+          const loadCollections = async () => {
+            collectionsLoading.value = true;
+            collectionsError.value = '';
+            try {
+              const resp = await axios.get('/v1/collections');
+              const list = Array.isArray(resp.data) ? resp.data.slice() : [];
+              list.sort((a, b) => a.name.localeCompare(b.name));
+              collections.value = list;
+              if (selectedCollectionName.value) {
+                const exists = list.some((item) => item.name === selectedCollectionName.value);
+                if (!exists) {
+                  selectedCollectionName.value = '';
+                }
+              }
+            } catch (error) {
+              collectionsError.value = error?.response?.data?.error || 'No se pudieron cargar las colecciones.';
+            } finally {
+              collectionsLoading.value = false;
+            }
+          };
 
-                            }
+          const loadIndexes = async () => {
+            if (!selectedCollection.value) return;
+            indexesLoading.value = true;
+            try {
+              const resp = await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:listIndexes`);
+              const list = Array.isArray(resp.data) ? resp.data : [];
+              indexes.value = list;
+              if (!list.some((idx) => idx.name === selectedIndexName.value)) {
+                selectedIndexName.value = '';
+              }
+            } catch (error) {
+              indexes.value = [];
+            } finally {
+              indexesLoading.value = false;
+            }
+          };
 
-                            reader.read().then(readCallback);
+          const parseFilter = () => {
+            const raw = filterText.value.trim();
+            if (!raw) {
+              filterText.value = '{}';
+              return {};
+            }
+            try {
+              const parsed = JSON.parse(raw);
+              filterError.value = '';
+              return parsed;
+            } catch (err) {
+              filterError.value = 'JSON inválido: ' + err.message;
+              return null;
+            }
+          };
 
-                        });
-                    },
-                    fetchFullScan(collection) {
-                        let that = this;
-                        let payload = {
-                            mode: "fullscan",
-                            filter: {},
-                            limit: parseInt(that.full_scan.limit),
-                            skip: parseInt(that.full_scan.skip),
-                        };
+          const buildQueryPayload = () => {
+            const parsedFilter = parseFilter();
+            if (parsedFilter === null) {
+              const error = new Error('invalid-filter');
+              error.code = 'invalid-filter';
+              throw error;
+            }
+            const payload = {
+              filter: parsedFilter,
+              limit: Number(pageSize.value) || 0,
+              skip: offset.value,
+            };
+            const index = activeIndex.value;
+            if (index) {
+              payload.index = index.name;
+              if (index.type === 'map') {
+                if (!mapValue.value) {
+                  const error = new Error('map-value-required');
+                  error.code = 'map-value-required';
+                  throw error;
+                }
+                payload.value = mapValue.value;
+              } else if (index.type === 'btree') {
+                payload.reverse = !!reverse.value;
+                const fields = index.fields || [];
+                if (fields.length && fields.every((field) => rangeFrom[field])) {
+                  const from = {};
+                  fields.forEach((field) => {
+                    from[field] = rangeFrom[field];
+                  });
+                  payload.from = from;
+                }
+                if (fields.length && fields.every((field) => rangeTo[field])) {
+                  const to = {};
+                  fields.forEach((field) => {
+                    to[field] = rangeTo[field];
+                  });
+                  payload.to = to;
+                }
+              }
+            }
+            return payload;
+          };
 
-                        try {
-                            payload.filter = JSON.parse(that.full_scan.filter);
-                        } catch (e) {
-                            console.log(e)
-                            // Nothing happen :D
-                        }
+          const runQuery = async () => {
+            if (!selectedCollection.value) return;
+            queryError.value = '';
+            let payload;
+            try {
+              payload = buildQueryPayload();
+            } catch (error) {
+              if (error.code === 'invalid-filter') {
+                queryError.value = 'El filtro debe ser un JSON válido.';
+              } else if (error.code === 'map-value-required') {
+                queryError.value = 'Debes indicar un valor para el índice seleccionado.';
+              } else {
+                queryError.value = error.message || 'No se pudo preparar la consulta.';
+              }
+              return;
+            }
+            queryLoading.value = true;
+            const started = performance.now();
+            try {
+              const resp = await axios({
+                method: 'post',
+                url: `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:find`,
+                data: payload,
+                transformResponse: (res) => res,
+                responseType: 'text',
+              });
+              const raw = resp.data || '';
+              const lines = raw.split('\n').filter(Boolean);
+              const parsedRows = lines.map((line) => {
+                try {
+                  return JSON.parse(line);
+                } catch (err) {
+                  return { _raw: line };
+                }
+              });
+              queryRows.value = parsedRows;
+              queryStats.returned = parsedRows.length;
+              const elapsed = Math.round(performance.now() - started);
+              queryStats.elapsed = `${elapsed} ms`;
+            } catch (error) {
+              queryError.value = error?.response?.data?.error || 'No se pudo obtener la colección.';
+            } finally {
+              queryLoading.value = false;
+            }
+          };
 
-                        axios({
-                            method: 'post',
-                            url: '/v1/collections/'+ encodeURIComponent(collection)+':find',
-                            data: payload,
-                            transformResponse: (res) => {return res;},
-                            responseType: 'text',
-                        })
-                            .then(function(resp) {
-                                var rows = [];
-                                resp.data.split("\n").forEach(function(line) {
-                                    if (line == '') return;
-                                    rows.push(line);
-                                });
-                                that.rows = rows;
-                            });
-                    },
-                    fullscanFilterKeyup() {
-                        try {
-                            JSON.parse(this.full_scan.filter)
-                            this.fetchFullScan(this.collection_name);
-                        } catch (e) {
-                        }
-                    },
-                    fetchIndexes(collection) {
-                        var that = this;
-                        axios.post('/v1/collections/'+ encodeURIComponent(collection) + ":listIndexes")
-                            .then(function(resp) {
-                                that.indexes = resp.data;
-                                that.find.indexes = resp.data;
-                            });
-                    },
-                    applyPatchClick() {
-                        var patchJson = JSON.parse(this.item_patch);
-                        this.applyPatch(this.collection_name, this.find_by_index, this.find_by_value, patchJson)
-                    },
-                    applyPatch(collection, key, value, patch) {
-                        var that = this;
-                        let payload = {
-                            "mode": "unique",
-                            "field": key,
-                            "value": value,
-                            "patch": patch,
-                        };
-                        axios.post('/v1/collections/'+ encodeURIComponent(collection) + ':patch', payload)
-                            .then(function(resp) {
-                                that.item = resp.data;
-                                that.item_patch = '{\n\n}';
-                            });
-                    },
-                    deleteItemClick() {
-                        var that = this;
-                        let payload = {
-                            "mode": "unique",
-                            "field": that.find_by_index,
-                            "value": that.find_by_value,
-                        };
-                        axios.post('/v1/collections/'+ encodeURIComponent(that.collection_name) + ':remove', payload)
-                            .then(function(resp) {
-                                that.item = null;
-                                that.find_by_value = '';
-                            });
-                    },
-                    prettyTotal(n) {
-                        if (n >= 1000000) {
-                            return (n/1000000).toFixed(0) + 'M';
-                        }
-                        if (n >= 1000) {
-                            return (n/1000).toFixed(0) + 'K';
-                        }
-                        return n
-                    },
-                    selectIndex() {
-                        this.rows = [];
-                        for (i in this.indexes) {
-                            console.log(i);
-                            const index = this.indexes[i];
-                            if (index.name == this.find_by_index) {
-                                this.selected_index = index;
-                                break;
-                            }
-                        }
-                        if (this.selected_index.type == 'btree') {
-                            this.find_btree.skip = 0;
-                            this.findByIndexBtree();
-                        }
-                    },
-                    findSelectIndex(name) {
-                        for (let key in this.find.indexes) {
-                            let index = this.find.indexes[key];
-                            if (index.name == name) {
-                                this.find.index = index;
-                                if (index.type == 'btree') {
-                                    this.find.columns = index.fields;
-                                } else {
-                                    this.find.columns = [];
-                                }
-                                return;
-                            }
-                        }
-                        this.find.index = null;
-                    },
-                    apiFind() {
-                        let that = this;
-                        let payload = {
-                            limit: parseInt(that.find.limit),
-                            skip: parseInt(that.find.skip),
-                        };
+          const nextPage = () => {
+            if (disableNext.value) return;
+            page.value = Number(page.value) + 1;
+            runQuery();
+          };
 
-                        try {
-                            payload.filter = JSON.parse(that.find.filter);
-                        } catch (e) {
-                            console.log(e)
-                            // Nothing happen :D
-                        }
+          const prevPage = () => {
+            if (disablePrev.value) return;
+            page.value = Math.max(1, Number(page.value) - 1);
+            runQuery();
+          };
 
-                        if (this.find.index) {
-                            payload.index = this.find.index.name;
-                        }
+          watch(pageSize, (value, old) => {
+            if (value === old) return;
+            page.value = 1;
+            runQuery();
+          });
 
-                        if (this.find.index && this.find.index.type == 'map') {
-                            payload.value = this.find.value;
-                        }
+          const canDeleteRow = (row) => {
+            const index = activeIndex.value;
+            if (!index || index.type !== 'map') return false;
+            const field = index.field;
+            if (!field) return false;
+            return Object.prototype.hasOwnProperty.call(row, field);
+          };
 
-                        if (this.find.index && this.find.index.type == 'btree') {
+          const deleteRow = async (row) => {
+            const index = activeIndex.value;
+            if (!selectedCollection.value || !index || index.type !== 'map' || !index.field) return;
+            const value = row[index.field];
+            if (value === undefined) {
+              queryError.value = `El documento no contiene el campo «${index.field}».`;
+              return;
+            }
+            const ok = window.confirm(`¿Eliminar el documento donde ${index.field} = ${value}?`);
+            if (!ok) return;
+            try {
+              await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:remove`, {
+                mode: 'unique',
+                field: index.field,
+                value,
+              });
+              await runQuery();
+              await loadCollections();
+            } catch (error) {
+              queryError.value = error?.response?.data?.error || 'No se pudo eliminar el documento.';
+            }
+          };
 
-                            payload.reverse = this.find.reverse;
+          const insertDocument = async () => {
+            insertForm.error = '';
+            insertForm.success = '';
+            if (!selectedCollection.value) {
+              insertForm.error = 'Selecciona una colección antes de insertar.';
+              return;
+            }
+            let payload;
+            try {
+              payload = JSON.parse(insertForm.payload);
+            } catch (err) {
+              insertForm.error = 'JSON inválido: ' + err.message;
+              return;
+            }
+            try {
+              await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:insert`, payload);
+              insertForm.success = 'Documento insertado correctamente.';
+              insertForm.payload = '{\n\n}';
+              await runQuery();
+              await loadCollections();
+            } catch (error) {
+              insertForm.error = error?.response?.data?.error || 'No se pudo insertar el documento.';
+            }
+          };
 
-                            let fromCount = 0;
-                            for (let field in this.find.from) {
-                                if (this.find.from[field]) {
-                                    fromCount++;
-                                }
-                            }
-                            if (fromCount == this.find.index.fields.length) {
-                                payload.from = this.find.from
-                            }
+          const createCollection = async () => {
+            createForm.error = '';
+            const name = createForm.name.trim();
+            if (!name) {
+              createForm.error = 'Indica un nombre para la colección.';
+              return;
+            }
+            try {
+              const resp = await axios.post('/v1/collections', { name });
+              await loadCollections();
+              const created = resp?.data?.name || name;
+              selectedCollectionName.value = created;
+              createForm.name = '';
+              createForm.open = false;
+            } catch (error) {
+              createForm.error = error?.response?.data?.error || 'No se pudo crear la colección.';
+            }
+          };
 
-                            let toCount = 0;
-                            for (let field in this.find.to) {
-                                if (this.find.to[field]) {
-                                    toCount++;
-                                }
-                            }
-                            if (toCount == this.find.index.fields.length) {
-                                payload.to = this.find.to
-                            }
-                        }
+          const dropCollection = async () => {
+            if (!selectedCollection.value) return;
+            const name = selectedCollection.value.name;
+            const ok = window.confirm(`¿Eliminar la colección «${name}»? Esta acción no se puede deshacer.`);
+            if (!ok) return;
+            try {
+              await axios.post(`/v1/collections/${encodeURIComponent(name)}:dropCollection`);
+              selectedCollectionName.value = '';
+              await loadCollections();
+            } catch (error) {
+              queryError.value = error?.response?.data?.error || 'No se pudo eliminar la colección.';
+            }
+          };
 
+          const formatDocument = (row) => {
+            if (row && typeof row === 'object' && '_raw' in row) {
+              return row._raw;
+            }
+            try {
+              return JSON.stringify(row, null, 2);
+            } catch (err) {
+              return String(row);
+            }
+          };
 
-                        let t0 = new Date();
-                        axios({
-                            method: 'post',
-                            url: '/v1/collections/'+ encodeURIComponent(this.collection_name)+':find',
-                            data: payload,
-                            transformResponse: (res) => {return res;},
-                            responseType: 'text',
-                        })
-                            .then(function(resp) {
-                                let t1 = new Date();
-                                that.find.result.elapsed = (t1.getTime()-t0.getTime()) + 'ms';
-                                var rows = [];
-                                resp.data.split("\n").forEach(function(line) {
-                                    if (line == '') return;
-                                    rows.push(JSON.parse(line)); // todo: try-catch
-                                });
-                                that.find.result.rows = rows;
-                            });
-                    },
-                    findByIndexBtree() {
-                        let that = this;
-                        let payload = {
-                            index: this.selected_index.name,
-                            reverse: this.find_btree.reverse,
-                            limit: parseInt(this.find_btree.limit),
-                            skip: parseInt(this.find_btree.skip),
-                        };
+          onMounted(() => {
+            loadCollections();
+          });
 
-                        try {
-                            payload.filter = JSON.parse(that.find_btree.filter);
-                        } catch (e) {
-                            console.log(e)
-                            // Nothing happen :D
-                        }
-
-                        let fromCount = 0;
-                        for (let field in this.find_btree.from) {
-                            if (this.find_btree.from[field]) {
-                                fromCount++;
-                            }
-                        }
-                        if (fromCount = this.selected_index.fields.length) {
-                            payload.from = this.find_btree.from
-                        }
-
-                        let toCount = 0;
-                        for (let field in this.find_btree.to) {
-                            if (this.find_btree.to[field]) {
-                                toCount++;
-                            }
-                        }
-                        if (toCount = this.selected_index.fields.length) {
-                            payload.to = this.find_btree.to
-                        }
-
-                        let t0 = new Date();
-                        axios({
-                            method: 'post',
-                            url: '/v1/collections/'+ encodeURIComponent(this.collection_name)+':find',
-                            data: payload,
-                            transformResponse: (res) => {return res;},
-                            responseType: 'text',
-                        })
-                            .then(function(resp) {
-                                let t1 = new Date();
-                                that.find_btree.elapsed = (t1.getTime()-t0.getTime()) + 'ms';
-                                var rows = [];
-                                resp.data.split("\n").forEach(function(line) {
-                                    if (line == '') return;
-                                    rows.push(JSON.parse(line));
-                                });
-                                that.rows = rows;
-                            });
-
-                    },
-                },
-                beforeMount() {
-                    this.listCollections();
-                },
-            });
-
-        </script>
-
-    </body>
+          return {
+            // state
+            collections,
+            collectionsLoading,
+            collectionsError,
+            selectedCollection,
+            selectedCollectionName,
+            indexes,
+            indexesLoading,
+            filterText,
+            filterError,
+            queryRows,
+            queryLoading,
+            queryError,
+            queryStats,
+            selectedIndexName,
+            activeIndex,
+            mapValue,
+            reverse,
+            rangeFrom,
+            rangeTo,
+            insertForm,
+            createForm,
+            disablePrev,
+            disableNext,
+            page,
+            pageSize,
+            pageSizeOptions,
+            offset,
+            pageInfo,
+            // methods
+            prettyTotal,
+            isSelected,
+            toggleCreateForm,
+            selectCollection,
+            runQuery,
+            nextPage,
+            prevPage,
+            insertDocument,
+            createCollection,
+            dropCollection,
+            deleteRow,
+            canDeleteRow,
+            formatDocument,
+          };
+        },
+      }).mount('#app');
+    </script>
+  </body>
 </html>
-
-
-
