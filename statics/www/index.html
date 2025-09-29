@@ -323,14 +323,8 @@
                         </p>
                       </div>
                       <pre class="whitespace-pre-wrap break-words text-sm text-slate-200 font-mono">{{ formatDocument(row) }}</pre>
-                      <p v-if="!canDeleteRow(row) && activeIndex && activeIndex.type === 'map'" class="mt-3 text-xs text-slate-500">
-                        The document does not contain the "{{ activeIndex.field }}" field required for deletion.
-                      </p>
-                      <p v-else-if="activeIndex && activeIndex.type !== 'map'" class="mt-3 text-xs text-slate-500">
-                        Select a "map" index to enable direct deletion.
-                      </p>
                       <p v-if="!canEditDocument(row)" class="mt-3 text-xs text-slate-500">
-                        The document must include an "id" field to enable editing.
+                        The document must include an "id" field to enable editing or deletion.
                       </p>
                     </div>
                   </div>
@@ -1460,40 +1454,32 @@
             runQuery();
           });
 
-          const canDeleteRow = (row) => {
-            const index = activeIndex.value;
-            if (!index || index.type !== 'map') return false;
-            const field = index.field;
-            if (!field) return false;
-            return Object.prototype.hasOwnProperty.call(row, field);
-          };
+          const canDeleteRow = (row) => documentId(row) !== null;
 
           const deleteRow = async (row) => {
-            const index = activeIndex.value;
-            if (!selectedCollection.value || !index || index.type !== 'map' || !index.field) return;
-            const value = row[index.field];
-            if (value === undefined) {
-              queryError.value = `The document does not contain the field "${index.field}".`;
+            if (!selectedCollection.value) return;
+            const id = documentId(row);
+            if (!id) {
+              queryError.value = 'The document does not contain an "id" field.';
               return;
             }
-            const ok = window.confirm(`Delete the document where ${index.field} = ${value}?`);
+            const ok = window.confirm(`Delete the document with id ${id}?`);
             if (!ok) return;
             const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:remove`;
             const entry = createActivityEntry({
-              label: `Delete document by ${index.field}`,
+              label: `Delete document ${id}`,
               method: 'POST',
               url,
               target: selectedCollection.value.name,
             });
             try {
               const resp = await axios.post(url, {
-                mode: 'unique',
-                field: index.field,
-                value,
+                filter: { id: row.id },
+                limit: 1,
               });
               markConnectionOnline();
               completeActivityEntry(entry, {
-                detail: `Deleted document where ${index.field} = ${value}.`,
+                detail: `Deleted document with id ${id}.`,
                 statusCode: resp.status,
               });
               await runQuery();
