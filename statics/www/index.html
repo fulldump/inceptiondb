@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <title>InceptionDB Console</title>
@@ -30,6 +30,29 @@
                 />
               </svg>
             </a>
+          </div>
+          <div class="mt-4 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+            <p class="text-xs uppercase tracking-wide text-slate-400">API status</p>
+            <div class="mt-2 flex items-center justify-between gap-3">
+              <span
+                class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold"
+                :class="connectionStatusBadgeClass"
+              >
+                <span class="h-2 w-2 rounded-full" :class="connectionStatusDotClass"></span>
+                {{ connectionStatusLabel }}
+              </span>
+              <button
+                type="button"
+                class="text-xs font-medium text-slate-300 hover:text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="connectionStatusChecking"
+                @click="refreshConnectionStatus"
+              >
+                {{ connectionStatusButtonLabel }}
+              </button>
+            </div>
+            <p v-if="connectionStatusDescription" class="mt-2 text-xs text-slate-400">
+              {{ connectionStatusDescription }}
+            </p>
           </div>
           <button
             type="button"
@@ -306,7 +329,7 @@
     </div>
 
     <script>
-      const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
+      const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount } = Vue;
 
       createApp({
         setup() {
@@ -332,6 +355,69 @@
           const rangeTo = reactive({});
           const insertForm = reactive({ payload: '{\n\n}', error: '', success: '' });
           const createForm = reactive({ open: false, name: '', error: '' });
+          const connectionStatus = reactive({
+            state: 'unknown',
+            detail: 'Waiting for first response.',
+            checkedAt: null,
+            isChecking: false,
+          });
+
+          const timeFormatter = new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+          });
+
+          const connectionStatusLabel = computed(() => {
+            if (connectionStatus.state === 'online') return 'Connected';
+            if (connectionStatus.state === 'degraded') return 'Degraded';
+            if (connectionStatus.state === 'offline') return 'Offline';
+            return connectionStatus.isChecking ? 'Checking…' : 'Unknown';
+          });
+
+          const connectionStatusDescription = computed(() => {
+            if (connectionStatus.state === 'unknown' && connectionStatus.isChecking) {
+              return 'Verifying API availability…';
+            }
+            const segments = [];
+            if (connectionStatus.detail) segments.push(connectionStatus.detail);
+            if (connectionStatus.checkedAt instanceof Date) {
+              segments.push(`Updated at ${timeFormatter.format(connectionStatus.checkedAt)}`);
+            }
+            return segments.join(' • ');
+          });
+
+          const connectionStatusBadgeClass = computed(() => {
+            switch (connectionStatus.state) {
+              case 'online':
+                return 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+              case 'degraded':
+                return 'border border-amber-500/40 bg-amber-500/10 text-amber-200';
+              case 'offline':
+                return 'border border-rose-500/40 bg-rose-500/10 text-rose-200';
+              default:
+                return 'border border-slate-500/30 bg-slate-500/10 text-slate-200';
+            }
+          });
+
+          const connectionStatusDotClass = computed(() => {
+            const base = 'h-2 w-2 rounded-full';
+            const pulse = connectionStatus.isChecking ? ' animate-pulse' : '';
+            switch (connectionStatus.state) {
+              case 'online':
+                return base + ' bg-emerald-400' + pulse;
+              case 'degraded':
+                return base + ' bg-amber-400' + pulse;
+              case 'offline':
+                return base + ' bg-rose-400' + pulse;
+              default:
+                return base + ' bg-slate-300' + pulse;
+            }
+          });
+
+          const connectionStatusButtonLabel = computed(() => (connectionStatus.isChecking ? 'Checking…' : 'Check now'));
+          const connectionStatusChecking = computed(() => connectionStatus.isChecking);
 
           const selectedCollection = computed(() => collections.value.find(c => c.name === selectedCollectionName.value) || null);
           const activeIndex = computed(() => indexes.value.find(idx => idx.name === selectedIndexName.value) || null);
@@ -368,6 +454,77 @@
           const toggleCreateForm = () => {
             createForm.open = !createForm.open;
             createForm.error = '';
+          };
+
+          const markConnectionOnline = (detail = 'All systems operational') => {
+            connectionStatus.state = 'online';
+            connectionStatus.detail = detail;
+            connectionStatus.checkedAt = new Date();
+            connectionStatus.isChecking = false;
+          };
+
+          const markConnectionDegraded = (detail) => {
+            connectionStatus.state = 'degraded';
+            connectionStatus.detail = detail;
+            connectionStatus.checkedAt = new Date();
+            connectionStatus.isChecking = false;
+          };
+
+          const markConnectionOffline = (detail) => {
+            connectionStatus.state = 'offline';
+            connectionStatus.detail = detail;
+            connectionStatus.checkedAt = new Date();
+            connectionStatus.isChecking = false;
+          };
+
+          const beginConnectionCheck = () => {
+            connectionStatus.isChecking = true;
+            if (connectionStatus.state === 'unknown') {
+              connectionStatus.detail = 'Checking backend status…';
+            }
+          };
+
+          const handleRequestError = (error, { context = 'request' } = {}) => {
+            if (error?.response) {
+              const status = Number(error.response.status);
+              if (status >= 500) {
+                markConnectionDegraded(`Server error (HTTP ${status})`);
+              } else if (context === 'check') {
+                markConnectionDegraded(`Unexpected response (HTTP ${status})`);
+              } else {
+                connectionStatus.isChecking = false;
+              }
+            } else {
+              const message = error?.message ? `Network error: ${error.message}` : 'Unable to reach the API.';
+              markConnectionOffline(message);
+            }
+            return error;
+          };
+
+          let statusPoller = null;
+          let statusPromise = null;
+
+          const checkBackendStatus = async () => {
+            if (statusPromise) return statusPromise;
+            beginConnectionCheck();
+            statusPromise = axios
+              .get('/v1/collections')
+              .then(() => {
+                markConnectionOnline();
+              })
+              .catch((error) => {
+                handleRequestError(error, { context: 'check' });
+              })
+              .finally(() => {
+                connectionStatus.isChecking = false;
+                statusPromise = null;
+              });
+            return statusPromise;
+          };
+
+          const refreshConnectionStatus = () => {
+            if (connectionStatus.isChecking) return;
+            checkBackendStatus();
           };
 
           const selectCollection = (name) => {
@@ -420,6 +577,7 @@
             collectionsError.value = '';
             try {
               const resp = await axios.get('/v1/collections');
+              markConnectionOnline();
               const list = Array.isArray(resp.data) ? resp.data.slice() : [];
               list.sort((a, b) => a.name.localeCompare(b.name));
               collections.value = list;
@@ -431,6 +589,7 @@
               }
             } catch (error) {
               collectionsError.value = error?.response?.data?.error || 'No se pudieron cargar las colecciones.';
+              handleRequestError(error);
             } finally {
               collectionsLoading.value = false;
             }
@@ -441,6 +600,7 @@
             indexesLoading.value = true;
             try {
               const resp = await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:listIndexes`);
+              markConnectionOnline();
               const list = Array.isArray(resp.data) ? resp.data : [];
               indexes.value = list;
               if (!list.some((idx) => idx.name === selectedIndexName.value)) {
@@ -448,6 +608,7 @@
               }
             } catch (error) {
               indexes.value = [];
+              handleRequestError(error);
             } finally {
               indexesLoading.value = false;
             }
@@ -552,8 +713,10 @@
               queryStats.returned = parsedRows.length;
               const elapsed = Math.round(performance.now() - started);
               queryStats.elapsed = `${elapsed} ms`;
+              markConnectionOnline();
             } catch (error) {
               queryError.value = error?.response?.data?.error || 'No se pudo obtener la colección.';
+              handleRequestError(error);
             } finally {
               queryLoading.value = false;
             }
@@ -601,10 +764,12 @@
                 field: index.field,
                 value,
               });
+              markConnectionOnline();
               await runQuery();
               await loadCollections();
             } catch (error) {
               queryError.value = error?.response?.data?.error || 'No se pudo eliminar el documento.';
+              handleRequestError(error);
             }
           };
 
@@ -626,10 +791,12 @@
               await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:insert`, payload);
               insertForm.success = 'Documento insertado correctamente.';
               insertForm.payload = '{\n\n}';
+              markConnectionOnline();
               await runQuery();
               await loadCollections();
             } catch (error) {
               insertForm.error = error?.response?.data?.error || 'No se pudo insertar el documento.';
+              handleRequestError(error);
             }
           };
 
@@ -642,6 +809,7 @@
             }
             try {
               const resp = await axios.post('/v1/collections', { name });
+              markConnectionOnline();
               await loadCollections();
               const created = resp?.data?.name || name;
               selectedCollectionName.value = created;
@@ -649,6 +817,7 @@
               createForm.open = false;
             } catch (error) {
               createForm.error = error?.response?.data?.error || 'No se pudo crear la colección.';
+              handleRequestError(error);
             }
           };
 
@@ -659,10 +828,12 @@
             if (!ok) return;
             try {
               await axios.post(`/v1/collections/${encodeURIComponent(name)}:dropCollection`);
+              markConnectionOnline();
               selectedCollectionName.value = '';
               await loadCollections();
             } catch (error) {
               queryError.value = error?.response?.data?.error || 'No se pudo eliminar la colección.';
+              handleRequestError(error);
             }
           };
 
@@ -678,7 +849,16 @@
           };
 
           onMounted(() => {
+            beginConnectionCheck();
             loadCollections();
+            statusPoller = window.setInterval(checkBackendStatus, 30000);
+          });
+
+          onBeforeUnmount(() => {
+            if (statusPoller) {
+              window.clearInterval(statusPoller);
+              statusPoller = null;
+            }
           });
 
           return {
@@ -704,6 +884,13 @@
             rangeTo,
             insertForm,
             createForm,
+            connectionStatus,
+            connectionStatusLabel,
+            connectionStatusDescription,
+            connectionStatusBadgeClass,
+            connectionStatusDotClass,
+            connectionStatusButtonLabel,
+            connectionStatusChecking,
             disablePrev,
             disableNext,
             page,
@@ -725,6 +912,7 @@
             deleteRow,
             canDeleteRow,
             formatDocument,
+            refreshConnectionStatus,
           };
         },
       }).mount('#app');
