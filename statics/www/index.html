@@ -20,7 +20,7 @@
               href="https://github.com/fulldump/inceptiondb"
               target="_blank"
               rel="noopener"
-              aria-label="Repositorio en GitHub"
+              aria-label="GitHub repository"
             >
               <svg class="w-6 h-6" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                 <path
@@ -59,31 +59,31 @@
             class="mt-5 w-full rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-100 bg-slate-800 hover:bg-slate-700 transition"
             @click="toggleCreateForm"
           >
-            {{ createForm.open ? 'Cancelar' : 'Nueva colección' }}
+            {{ createForm.open ? 'Cancel' : 'New collection' }}
           </button>
           <form v-if="createForm.open" class="mt-4 space-y-3" @submit.prevent="createCollection">
             <div>
-              <label for="new-collection" class="block text-xs uppercase tracking-wide text-slate-400">Nombre</label>
+              <label for="new-collection" class="block text-xs uppercase tracking-wide text-slate-400">Name</label>
               <input
                 id="new-collection"
                 v-model="createForm.name"
                 type="text"
                 required
                 class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                placeholder="clientes"
+                placeholder="customers"
               >
             </div>
             <button
               type="submit"
               class="w-full rounded-md bg-sky-600 hover:bg-sky-500 px-3 py-2 text-sm font-semibold text-white transition"
             >
-              Crear colección
+              Create collection
             </button>
             <p v-if="createForm.error" class="text-sm text-rose-400">{{ createForm.error }}</p>
           </form>
         </div>
         <div class="flex-1 overflow-y-auto">
-          <div v-if="collectionsLoading" class="px-6 py-4 text-sm text-slate-400">Cargando colecciones…</div>
+          <div v-if="collectionsLoading" class="px-6 py-4 text-sm text-slate-400">Loading collections…</div>
           <div v-else-if="collectionsError" class="px-6 py-4 text-sm text-rose-400">{{ collectionsError }}</div>
           <nav v-else class="py-2">
             <button
@@ -101,27 +101,27 @@
                 <span class="truncate">{{ collection.name }}</span>
                 <span class="text-xs text-slate-400" v-if="collection.total !== undefined">{{ prettyTotal(collection.total) }}</span>
               </div>
-              <p class="mt-1 text-xs text-slate-500" v-if="collection.indexes">{{ collection.indexes }} índices</p>
+              <p class="mt-1 text-xs text-slate-500" v-if="collection.indexes">{{ collection.indexes }} indexes</p>
             </button>
-            <p v-if="collections.length === 0" class="px-6 py-4 text-sm text-slate-500">No hay colecciones registradas.</p>
+            <p v-if="collections.length === 0" class="px-6 py-4 text-sm text-slate-500">No collections registered yet.</p>
           </nav>
         </div>
       </aside>
 
       <main class="flex-1">
         <div v-if="!selectedCollection" class="flex h-full flex-col items-center justify-center text-center gap-3 px-6">
-          <h2 class="text-2xl font-semibold text-slate-200">Bienvenido a InceptionDB</h2>
-          <p class="text-slate-400 max-w-md">Selecciona o crea una colección en el panel lateral para comenzar a consultar, insertar o eliminar documentos.</p>
+          <h2 class="text-2xl font-semibold text-slate-200">Welcome to InceptionDB</h2>
+          <p class="text-slate-400 max-w-md">Select or create a collection in the sidebar to start querying, inserting, or deleting documents.</p>
         </div>
 
         <div v-else class="flex flex-col gap-6 p-6">
           <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 class="text-2xl font-semibold text-slate-100">Colección {{ selectedCollection.name }}</h2>
+              <h2 class="text-2xl font-semibold text-slate-100">Collection {{ selectedCollection.name }}</h2>
               <p class="text-sm text-slate-400 flex flex-wrap items-center gap-3">
                 <span v-if="selectedCollection.total !== undefined">Total: {{ selectedCollection.total }}</span>
-                <span v-if="queryStats.elapsed">Última consulta: {{ queryStats.elapsed }}</span>
-                <span v-if="queryStats.returned">Documentos listados: {{ queryStats.returned }}</span>
+                <span v-if="queryStats.elapsed">Last query: {{ queryStats.elapsed }}</span>
+                <span v-if="queryStats.returned">Documents listed: {{ queryStats.returned }}</span>
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -130,14 +130,14 @@
                 class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 transition"
                 @click="runQuery"
               >
-                Ejecutar consulta
+                Run query
               </button>
               <button
                 type="button"
                 class="rounded-md border border-rose-500/40 bg-rose-600/20 px-3 py-2 text-sm font-medium text-rose-300 hover:bg-rose-600/30 transition"
                 @click="dropCollection"
               >
-                Eliminar colección
+                Delete collection
               </button>
             </div>
           </header>
@@ -146,7 +146,7 @@
             <div class="space-y-6">
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-5">
                 <div>
-                  <label for="filter" class="block text-xs uppercase tracking-wide text-slate-400">Filtro (JSON)</label>
+                  <label for="filter" class="block text-xs uppercase tracking-wide text-slate-400">Filter (JSON)</label>
                   <textarea
                     id="filter"
                     v-model="filterText"
@@ -159,7 +159,7 @@
 
                 <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <label class="block text-xs uppercase tracking-wide text-slate-400">
-                    Elementos por página
+                    Items per page
                     <select
                       v-model.number="pageSize"
                       class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -171,12 +171,12 @@
                 </div>
 
                 <div>
-                  <label class="block text-xs uppercase tracking-wide text-slate-400">Índice</label>
+                  <label class="block text-xs uppercase tracking-wide text-slate-400">Index</label>
                   <select
                     v-model="selectedIndexName"
                     class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                   >
-                    <option value="">Sin índice (full scan)</option>
+                    <option value="">No index (full scan)</option>
                     <option v-for="index in indexes" :key="index.name" :value="index.name">
                       {{ index.name }} · {{ index.type }}
                     </option>
@@ -184,18 +184,18 @@
                 </div>
 
                 <div v-if="activeIndex && activeIndex.type === 'map'" class="grid gap-2">
-                  <label class="block text-xs uppercase tracking-wide text-slate-400">Valor del índice</label>
+                  <label class="block text-xs uppercase tracking-wide text-slate-400">Index value</label>
                   <input
                     type="text"
                     v-model="mapValue"
                     class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    placeholder="Introduce un valor único"
+                    placeholder="Enter a unique value"
                   >
                 </div>
 
                 <div v-if="activeIndex && activeIndex.type === 'btree'" class="space-y-4">
                   <div>
-                    <span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">Desde (incluido)</span>
+                    <span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">From (inclusive)</span>
                     <div class="grid gap-3 md:grid-cols-2">
                       <label v-for="field in activeIndex.fields" :key="'from-' + field" class="text-sm text-slate-300">
                         <span class="block text-xs uppercase tracking-wide text-slate-500">{{ field }}</span>
@@ -208,7 +208,7 @@
                     </div>
                   </div>
                   <div>
-                    <span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">Hasta (excluido)</span>
+                    <span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">To (exclusive)</span>
                     <div class="grid gap-3 md:grid-cols-2">
                       <label v-for="field in activeIndex.fields" :key="'to-' + field" class="text-sm text-slate-300">
                         <span class="block text-xs uppercase tracking-wide text-slate-500">{{ field }}</span>
@@ -222,7 +222,7 @@
                   </div>
                   <label class="inline-flex items-center gap-2 text-sm text-slate-300">
                     <input type="checkbox" v-model="reverse" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
-                    Orden inverso
+                    Reverse order
                   </label>
                 </div>
 
@@ -233,7 +233,7 @@
                     :disabled="disablePrev"
                     @click="prevPage"
                   >
-                    Anterior
+                    Previous
                   </button>
                   <button
                     type="button"
@@ -241,18 +241,18 @@
                     :disabled="disableNext"
                     @click="nextPage"
                   >
-                    Siguiente
+                    Next
                   </button>
                 </div>
               </div>
 
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-                <div class="border-b border-slate-800 px-5 py-3 text-sm font-semibold text-slate-200">Resultados</div>
-                <p class="px-5 pt-3 text-xs text-slate-400">Vista por defecto: listado JSON de los primeros documentos de la colección seleccionada.</p>
+                <div class="border-b border-slate-800 px-5 py-3 text-sm font-semibold text-slate-200">Results</div>
+                <p class="px-5 pt-3 text-xs text-slate-400">Default view: JSON list of the first documents in the selected collection.</p>
                 <div class="p-5 space-y-4">
-                  <div v-if="queryLoading" class="text-sm text-slate-400">Ejecutando consulta…</div>
+                  <div v-if="queryLoading" class="text-sm text-slate-400">Running query…</div>
                   <div v-else-if="queryError" class="text-sm text-rose-400">{{ queryError }}</div>
-                  <div v-else-if="queryRows.length === 0" class="text-sm text-slate-400">No se encontraron documentos.</div>
+                  <div v-else-if="queryRows.length === 0" class="text-sm text-slate-400">No documents found.</div>
                   <div v-else class="space-y-4">
                     <div
                       v-for="(row, idx) in queryRows"
@@ -260,22 +260,22 @@
                       class="rounded-lg border border-slate-800 bg-slate-950 p-4"
                     >
                       <div class="flex items-center justify-between text-xs text-slate-500 mb-3">
-                        <span>Documento #{{ offset + idx + 1 }}</span>
+                        <span>Document #{{ offset + idx + 1 }}</span>
                         <button
                           v-if="canDeleteRow(row)"
                           type="button"
                           class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
                           @click="deleteRow(row)"
                         >
-                          Eliminar
+                          Delete
                         </button>
                       </div>
                       <pre class="whitespace-pre-wrap break-words text-sm text-slate-200 font-mono">{{ formatDocument(row) }}</pre>
                       <p v-if="!canDeleteRow(row) && activeIndex && activeIndex.type === 'map'" class="mt-3 text-xs text-slate-500">
-                        El documento no contiene el campo «{{ activeIndex.field }}» requerido para eliminarlo.
+                        The document does not contain the "{{ activeIndex.field }}" field required for deletion.
                       </p>
                       <p v-else-if="activeIndex && activeIndex.type !== 'map'" class="mt-3 text-xs text-slate-500">
-                        Selecciona un índice de tipo "map" para habilitar la eliminación directa.
+                        Select a "map" index to enable direct deletion.
                       </p>
                     </div>
                   </div>
@@ -285,7 +285,7 @@
 
             <div class="space-y-6">
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
-                <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Insertar documento</h3>
+                <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Insert document</h3>
                 <textarea
                   v-model="insertForm.payload"
                   rows="8"
@@ -298,7 +298,7 @@
                     class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 transition"
                     @click="insertDocument"
                   >
-                    Insertar
+                    Insert
                   </button>
                 </div>
                 <p v-if="insertForm.error" class="text-sm text-rose-400">{{ insertForm.error }}</p>
@@ -557,15 +557,15 @@
           const pageInfo = computed(() => {
             const count = queryRows.value.length;
             if (count === 0) {
-              return 'Sin resultados en esta página.';
+              return 'No results on this page.';
             }
             const start = offset.value + 1;
             const end = offset.value + count;
             const total = selectedCollection.value?.total;
             if (typeof total === 'number') {
-              return `Mostrando ${start}–${end} de ${total}`;
+              return `Showing ${start}–${end} of ${total}`;
             }
-            return `Mostrando ${start}–${end}`;
+            return `Showing ${start}–${end}`;
           });
 
           const prettyTotal = (n) => {
@@ -831,7 +831,7 @@
                 }
               }
             } catch (error) {
-              collectionsError.value = error?.response?.data?.error || 'No se pudieron cargar las colecciones.';
+              collectionsError.value = error?.response?.data?.error || 'Failed to load collections.';
               handleRequestError(error);
             } finally {
               collectionsLoading.value = false;
@@ -868,7 +868,7 @@
               filterError.value = '';
               return parsed;
             } catch (err) {
-              filterError.value = 'JSON inválido: ' + err.message;
+              filterError.value = 'Invalid JSON: ' + err.message;
               return null;
             }
           };
@@ -925,11 +925,11 @@
               payload = buildQueryPayload();
             } catch (error) {
               if (error.code === 'invalid-filter') {
-                queryError.value = 'El filtro debe ser un JSON válido.';
+                queryError.value = 'The filter must be valid JSON.';
               } else if (error.code === 'map-value-required') {
-                queryError.value = 'Debes indicar un valor para el índice seleccionado.';
+                queryError.value = 'You must provide a value for the selected index.';
               } else {
-                queryError.value = error.message || 'No se pudo preparar la consulta.';
+                queryError.value = error.message || 'Failed to prepare the query.';
               }
               return;
             }
@@ -958,7 +958,7 @@
               queryStats.elapsed = `${elapsed} ms`;
               markConnectionOnline();
             } catch (error) {
-              queryError.value = error?.response?.data?.error || 'No se pudo obtener la colección.';
+              queryError.value = error?.response?.data?.error || 'Failed to fetch the collection.';
               handleRequestError(error);
             } finally {
               queryLoading.value = false;
@@ -996,10 +996,10 @@
             if (!selectedCollection.value || !index || index.type !== 'map' || !index.field) return;
             const value = row[index.field];
             if (value === undefined) {
-              queryError.value = `El documento no contiene el campo «${index.field}».`;
+              queryError.value = `The document does not contain the field "${index.field}".`;
               return;
             }
-            const ok = window.confirm(`¿Eliminar el documento donde ${index.field} = ${value}?`);
+            const ok = window.confirm(`Delete the document where ${index.field} = ${value}?`);
             if (!ok) return;
             try {
               await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:remove`, {
@@ -1011,7 +1011,7 @@
               await runQuery();
               await loadCollections();
             } catch (error) {
-              queryError.value = error?.response?.data?.error || 'No se pudo eliminar el documento.';
+              queryError.value = error?.response?.data?.error || 'Failed to delete the document.';
               handleRequestError(error);
             }
           };
@@ -1020,25 +1020,25 @@
             insertForm.error = '';
             insertForm.success = '';
             if (!selectedCollection.value) {
-              insertForm.error = 'Selecciona una colección antes de insertar.';
+              insertForm.error = 'Select a collection before inserting.';
               return;
             }
             let payload;
             try {
               payload = JSON.parse(insertForm.payload);
             } catch (err) {
-              insertForm.error = 'JSON inválido: ' + err.message;
+              insertForm.error = 'Invalid JSON: ' + err.message;
               return;
             }
             try {
               await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:insert`, payload);
-              insertForm.success = 'Documento insertado correctamente.';
+              insertForm.success = 'Document inserted successfully.';
               insertForm.payload = '{\n\n}';
               markConnectionOnline();
               await runQuery();
               await loadCollections();
             } catch (error) {
-              insertForm.error = error?.response?.data?.error || 'No se pudo insertar el documento.';
+              insertForm.error = error?.response?.data?.error || 'Failed to insert the document.';
               handleRequestError(error);
             }
           };
@@ -1047,7 +1047,7 @@
             createForm.error = '';
             const name = createForm.name.trim();
             if (!name) {
-              createForm.error = 'Indica un nombre para la colección.';
+              createForm.error = 'Provide a name for the collection.';
               return;
             }
             try {
@@ -1059,7 +1059,7 @@
               createForm.name = '';
               createForm.open = false;
             } catch (error) {
-              createForm.error = error?.response?.data?.error || 'No se pudo crear la colección.';
+              createForm.error = error?.response?.data?.error || 'Failed to create the collection.';
               handleRequestError(error);
             }
           };
@@ -1067,7 +1067,7 @@
           const dropCollection = async () => {
             if (!selectedCollection.value) return;
             const name = selectedCollection.value.name;
-            const ok = window.confirm(`¿Eliminar la colección «${name}»? Esta acción no se puede deshacer.`);
+            const ok = window.confirm(`Delete the collection "${name}"? This action cannot be undone.`);
             if (!ok) return;
             try {
               await axios.post(`/v1/collections/${encodeURIComponent(name)}:dropCollection`);
@@ -1075,7 +1075,7 @@
               selectedCollectionName.value = '';
               await loadCollections();
             } catch (error) {
-              queryError.value = error?.response?.data?.error || 'No se pudo eliminar la colección.';
+              queryError.value = error?.response?.data?.error || 'Failed to delete the collection.';
               handleRequestError(error);
             }
           };
