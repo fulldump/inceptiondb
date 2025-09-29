@@ -5,6 +5,7 @@
 * Implementar layout general (sólo front)
 * Añadir un indicador de estado de conexión con el backend (sólo front)
 * Implementar gestión de índices (sólo front)
+* Traducir toda la interfaz a inglés americano (sólo front)
 
 ## Next features
 
@@ -18,6 +19,7 @@
 * Implementar vista tabular alterna para resultados (sólo front)
 * Añadir buscador de colecciones (sólo front)
 * Implementar ayuda contextual para filtros (sólo front)
+* Persistir la colección y filtros seleccionados entre sesiones (sólo front)
 
 ## Will not do these features
 
