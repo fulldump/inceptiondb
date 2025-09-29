@@ -437,6 +437,54 @@
                   </li>
                 </ul>
               </div>
+
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Activity log</h3>
+                    <p class="mt-1 text-xs text-slate-400">Latest API calls for this session.</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    :disabled="activityLog.length === 0"
+                    @click="clearActivityLog"
+                  >
+                    Clear log
+                  </button>
+                </div>
+                <div v-if="activityLog.length === 0" class="text-sm text-slate-400">No activity recorded yet.</div>
+                <ul v-else class="space-y-3">
+                  <li
+                    v-for="entry in activityLog"
+                    :key="entry.id"
+                    class="rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-2"
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="space-y-1 min-w-0">
+                        <p class="text-sm font-semibold text-slate-200 flex flex-wrap items-baseline gap-2">
+                          <span class="text-[11px] uppercase tracking-wide text-slate-500">{{ entry.method }}</span>
+                          <span class="truncate">{{ entry.label }}</span>
+                        </p>
+                        <p class="text-xs text-slate-500 break-all">{{ entry.url }}</p>
+                        <p v-if="entry.target" class="text-[11px] uppercase tracking-wide text-slate-500">Target: {{ entry.target }}</p>
+                      </div>
+                      <span
+                        class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+                        :class="activityStatusBadgeClass(entry.status)"
+                      >
+                        {{ activityStatusLabel(entry.status) }}
+                      </span>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                      <span>{{ formatActivityTime(entry.startedAt) }}</span>
+                      <span v-if="entry.durationMs !== null">{{ formatDuration(entry.durationMs) }}</span>
+                    </div>
+                    <p class="text-xs text-slate-300">{{ entry.detail }}</p>
+                    <p v-if="entry.statusCode" class="text-[11px] uppercase tracking-wide text-slate-500">HTTP {{ entry.statusCode }}</p>
+                  </li>
+                </ul>
+              </div>
             </div>
           </section>
         </div>
@@ -487,6 +535,8 @@
             checkedAt: null,
             isChecking: false,
           });
+          const MAX_ACTIVITY_LOG_ENTRIES = 50;
+          const activityLog = ref([]);
 
           const timeFormatter = new Intl.DateTimeFormat('en-US', {
             hour: 'numeric',
@@ -494,6 +544,83 @@
             second: '2-digit',
             hour12: true,
           });
+
+          const createActivityEntry = ({ label, method, url, target }) => {
+            const entry = {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              label,
+              method,
+              url,
+              target: target || '',
+              status: 'pending',
+              statusCode: null,
+              detail: 'Waiting for response…',
+              startedAt: new Date(),
+              finishedAt: null,
+              durationMs: null,
+            };
+            activityLog.value.unshift(entry);
+            if (activityLog.value.length > MAX_ACTIVITY_LOG_ENTRIES) {
+              activityLog.value.splice(MAX_ACTIVITY_LOG_ENTRIES);
+            }
+            return entry;
+          };
+
+          const completeActivityEntry = (entry, { status = 'success', detail = '', statusCode } = {}) => {
+            if (!entry) return;
+            entry.status = status;
+            entry.detail = detail;
+            if (typeof statusCode === 'number') {
+              entry.statusCode = statusCode;
+            }
+            entry.finishedAt = new Date();
+            entry.durationMs = entry.finishedAt - entry.startedAt;
+          };
+
+          const failActivityEntry = (entry, error, { fallback } = {}) => {
+            if (!entry) return;
+            const statusCode = error?.response?.status;
+            const detail = error?.response?.data?.error || error?.message || fallback || 'Request failed.';
+            completeActivityEntry(entry, { status: 'error', detail, statusCode });
+          };
+
+          const formatDuration = (ms) => {
+            if (typeof ms !== 'number' || Number.isNaN(ms)) return '';
+            if (ms < 1000) return `${ms} ms`;
+            if (ms < 10000) return `${(ms / 1000).toFixed(2)} s`;
+            return `${(ms / 1000).toFixed(1)} s`;
+          };
+
+          const formatActivityTime = (date) => {
+            if (!(date instanceof Date)) return '';
+            return timeFormatter.format(date);
+          };
+
+          const activityStatusLabel = (status) => {
+            switch (status) {
+              case 'success':
+                return 'Success';
+              case 'error':
+                return 'Failed';
+              default:
+                return 'Pending';
+            }
+          };
+
+          const activityStatusBadgeClass = (status) => {
+            switch (status) {
+              case 'success':
+                return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300';
+              case 'error':
+                return 'border-rose-500/40 bg-rose-500/10 text-rose-300';
+              default:
+                return 'border-sky-500/40 bg-sky-500/10 text-sky-300';
+            }
+          };
+
+          const clearActivityLog = () => {
+            activityLog.value = [];
+          };
 
           const connectionStatusLabel = computed(() => {
             if (connectionStatus.state === 'online') return 'Connected';
@@ -641,19 +768,28 @@
               return;
             }
             indexForm.submitting = true;
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:createIndex`;
+            const entry = createActivityEntry({
+              label: `Create index ${name}`,
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
             try {
-              await axios.post(
-                `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:createIndex`,
-                payload,
-              );
+              const resp = await axios.post(url, payload);
               markConnectionOnline();
               indexMessages.success = `Index "${name}" created successfully.`;
               indexForm.open = false;
               resetIndexForm();
+              completeActivityEntry(entry, {
+                detail: `Index "${name}" created successfully.`,
+                statusCode: resp.status,
+              });
               await loadIndexes();
               selectedIndexName.value = name;
             } catch (error) {
               indexMessages.error = error?.response?.data?.error || 'Failed to create the index.';
+              failActivityEntry(entry, error, { fallback: 'Failed to create the index.' });
               handleRequestError(error);
             } finally {
               indexForm.submitting = false;
@@ -667,19 +803,28 @@
             const confirmMessage = `Delete the index "${index.name}"? This action cannot be undone.`;
             const ok = window.confirm(confirmMessage);
             if (!ok) return;
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:dropIndex`;
+            const entry = createActivityEntry({
+              label: `Delete index ${index.name}`,
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
             try {
-              await axios.post(
-                `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:dropIndex`,
-                { name: index.name },
-              );
+              const resp = await axios.post(url, { name: index.name });
               markConnectionOnline();
               if (selectedIndexName.value === index.name) {
                 selectedIndexName.value = '';
               }
               indexMessages.success = `Index "${index.name}" deleted successfully.`;
+              completeActivityEntry(entry, {
+                detail: `Index "${index.name}" deleted successfully.`,
+                statusCode: resp.status,
+              });
               await loadIndexes();
             } catch (error) {
               indexMessages.error = error?.response?.data?.error || 'Failed to delete the index.';
+              failActivityEntry(entry, error, { fallback: 'Failed to delete the index.' });
               handleRequestError(error);
             }
           };
@@ -818,12 +963,21 @@
           const loadCollections = async () => {
             collectionsLoading.value = true;
             collectionsError.value = '';
+            const entry = createActivityEntry({
+              label: 'List collections',
+              method: 'GET',
+              url: '/v1/collections',
+            });
             try {
               const resp = await axios.get('/v1/collections');
               markConnectionOnline();
               const list = Array.isArray(resp.data) ? resp.data.slice() : [];
               list.sort((a, b) => a.name.localeCompare(b.name));
               collections.value = list;
+              completeActivityEntry(entry, {
+                detail: `Loaded ${list.length} collections.`,
+                statusCode: resp.status,
+              });
               if (selectedCollectionName.value) {
                 const exists = list.some((item) => item.name === selectedCollectionName.value);
                 if (!exists) {
@@ -832,6 +986,7 @@
               }
             } catch (error) {
               collectionsError.value = error?.response?.data?.error || 'Failed to load collections.';
+              failActivityEntry(entry, error, { fallback: 'Failed to load collections.' });
               handleRequestError(error);
             } finally {
               collectionsLoading.value = false;
@@ -841,16 +996,28 @@
           const loadIndexes = async () => {
             if (!selectedCollection.value) return;
             indexesLoading.value = true;
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:listIndexes`;
+            const entry = createActivityEntry({
+              label: 'List indexes',
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
             try {
-              const resp = await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:listIndexes`);
+              const resp = await axios.post(url);
               markConnectionOnline();
               const list = Array.isArray(resp.data) ? resp.data : [];
               indexes.value = list;
+              completeActivityEntry(entry, {
+                detail: `Loaded ${list.length} indexes.`,
+                statusCode: resp.status,
+              });
               if (!list.some((idx) => idx.name === selectedIndexName.value)) {
                 selectedIndexName.value = '';
               }
             } catch (error) {
               indexes.value = [];
+              failActivityEntry(entry, error, { fallback: 'Failed to load indexes.' });
               handleRequestError(error);
             } finally {
               indexesLoading.value = false;
@@ -935,10 +1102,17 @@
             }
             queryLoading.value = true;
             const started = performance.now();
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:find`;
+            const entry = createActivityEntry({
+              label: 'Query documents',
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
             try {
               const resp = await axios({
                 method: 'post',
-                url: `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:find`,
+                url,
                 data: payload,
                 transformResponse: (res) => res,
                 responseType: 'text',
@@ -957,8 +1131,13 @@
               const elapsed = Math.round(performance.now() - started);
               queryStats.elapsed = `${elapsed} ms`;
               markConnectionOnline();
+              completeActivityEntry(entry, {
+                detail: `Retrieved ${parsedRows.length} documents in ${elapsed} ms.`,
+                statusCode: resp.status,
+              });
             } catch (error) {
               queryError.value = error?.response?.data?.error || 'Failed to fetch the collection.';
+              failActivityEntry(entry, error, { fallback: 'Failed to fetch the collection.' });
               handleRequestError(error);
             } finally {
               queryLoading.value = false;
@@ -1001,17 +1180,29 @@
             }
             const ok = window.confirm(`Delete the document where ${index.field} = ${value}?`);
             if (!ok) return;
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:remove`;
+            const entry = createActivityEntry({
+              label: `Delete document by ${index.field}`,
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
             try {
-              await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:remove`, {
+              const resp = await axios.post(url, {
                 mode: 'unique',
                 field: index.field,
                 value,
               });
               markConnectionOnline();
+              completeActivityEntry(entry, {
+                detail: `Deleted document where ${index.field} = ${value}.`,
+                statusCode: resp.status,
+              });
               await runQuery();
               await loadCollections();
             } catch (error) {
               queryError.value = error?.response?.data?.error || 'Failed to delete the document.';
+              failActivityEntry(entry, error, { fallback: 'Failed to delete the document.' });
               handleRequestError(error);
             }
           };
@@ -1030,15 +1221,27 @@
               insertForm.error = 'Invalid JSON: ' + err.message;
               return;
             }
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:insert`;
+            const entry = createActivityEntry({
+              label: 'Insert document',
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
             try {
-              await axios.post(`/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:insert`, payload);
+              const resp = await axios.post(url, payload);
               insertForm.success = 'Document inserted successfully.';
               insertForm.payload = '{\n\n}';
               markConnectionOnline();
+              completeActivityEntry(entry, {
+                detail: 'Document inserted successfully.',
+                statusCode: resp.status,
+              });
               await runQuery();
               await loadCollections();
             } catch (error) {
               insertForm.error = error?.response?.data?.error || 'Failed to insert the document.';
+              failActivityEntry(entry, error, { fallback: 'Failed to insert the document.' });
               handleRequestError(error);
             }
           };
@@ -1050,16 +1253,27 @@
               createForm.error = 'Provide a name for the collection.';
               return;
             }
+            const entry = createActivityEntry({
+              label: `Create collection ${name}`,
+              method: 'POST',
+              url: '/v1/collections',
+              target: name,
+            });
             try {
               const resp = await axios.post('/v1/collections', { name });
               markConnectionOnline();
-              await loadCollections();
               const created = resp?.data?.name || name;
+              completeActivityEntry(entry, {
+                detail: `Collection "${created}" created successfully.`,
+                statusCode: resp.status,
+              });
+              await loadCollections();
               selectedCollectionName.value = created;
               createForm.name = '';
               createForm.open = false;
             } catch (error) {
               createForm.error = error?.response?.data?.error || 'Failed to create the collection.';
+              failActivityEntry(entry, error, { fallback: 'Failed to create the collection.' });
               handleRequestError(error);
             }
           };
@@ -1069,13 +1283,25 @@
             const name = selectedCollection.value.name;
             const ok = window.confirm(`Delete the collection "${name}"? This action cannot be undone.`);
             if (!ok) return;
+            const url = `/v1/collections/${encodeURIComponent(name)}:dropCollection`;
+            const entry = createActivityEntry({
+              label: `Delete collection ${name}`,
+              method: 'POST',
+              url,
+              target: name,
+            });
             try {
-              await axios.post(`/v1/collections/${encodeURIComponent(name)}:dropCollection`);
+              const resp = await axios.post(url);
               markConnectionOnline();
+              completeActivityEntry(entry, {
+                detail: `Collection "${name}" deleted successfully.`,
+                statusCode: resp.status,
+              });
               selectedCollectionName.value = '';
               await loadCollections();
             } catch (error) {
               queryError.value = error?.response?.data?.error || 'Failed to delete the collection.';
+              failActivityEntry(entry, error, { fallback: 'Failed to delete the collection.' });
               handleRequestError(error);
             }
           };
@@ -1130,6 +1356,7 @@
             insertForm,
             createForm,
             connectionStatus,
+            activityLog,
             connectionStatusLabel,
             connectionStatusDescription,
             connectionStatusBadgeClass,
@@ -1161,6 +1388,11 @@
             canDeleteRow,
             formatDocument,
             refreshConnectionStatus,
+            formatActivityTime,
+            formatDuration,
+            activityStatusLabel,
+            activityStatusBadgeClass,
+            clearActivityLog,
           };
         },
       }).mount('#app');
