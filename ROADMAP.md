@@ -15,12 +15,11 @@
 * Implementar modo claro/ocuro automático (sólo front)
 * Añadir un mensaje de bienvenida explicando las motivaciones del proyecto (sólo front)
 * Implementar exportación de resultados a JSON (sólo front)
-* Implementar guardado de consultas frecuentes (sólo front)
 * Implementar vista tabular alterna para resultados (sólo front)
 * Añadir buscador de colecciones (sólo front)
 * Implementar ayuda contextual para filtros (sólo front)
-* Persistir la colección y filtros seleccionados entre sesiones (sólo front)
 
 ## Will not do these features
 
-* 
+* Persistir la colección y filtros seleccionados entre sesiones (sólo front)
+* Implementar guardado de consultas frecuentes (sólo front)
