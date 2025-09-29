@@ -259,16 +259,68 @@
                       :key="idx"
                       class="rounded-lg border border-slate-800 bg-slate-950 p-4"
                     >
-                      <div class="flex items-center justify-between text-xs text-slate-500 mb-3">
-                        <span>Document #{{ offset + idx + 1 }}</span>
-                        <button
-                          v-if="canDeleteRow(row)"
-                          type="button"
-                          class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
-                          @click="deleteRow(row)"
-                        >
-                          Delete
-                        </button>
+                      <div class="mb-3 flex flex-wrap items-start justify-between gap-3 text-xs text-slate-500">
+                        <div class="space-y-1">
+                          <p class="text-sm font-semibold text-slate-200">Document #{{ offset + idx + 1 }}</p>
+                          <p v-if="documentId(row)" class="text-[11px] uppercase tracking-wide text-slate-500">ID: {{ documentId(row) }}</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                          <button
+                            v-if="canEditDocument(row) && !isEditingRow(row)"
+                            type="button"
+                            class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+                            @click="openEditRow(row)"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            v-if="canDeleteRow(row)"
+                            type="button"
+                            class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
+                            @click="deleteRow(row)"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      <div
+                        v-if="isEditingRow(row) && editingDocuments[documentId(row)]"
+                        class="mb-3 space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
+                      >
+                        <label class="block text-xs uppercase tracking-wide text-slate-400">Edit document</label>
+                        <textarea
+                          v-model="editingDocuments[documentId(row)].draft"
+                          @input="onEditDraftInput(row)"
+                          rows="10"
+                          class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        ></textarea>
+                        <p class="text-[11px] text-slate-500">
+                          Set a field to <span class="font-mono text-slate-300">null</span> to remove it.
+                        </p>
+                        <div class="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition disabled:cursor-not-allowed disabled:opacity-60"
+                            :disabled="editingDocuments[documentId(row)].saving"
+                            @click="closeEditRow(row)"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            class="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 transition disabled:cursor-not-allowed disabled:opacity-60"
+                            :disabled="editingDocuments[documentId(row)].saving"
+                            @click="saveEditRow(row)"
+                          >
+                            {{ editingDocuments[documentId(row)].saving ? 'Saving…' : 'Save changes' }}
+                          </button>
+                        </div>
+                        <p v-if="editingDocuments[documentId(row)].error" class="text-sm text-rose-400">
+                          {{ editingDocuments[documentId(row)].error }}
+                        </p>
+                        <p v-else-if="editingDocuments[documentId(row)].success" class="text-sm text-emerald-400">
+                          {{ editingDocuments[documentId(row)].success }}
+                        </p>
                       </div>
                       <pre class="whitespace-pre-wrap break-words text-sm text-slate-200 font-mono">{{ formatDocument(row) }}</pre>
                       <p v-if="!canDeleteRow(row) && activeIndex && activeIndex.type === 'map'" class="mt-3 text-xs text-slate-500">
@@ -276,6 +328,9 @@
                       </p>
                       <p v-else-if="activeIndex && activeIndex.type !== 'map'" class="mt-3 text-xs text-slate-500">
                         Select a "map" index to enable direct deletion.
+                      </p>
+                      <p v-if="!canEditDocument(row)" class="mt-3 text-xs text-slate-500">
+                        The document must include an "id" field to enable editing.
                       </p>
                     </div>
                   </div>
@@ -516,6 +571,7 @@
           const reverse = ref(false);
           const rangeFrom = reactive({});
           const rangeTo = reactive({});
+          const editingDocuments = reactive({});
           const insertForm = reactive({ payload: '{\n\n}', error: '', success: '' });
           const createForm = reactive({ open: false, name: '', error: '' });
           const indexForm = reactive({
@@ -728,6 +784,219 @@
             }
             indexMessages.error = '';
             indexMessages.success = '';
+          };
+
+          const ensureEditState = (id) => {
+            if (!editingDocuments[id]) {
+              editingDocuments[id] = {
+                open: false,
+                draft: '',
+                original: '',
+                parsedOriginal: null,
+                saving: false,
+                error: '',
+                success: '',
+              };
+            }
+            return editingDocuments[id];
+          };
+
+          const clearEditingDocuments = () => {
+            Object.keys(editingDocuments).forEach((key) => {
+              delete editingDocuments[key];
+            });
+          };
+
+          const documentId = (row) => {
+            if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+            if (Object.prototype.hasOwnProperty.call(row, '_raw')) return null;
+            if (!Object.prototype.hasOwnProperty.call(row, 'id')) return null;
+            const value = row.id;
+            if (value === undefined || value === null) return null;
+            return String(value);
+          };
+
+          const canEditDocument = (row) => documentId(row) !== null;
+
+          const isEditingRow = (row) => {
+            const id = documentId(row);
+            if (!id) return false;
+            const state = editingDocuments[id];
+            return !!(state && state.open);
+          };
+
+          const openEditRow = (row) => {
+            const id = documentId(row);
+            if (!id) return;
+            const state = ensureEditState(id);
+            const snapshot = JSON.parse(JSON.stringify(row));
+            const formatted = JSON.stringify(snapshot, null, 2);
+            state.open = true;
+            state.error = '';
+            state.success = '';
+            state.saving = false;
+            state.parsedOriginal = snapshot;
+            state.original = formatted;
+            state.draft = formatted;
+          };
+
+          const closeEditRow = (row) => {
+            const id = documentId(row);
+            if (!id) return;
+            const state = editingDocuments[id];
+            if (!state || state.saving) return;
+            state.open = false;
+            state.error = '';
+            state.success = '';
+            state.draft = state.original;
+          };
+
+          const onEditDraftInput = (row) => {
+            const id = documentId(row);
+            if (!id) return;
+            const state = editingDocuments[id];
+            if (!state) return;
+            state.error = '';
+            if (state.success) {
+              state.success = '';
+            }
+          };
+
+          const isPlainObject = (value) => Object.prototype.toString.call(value) === '[object Object]';
+
+          const deepEqual = (a, b) => {
+            if (a === b) return true;
+            if (typeof a !== typeof b) return false;
+            if (a === null || b === null) return false;
+            if (Array.isArray(a)) {
+              if (!Array.isArray(b) || a.length !== b.length) return false;
+              for (let i = 0; i < a.length; i += 1) {
+                if (!deepEqual(a[i], b[i])) return false;
+              }
+              return true;
+            }
+            if (isPlainObject(a)) {
+              if (!isPlainObject(b)) return false;
+              const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+              for (const key of keys) {
+                if (!deepEqual(a[key], b[key])) {
+                  return false;
+                }
+              }
+              return true;
+            }
+            return false;
+          };
+
+          const buildMergePatch = (original, updated) => {
+            if (deepEqual(original, updated)) {
+              return undefined;
+            }
+            if (Array.isArray(original) || Array.isArray(updated)) {
+              if (Array.isArray(original) && Array.isArray(updated) && deepEqual(original, updated)) {
+                return undefined;
+              }
+              return updated;
+            }
+            if (!isPlainObject(original) || !isPlainObject(updated)) {
+              return updated;
+            }
+            const patch = {};
+            const keys = new Set([...Object.keys(original), ...Object.keys(updated)]);
+            keys.forEach((key) => {
+              if (!Object.prototype.hasOwnProperty.call(updated, key)) {
+                patch[key] = null;
+                return;
+              }
+              const child = buildMergePatch(original[key], updated[key]);
+              if (child !== undefined) {
+                patch[key] = child;
+              }
+            });
+            if (Object.keys(patch).length === 0) {
+              return undefined;
+            }
+            return patch;
+          };
+
+          const applyDocumentUpdate = (target, source) => {
+            if (!target || typeof target !== 'object' || !source || typeof source !== 'object') return;
+            Object.keys(target).forEach((key) => {
+              if (!Object.prototype.hasOwnProperty.call(source, key)) {
+                delete target[key];
+              }
+            });
+            Object.keys(source).forEach((key) => {
+              target[key] = source[key];
+            });
+          };
+
+          const saveEditRow = async (row) => {
+            const id = documentId(row);
+            if (!id || !selectedCollection.value) return;
+            const state = ensureEditState(id);
+            if (state.saving) return;
+            state.error = '';
+            state.success = '';
+            let parsed;
+            try {
+              parsed = JSON.parse(state.draft);
+            } catch (err) {
+              state.error = 'Invalid JSON: ' + err.message;
+              return;
+            }
+            if (!Object.prototype.hasOwnProperty.call(parsed, 'id')) {
+              state.error = 'The document must include an "id" field.';
+              return;
+            }
+            if (parsed.id !== row.id) {
+              state.error = 'The "id" field cannot be changed.';
+              return;
+            }
+            const originalSnapshot = state.parsedOriginal || JSON.parse(JSON.stringify(row));
+            const patch = buildMergePatch(originalSnapshot, parsed);
+            let preparedPatch = patch;
+            if (preparedPatch && typeof preparedPatch === 'object' && !Array.isArray(preparedPatch)) {
+              delete preparedPatch.id;
+              if (Object.keys(preparedPatch).length === 0) {
+                preparedPatch = undefined;
+              }
+            }
+            if (!preparedPatch) {
+              state.error = 'No changes detected.';
+              return;
+            }
+            state.saving = true;
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:patch`;
+            const entry = createActivityEntry({
+              label: `Edit document ${id}`,
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
+            try {
+              const resp = await axios.post(url, {
+                filter: { id: row.id },
+                patch: preparedPatch,
+                limit: 1,
+              });
+              markConnectionOnline();
+              completeActivityEntry(entry, {
+                detail: `Document ${id} updated successfully.`,
+                statusCode: resp.status,
+              });
+              applyDocumentUpdate(row, parsed);
+              state.parsedOriginal = JSON.parse(JSON.stringify(parsed));
+              state.original = JSON.stringify(parsed, null, 2);
+              state.draft = state.original;
+              state.success = 'Document updated successfully.';
+            } catch (error) {
+              state.error = error?.response?.data?.error || 'Failed to update the document.';
+              failActivityEntry(entry, error, { fallback: 'Failed to update the document.' });
+              handleRequestError(error);
+            } finally {
+              state.saving = false;
+            }
           };
 
           const createIndex = async () => {
@@ -1156,6 +1425,35 @@
             runQuery();
           };
 
+          watch(selectedCollectionName, () => {
+            clearEditingDocuments();
+          });
+
+          watch(queryRows, (rows) => {
+            if (!Array.isArray(rows)) return;
+            const activeIds = new Set();
+            rows.forEach((row) => {
+              const id = documentId(row);
+              if (!id) return;
+              activeIds.add(id);
+              const state = editingDocuments[id];
+              if (state && !state.open && !state.saving) {
+                const snapshot = JSON.parse(JSON.stringify(row));
+                const formatted = JSON.stringify(snapshot, null, 2);
+                state.parsedOriginal = snapshot;
+                state.original = formatted;
+                state.draft = formatted;
+                state.error = '';
+                state.success = '';
+              }
+            });
+            Object.keys(editingDocuments).forEach((key) => {
+              if (!activeIds.has(key)) {
+                delete editingDocuments[key];
+              }
+            });
+          });
+
           watch(pageSize, (value, old) => {
             if (value === old) return;
             page.value = 1;
@@ -1351,6 +1649,7 @@
             reverse,
             rangeFrom,
             rangeTo,
+            editingDocuments,
             indexForm,
             indexMessages,
             insertForm,
@@ -1379,6 +1678,13 @@
             runQuery,
             nextPage,
             prevPage,
+            documentId,
+            canEditDocument,
+            isEditingRow,
+            openEditRow,
+            closeEditRow,
+            saveEditRow,
+            onEditDraftInput,
             createIndex,
             removeIndex,
             insertDocument,
