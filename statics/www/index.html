@@ -247,50 +247,189 @@
               </div>
 
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-                <div class="border-b border-slate-800 px-5 py-3 text-sm font-semibold text-slate-200">Results</div>
-                <p class="px-5 pt-3 text-xs text-slate-400">Default view: JSON list of the first documents in the selected collection.</p>
+                <div class="border-b border-slate-800 px-5 py-3">
+                  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p class="text-sm font-semibold text-slate-200">Results</p>
+                      <p class="text-xs text-slate-400">Switch between JSON cards and a table layout to review your documents.</p>
+                    </div>
+                    <div class="inline-flex overflow-hidden rounded-md border border-slate-700" role="group" aria-label="Select results layout">
+                      <button
+                        type="button"
+                        class="px-3 py-1.5 text-xs font-semibold transition"
+                        :class="resultsViewMode === 'cards' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+                        :aria-pressed="resultsViewMode === 'cards'"
+                        @click="selectResultsView('cards')"
+                      >
+                        JSON cards
+                      </button>
+                      <button
+                        type="button"
+                        class="border-l border-slate-700 px-3 py-1.5 text-xs font-semibold transition"
+                        :class="resultsViewMode === 'table' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+                        :aria-pressed="resultsViewMode === 'table'"
+                        @click="selectResultsView('table')"
+                      >
+                        Table view
+                      </button>
+                    </div>
+                  </div>
+                </div>
                 <div class="p-5 space-y-4">
                   <div v-if="queryLoading" class="text-sm text-slate-400">Running query…</div>
                   <div v-else-if="queryError" class="text-sm text-rose-400">{{ queryError }}</div>
                   <div v-else-if="queryRows.length === 0" class="text-sm text-slate-400">No documents found.</div>
-                  <div v-else class="space-y-4">
-                    <div
-                      v-for="(row, idx) in queryRows"
-                      :key="idx"
-                      class="rounded-lg border border-slate-800 bg-slate-950 p-4"
-                    >
-                      <div class="mb-3 flex flex-wrap items-start justify-between gap-3 text-xs text-slate-500">
-                        <div class="space-y-1">
-                          <p class="text-sm font-semibold text-slate-200">Document #{{ offset + idx + 1 }}</p>
-                          <p v-if="documentId(row)" class="text-[11px] uppercase tracking-wide text-slate-500">ID: {{ documentId(row) }}</p>
+                  <div v-else>
+                    <div v-if="resultsViewMode === 'cards'" class="space-y-4">
+                      <div
+                        v-for="(row, idx) in queryRows"
+                        :key="idx"
+                        class="rounded-lg border border-slate-800 bg-slate-950 p-4"
+                      >
+                        <div class="mb-3 flex flex-wrap items-start justify-between gap-3 text-xs text-slate-500">
+                          <div class="space-y-1">
+                            <p class="text-sm font-semibold text-slate-200">Document #{{ offset + idx + 1 }}</p>
+                            <p v-if="documentId(row)" class="text-[11px] uppercase tracking-wide text-slate-500">ID: {{ documentId(row) }}</p>
+                          </div>
+                          <div class="flex flex-wrap items-center gap-2">
+                            <button
+                              v-if="canEditDocument(row) && !isEditingRow(row)"
+                              type="button"
+                              class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+                              @click="openEditRow(row)"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              v-if="canDeleteRow(row)"
+                              type="button"
+                              class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
+                              @click="deleteRow(row)"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2">
-                          <button
-                            v-if="canEditDocument(row) && !isEditingRow(row)"
-                            type="button"
-                            class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
-                            @click="openEditRow(row)"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            v-if="canDeleteRow(row)"
-                            type="button"
-                            class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
-                            @click="deleteRow(row)"
-                          >
-                            Delete
-                          </button>
+                        <div
+                          v-if="isEditingRow(row) && editingDocuments[documentId(row)]"
+                          class="mb-3 space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
+                        >
+                          <label class="block text-xs uppercase tracking-wide text-slate-400">Edit document</label>
+                          <textarea
+                            v-model="editingDocuments[documentId(row)].draft"
+                            @input="onEditDraftInput(row)"
+                            rows="10"
+                            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          ></textarea>
+                          <p class="text-[11px] text-slate-500">
+                            Set a field to <span class="font-mono text-slate-300">null</span> to remove it.
+                          </p>
+                          <div class="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition disabled:cursor-not-allowed disabled:opacity-60"
+                              :disabled="editingDocuments[documentId(row)].saving"
+                              @click="closeEditRow(row)"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              class="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 transition disabled:cursor-not-allowed disabled:opacity-60"
+                              :disabled="editingDocuments[documentId(row)].saving"
+                              @click="saveEditRow(row)"
+                            >
+                              {{ editingDocuments[documentId(row)].saving ? 'Saving…' : 'Save changes' }}
+                            </button>
+                          </div>
+                          <p v-if="editingDocuments[documentId(row)].error" class="text-sm text-rose-400">
+                            {{ editingDocuments[documentId(row)].error }}
+                          </p>
+                          <p v-else-if="editingDocuments[documentId(row)].success" class="text-sm text-emerald-400">
+                            {{ editingDocuments[documentId(row)].success }}
+                          </p>
                         </div>
+                        <pre class="whitespace-pre-wrap break-words text-sm text-slate-200 font-mono">{{ formatDocument(row) }}</pre>
+                        <p v-if="!canEditDocument(row)" class="mt-3 text-xs text-slate-500">
+                          The document must include an "id" field to enable editing or deletion.
+                        </p>
+                      </div>
+                    </div>
+                    <div v-else class="space-y-4">
+                      <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-800 text-sm">
+                          <thead class="bg-slate-950/40 text-slate-300">
+                            <tr>
+                              <th scope="col" class="px-4 py-2 text-left font-semibold">#</th>
+                              <th
+                                v-for="column in tableColumns"
+                                :key="column"
+                                scope="col"
+                                class="px-4 py-2 text-left font-semibold"
+                              >
+                                {{ column }}
+                              </th>
+                              <th scope="col" class="px-4 py-2 text-left font-semibold">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-slate-800 text-slate-200">
+                            <tr
+                              v-for="(row, idx) in queryRows"
+                              :key="idx"
+                              class="transition hover:bg-slate-900/70"
+                            >
+                              <td class="px-4 py-2 align-top text-xs text-slate-400">{{ offset + idx + 1 }}</td>
+                              <td
+                                v-for="column in tableColumns"
+                                :key="column"
+                                class="px-4 py-2 align-top"
+                              >
+                                <span class="font-mono text-xs break-words">{{ formatTableValue(row, column) }}</span>
+                              </td>
+                              <td class="px-4 py-2 align-top">
+                                <div class="flex flex-wrap gap-2">
+                                  <button
+                                    v-if="canEditDocument(row) && !isEditingRow(row)"
+                                    type="button"
+                                    class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 transition"
+                                    @click="openEditRow(row)"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    v-if="isEditingRow(row) && editingDocuments[documentId(row)]"
+                                    type="button"
+                                    class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 transition"
+                                    @click="closeEditRow(row)"
+                                  >
+                                    Close editor
+                                  </button>
+                                  <button
+                                    v-if="canDeleteRow(row)"
+                                    type="button"
+                                    class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-[11px] font-semibold text-rose-200 hover:bg-rose-600/30 transition"
+                                    @click="deleteRow(row)"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
                       </div>
                       <div
-                        v-if="isEditingRow(row) && editingDocuments[documentId(row)]"
-                        class="mb-3 space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
+                        v-for="editing in openEditingRows"
+                        :key="editing.id"
+                        class="space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
                       >
-                        <label class="block text-xs uppercase tracking-wide text-slate-400">Edit document</label>
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Edit document {{ editing.id }}</p>
+                          <p class="text-[11px] text-slate-500">Document #{{ editing.position }}</p>
+                        </div>
                         <textarea
-                          v-model="editingDocuments[documentId(row)].draft"
-                          @input="onEditDraftInput(row)"
+                          v-model="editing.state.draft"
+                          @input="onEditDraftInput(editing.row)"
                           rows="10"
                           class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                         ></textarea>
@@ -301,31 +440,27 @@
                           <button
                             type="button"
                             class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition disabled:cursor-not-allowed disabled:opacity-60"
-                            :disabled="editingDocuments[documentId(row)].saving"
-                            @click="closeEditRow(row)"
+                            :disabled="editing.state.saving"
+                            @click="closeEditRow(editing.row)"
                           >
                             Cancel
                           </button>
                           <button
                             type="button"
                             class="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 transition disabled:cursor-not-allowed disabled:opacity-60"
-                            :disabled="editingDocuments[documentId(row)].saving"
-                            @click="saveEditRow(row)"
+                            :disabled="editing.state.saving"
+                            @click="saveEditRow(editing.row)"
                           >
-                            {{ editingDocuments[documentId(row)].saving ? 'Saving…' : 'Save changes' }}
+                            {{ editing.state.saving ? 'Saving…' : 'Save changes' }}
                           </button>
                         </div>
-                        <p v-if="editingDocuments[documentId(row)].error" class="text-sm text-rose-400">
-                          {{ editingDocuments[documentId(row)].error }}
+                        <p v-if="editing.state.error" class="text-sm text-rose-400">
+                          {{ editing.state.error }}
                         </p>
-                        <p v-else-if="editingDocuments[documentId(row)].success" class="text-sm text-emerald-400">
-                          {{ editingDocuments[documentId(row)].success }}
+                        <p v-else-if="editing.state.success" class="text-sm text-emerald-400">
+                          {{ editing.state.success }}
                         </p>
                       </div>
-                      <pre class="whitespace-pre-wrap break-words text-sm text-slate-200 font-mono">{{ formatDocument(row) }}</pre>
-                      <p v-if="!canEditDocument(row)" class="mt-3 text-xs text-slate-500">
-                        The document must include an "id" field to enable editing or deletion.
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -560,6 +695,7 @@
           const queryLoading = ref(false);
           const queryError = ref('');
           const queryStats = reactive({ elapsed: '', returned: 0 });
+          const resultsViewMode = ref('cards');
           const selectedIndexName = ref('');
           const mapValue = ref('');
           const reverse = ref(false);
@@ -745,6 +881,24 @@
             return `Showing ${start}–${end}`;
           });
 
+          const tableColumns = computed(() => {
+            const columns = new Set();
+            queryRows.value.forEach((row) => {
+              if (!row || typeof row !== 'object' || Array.isArray(row)) return;
+              Object.keys(row).forEach((key) => {
+                if (key === '_raw') return;
+                columns.add(key);
+              });
+            });
+            const ordered = Array.from(columns);
+            ordered.sort((a, b) => {
+              if (a === 'id') return -1;
+              if (b === 'id') return 1;
+              return a.localeCompare(b);
+            });
+            return ordered;
+          });
+
           const prettyTotal = (n) => {
             if (typeof n !== 'number') return n;
             if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
@@ -753,6 +907,10 @@
           };
 
           const isSelected = (name) => selectedCollectionName.value === name;
+
+          const selectResultsView = (mode) => {
+            resultsViewMode.value = mode === 'table' ? 'table' : 'cards';
+          };
 
           const toggleCreateForm = () => {
             createForm.open = !createForm.open;
@@ -818,6 +976,21 @@
             const state = editingDocuments[id];
             return !!(state && state.open);
           };
+
+          const openEditingRows = computed(() => queryRows.value
+            .map((row, idx) => {
+              const id = documentId(row);
+              if (!id) return null;
+              const state = editingDocuments[id];
+              if (!state || !state.open) return null;
+              return {
+                id,
+                row,
+                state,
+                position: offset.value + idx + 1,
+              };
+            })
+            .filter(Boolean));
 
           const openEditRow = (row) => {
             const id = documentId(row);
@@ -1601,6 +1774,28 @@
             }
           };
 
+          const formatTableValue = (row, column) => {
+            if (!row || typeof row !== 'object' || Array.isArray(row)) return '';
+            if (!Object.prototype.hasOwnProperty.call(row, column)) return '';
+            const value = row[column];
+            if (value === undefined) return '';
+            if (value === null) return 'null';
+            if (typeof value === 'bigint') return value.toString();
+            if (typeof value === 'object') {
+              if (Object.prototype.hasOwnProperty.call(value, '_raw')) {
+                return String(value._raw);
+              }
+              try {
+                const text = JSON.stringify(value);
+                return text.length > 160 ? `${text.slice(0, 157)}…` : text;
+              } catch (err) {
+                return '[object]';
+              }
+            }
+            const text = String(value);
+            return text.length > 160 ? `${text.slice(0, 157)}…` : text;
+          };
+
           onMounted(() => {
             beginConnectionCheck();
             loadCollections();
@@ -1629,6 +1824,7 @@
             queryLoading,
             queryError,
             queryStats,
+            resultsViewMode,
             selectedIndexName,
             activeIndex,
             mapValue,
@@ -1636,6 +1832,8 @@
             rangeFrom,
             rangeTo,
             editingDocuments,
+            tableColumns,
+            openEditingRows,
             indexForm,
             indexMessages,
             insertForm,
@@ -1655,6 +1853,7 @@
             pageSizeOptions,
             offset,
             pageInfo,
+            selectResultsView,
             // methods
             prettyTotal,
             isSelected,
@@ -1679,6 +1878,7 @@
             deleteRow,
             canDeleteRow,
             formatDocument,
+            formatTableValue,
             refreshConnectionStatus,
             formatActivityTime,
             formatDuration,
