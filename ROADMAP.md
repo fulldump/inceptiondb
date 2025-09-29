@@ -3,6 +3,7 @@
 ## Actual features
 
 * Implementar layout general (sólo front)
+* Añadir un indicador de estado de conexión con el backend (sólo front)
 
 ## Next features
 
@@ -12,6 +13,8 @@
 * Implementar un log con el histórico de llamadas (sólo front)
 * Implementar modo claro/ocuro automático (sólo front)
 * Añadir un mensaje de bienvenida explicando las motivaciones del proyecto (sólo front)
+* Implementar exportación de resultados a JSON (sólo front)
+* Implementar guardado de consultas frecuentes (sólo front)
 
 ## Will not do these features
 
