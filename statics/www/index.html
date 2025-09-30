@@ -1116,38 +1116,38 @@
 			</section>
 		</div>
         </main>
-        </div>
-        <div
-                                        v-if="activityLog.length > 0"
-                                        class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-12 flex-col items-center justify-center sm:flex"
-                                        aria-hidden="false"
-        >
-		<div
-						class="pointer-events-auto flex max-h-[80vh] flex-col items-center gap-2 overflow-y-auto rounded-full bg-slate-950/85 px-3 py-4 shadow-2xl"
-						role="list"
-						aria-label="Recent requests"
-		>
-			<button
-							v-for="entry in activityLog"
-							:key="entry.id"
-							type="button"
-							class="activity-marker transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
-							:class="[
+					<div
+									v-if="activityLog.length > 0"
+									class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-12 flex-col items-center justify-center sm:flex"
+									aria-hidden="false"
+					>
+						<div
+										class="pointer-events-auto flex max-h-[80vh] flex-col items-center gap-2 overflow-y-auto rounded-full bg-slate-950/85 px-3 py-4 shadow-2xl"
+										role="list"
+										aria-label="Recent requests"
+						>
+							<button
+											v-for="entry in activityLog"
+											:key="entry.id"
+											type="button"
+											class="activity-marker transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
+											:class="[
               activityMarkerClass(entry),
               activityDetailOpen && selectedActivityEntry && selectedActivityEntry.id === entry.id ? 'activity-marker-selected' : ''
             ]"
-							:title="activityMarkerTitle(entry)"
-							:aria-label="activityMarkerTitle(entry)"
-							role="listitem"
-                                                        @click="openActivityDetail(entry)"
-                        ></button>
-                </div>
-        </div>
+											:title="activityMarkerTitle(entry)"
+											:aria-label="activityMarkerTitle(entry)"
+											role="listitem"
+											@click="openActivityDetail(entry)"
+							></button>
+						</div>
+					</div>
+				</div>
+
 </div>
 
 <script>
-<script>
-        const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } = Vue;
+	const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } = Vue;
 
 	createApp({
 		setup() {
@@ -3528,8 +3528,6 @@
 			};
 
                         onMounted(() => {
-                                modalMode.value = 'welcome';
-                                showActivityModal();
                                 beginConnectionCheck();
                                 window.addEventListener('keydown', handleKeydown);
                                 window.addEventListener('hashchange', handleHashChange);
