@@ -494,6 +494,73 @@
 
             <div class="space-y-6">
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
+                <div class="space-y-2">
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection defaults</h3>
+                    <button
+                      type="button"
+                      class="text-base leading-none text-slate-400 transition hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/70 rounded-full"
+                      @click="defaultsHelpOpen = !defaultsHelpOpen"
+                      :aria-expanded="defaultsHelpOpen"
+                      aria-label="Toggle special values help"
+                    >
+                      <span aria-hidden="true">🛈</span>
+                    </button>
+                  </div>
+                  <p class="text-xs text-slate-400">
+                    Documents missing fields will receive these values when inserted.
+                  </p>
+                  <div
+                    v-if="defaultsHelpOpen"
+                    class="space-y-2 rounded-lg border border-slate-800/70 bg-slate-950/60 p-3 text-[11px] text-slate-400"
+                  >
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-300">Special values</p>
+                    <ul class="list-disc space-y-1 pl-4">
+                      <li>
+                        <span class="font-mono text-slate-200">uuid()</span>
+                        Generate a unique identifier.
+                      </li>
+                      <li>
+                        <span class="font-mono text-slate-200">unixnano()</span>
+                        Insert the current timestamp in nanoseconds.
+                      </li>
+                      <li>
+                        <span class="font-mono text-slate-200">auto()</span>
+                        Assign an auto-incrementing number within the collection.
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <textarea
+                  v-model="defaultsForm.draft"
+                  rows="8"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  placeholder='{"verified": false}'
+                  :disabled="!selectedCollection"
+                ></textarea>
+                <div class="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="!selectedCollection || defaultsForm.saving || defaultsForm.draft === defaultsForm.original"
+                    @click="resetDefaultsForm"
+                  >
+                    Reset changes
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-md bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="!selectedCollection || defaultsForm.saving"
+                    @click="saveDefaults"
+                  >
+                    {{ defaultsForm.saving ? 'Saving…' : 'Save defaults' }}
+                  </button>
+                </div>
+                <p v-if="defaultsForm.error" class="text-sm text-rose-400">{{ defaultsForm.error }}</p>
+                <p v-else-if="defaultsForm.success" class="text-sm text-emerald-400">{{ defaultsForm.success }}</p>
+              </div>
+
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
                 <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Insert document</h3>
                 <textarea
                   v-model="insertForm.payload"
@@ -727,7 +794,16 @@
           const rangeFrom = reactive({});
           const rangeTo = reactive({});
           const editingDocuments = reactive({});
-          const insertForm = reactive({ payload: '{\n\n}', error: '', success: '' });
+          const emptyJsonObjectText = '{\n\n}';
+          const insertForm = reactive({ payload: emptyJsonObjectText, error: '', success: '' });
+          const defaultsForm = reactive({
+            draft: emptyJsonObjectText,
+            original: emptyJsonObjectText,
+            error: '',
+            success: '',
+            saving: false,
+          });
+          const defaultsHelpOpen = ref(false);
           const createForm = reactive({ open: false, name: '', error: '' });
           const indexForm = reactive({
             open: false,
@@ -864,6 +940,48 @@
             anchor.click();
             document.body.removeChild(anchor);
             URL.revokeObjectURL(objectUrl);
+          };
+
+          const normalizeDefaults = (defaults) => {
+            if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)) {
+              return {};
+            }
+            try {
+              return JSON.parse(JSON.stringify(defaults));
+            } catch (err) {
+              const copy = {};
+              Object.keys(defaults).forEach((key) => {
+                copy[key] = defaults[key];
+              });
+              return copy;
+            }
+          };
+
+          const formatDefaultsEditor = (defaults) => {
+            const normalized = normalizeDefaults(defaults);
+            if (Object.keys(normalized).length === 0) {
+              return emptyJsonObjectText;
+            }
+            try {
+              return JSON.stringify(normalized, null, 2);
+            } catch (err) {
+              return emptyJsonObjectText;
+            }
+          };
+
+          const syncDefaultsFormWithCollection = (collection) => {
+            const formatted = formatDefaultsEditor(collection?.defaults);
+            defaultsForm.original = formatted;
+            defaultsForm.draft = formatted;
+            defaultsForm.error = '';
+            defaultsForm.success = '';
+            defaultsForm.saving = false;
+          };
+
+          const resetDefaultsForm = () => {
+            defaultsForm.draft = defaultsForm.original;
+            defaultsForm.error = '';
+            defaultsForm.success = '';
           };
 
           const formatDuration = (ms) => {
@@ -1489,6 +1607,7 @@
             indexMessages.success = '';
             lastQueryParameters = null;
             resetExportState();
+            syncDefaultsFormWithCollection(collection);
             if (collection) {
               await loadIndexes();
               await runQuery();
@@ -1848,6 +1967,7 @@
 
           watch(selectedCollectionName, () => {
             clearEditingDocuments();
+            defaultsHelpOpen.value = false;
           });
 
           watch(queryRows, (rows) => {
@@ -1918,6 +2038,62 @@
             }
           };
 
+          const saveDefaults = async () => {
+            defaultsForm.error = '';
+            defaultsForm.success = '';
+            if (!selectedCollection.value) {
+              defaultsForm.error = 'Select a collection before editing defaults.';
+              return;
+            }
+            let parsed;
+            const raw = defaultsForm.draft.trim();
+            if (!raw) {
+              parsed = {};
+            } else {
+              try {
+                parsed = JSON.parse(raw);
+              } catch (err) {
+                defaultsForm.error = 'Invalid JSON: ' + err.message;
+                return;
+              }
+            }
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              defaultsForm.error = 'Defaults must be a JSON object.';
+              return;
+            }
+            defaultsForm.saving = true;
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:setDefaults`;
+            const entry = createActivityEntry({
+              label: 'Update defaults',
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
+            try {
+              const resp = await axios.post(url, parsed);
+              markConnectionOnline();
+              const savedDefaults = normalizeDefaults(resp?.data ?? parsed);
+              const formatted = formatDefaultsEditor(savedDefaults);
+              defaultsForm.original = formatted;
+              defaultsForm.draft = formatted;
+              defaultsForm.success = 'Defaults updated successfully.';
+              completeActivityEntry(entry, {
+                detail: 'Defaults updated successfully.',
+                statusCode: resp.status,
+              });
+              const target = collections.value.find((item) => item.name === selectedCollection.value.name);
+              if (target) {
+                target.defaults = normalizeDefaults(savedDefaults);
+              }
+            } catch (error) {
+              defaultsForm.error = error?.response?.data?.error || 'Failed to update defaults.';
+              failActivityEntry(entry, error, { fallback: 'Failed to update defaults.' });
+              handleRequestError(error);
+            } finally {
+              defaultsForm.saving = false;
+            }
+          };
+
           const insertDocument = async () => {
             insertForm.error = '';
             insertForm.success = '';
@@ -1942,7 +2118,7 @@
             try {
               const resp = await axios.post(url, payload);
               insertForm.success = 'Document inserted successfully.';
-              insertForm.payload = '{\n\n}';
+              insertForm.payload = emptyJsonObjectText;
               markConnectionOnline();
               completeActivityEntry(entry, {
                 detail: 'Document inserted successfully.',
@@ -2091,6 +2267,8 @@
             indexForm,
             indexMessages,
             insertForm,
+            defaultsForm,
+            defaultsHelpOpen,
             createForm,
             connectionStatus,
             activityLog,
@@ -2128,6 +2306,8 @@
             onEditDraftInput,
             createIndex,
             removeIndex,
+            resetDefaultsForm,
+            saveDefaults,
             insertDocument,
             createCollection,
             dropCollection,
