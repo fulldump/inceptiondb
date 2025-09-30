@@ -247,14 +247,21 @@
               </div>
 
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-                <div class="border-b border-slate-800 px-5 py-3">
+                <div
+                  v-if="queryRows.length > 0"
+                  class="border-b border-slate-800 px-5 py-3"
+                >
                   <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <p class="text-sm font-semibold text-slate-200">Results</p>
                       <p class="text-xs text-slate-400">Switch between JSON cards and a table layout to review your documents.</p>
                     </div>
                     <div class="flex flex-col items-stretch gap-2 text-right md:items-end">
-                      <div class="inline-flex overflow-hidden rounded-md border border-slate-700 self-end" role="group" aria-label="Select results layout">
+                      <div
+                        class="inline-flex overflow-hidden rounded-md border border-slate-700 self-end"
+                        role="group"
+                        aria-label="Select results layout"
+                      >
                         <button
                           type="button"
                           class="px-3 py-1.5 text-xs font-semibold transition"
@@ -285,7 +292,9 @@
                           {{ exportState.running ? 'Exporting…' : 'Export JSONL' }}
                         </button>
                       </div>
-                      <p class="text-[11px] text-slate-500">Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections.</p>
+                      <p class="text-[11px] text-slate-500">
+                        Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections.
+                      </p>
                       <p v-if="exportState.error" class="text-xs text-rose-400">{{ exportState.error }}</p>
                       <p v-else-if="exportState.progress" class="text-xs text-slate-400">{{ exportState.progress }}</p>
                     </div>
