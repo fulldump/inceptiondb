@@ -494,6 +494,45 @@
 
             <div class="space-y-6">
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection metrics</h3>
+                    <p class="text-xs text-slate-400">Estimated storage usage returned by the size endpoint.</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="!selectedCollection || sizeMetrics.loading"
+                    @click="refreshSizeMetrics"
+                  >
+                    {{ sizeMetrics.loading ? 'Refreshing…' : 'Refresh' }}
+                  </button>
+                </div>
+                <p v-if="!selectedCollection" class="text-sm text-slate-400">
+                  Select a collection to inspect its metrics.
+                </p>
+                <p v-else-if="sizeMetrics.loading" class="text-sm text-slate-400">Loading metrics…</p>
+                <p v-else-if="sizeMetrics.error" class="text-sm text-rose-400">{{ sizeMetrics.error }}</p>
+                <div v-else-if="sizeMetricsEntries.length > 0" class="space-y-3">
+                  <p v-if="sizeMetricsUpdatedLabel" class="text-[11px] uppercase tracking-wide text-slate-500">
+                    Updated at {{ sizeMetricsUpdatedLabel }}
+                  </p>
+                  <dl class="divide-y divide-slate-800 rounded-lg border border-slate-800/70 bg-slate-950/60">
+                    <div
+                      v-for="entry in sizeMetricsEntries"
+                      :key="entry.key"
+                      class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                    >
+                      <dt class="text-slate-300">{{ entry.label }}</dt>
+                      <dd class="font-mono text-slate-100" :title="entry.tooltip">{{ entry.value }}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <p v-else-if="sizeMetrics.data" class="text-sm text-slate-400">No metrics reported for this collection.</p>
+                <p v-else class="text-sm text-slate-400">Metrics will appear after refreshing.</p>
+              </div>
+
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
                 <div class="space-y-2">
                   <div class="flex items-center gap-2">
                     <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection defaults</h3>
@@ -831,6 +870,12 @@
             progress: '',
             error: '',
           });
+          const sizeMetrics = reactive({
+            loading: false,
+            error: '',
+            data: null,
+            updatedAt: null,
+          });
 
           const timeFormatter = new Intl.DateTimeFormat('en-US', {
             hour: 'numeric',
@@ -838,6 +883,7 @@
             second: '2-digit',
             hour12: true,
           });
+          const numberFormatter = new Intl.NumberFormat('en-US');
 
           const createActivityEntry = ({ label, method, url, target }) => {
             const entry = {
@@ -1022,6 +1068,13 @@
             activityLog.value = [];
           };
 
+          const resetSizeMetrics = () => {
+            sizeMetrics.loading = false;
+            sizeMetrics.error = '';
+            sizeMetrics.data = null;
+            sizeMetrics.updatedAt = null;
+          };
+
           const connectionStatusLabel = computed(() => {
             if (connectionStatus.state === 'online') return 'Connected';
             if (connectionStatus.state === 'degraded') return 'Degraded';
@@ -1095,6 +1148,43 @@
             return `Showing ${start}–${end}`;
           });
 
+          const sizeMetricsEntries = computed(() => {
+            const source = sizeMetrics.data;
+            if (!source || typeof source !== 'object' || Array.isArray(source)) return [];
+            return Object.keys(source)
+              .map((key) => {
+                const rawValue = source[key];
+                const isNumber = typeof rawValue === 'number' && Number.isFinite(rawValue);
+                const value = isNumber ? formatBytes(rawValue) : String(rawValue);
+                const tooltip = isNumber
+                  ? `${numberFormatter.format(rawValue)} bytes`
+                  : rawValue === null || rawValue === undefined
+                    ? ''
+                    : String(rawValue);
+                let priority = 3;
+                if (key === 'memory') priority = 0;
+                else if (key === 'disk') priority = 1;
+                else if (typeof key === 'string' && key.startsWith('index.')) priority = 2;
+                return {
+                  key,
+                  label: formatSizeMetricLabel(key),
+                  value,
+                  tooltip,
+                  priority,
+                };
+              })
+              .sort((a, b) => {
+                if (a.priority !== b.priority) return a.priority - b.priority;
+                return a.label.localeCompare(b.label);
+              })
+              .map(({ priority, ...rest }) => rest);
+          });
+
+          const sizeMetricsUpdatedLabel = computed(() => {
+            if (!(sizeMetrics.updatedAt instanceof Date)) return '';
+            return timeFormatter.format(sizeMetrics.updatedAt);
+          });
+
           const tableColumns = computed(() => {
             const columns = new Set();
             queryRows.value.forEach((row) => {
@@ -1118,6 +1208,34 @@
             if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
             if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
             return n;
+          };
+
+          const formatBytes = (value) => {
+            const bytes = Number(value);
+            if (!Number.isFinite(bytes)) {
+              if (value === null || value === undefined) return '';
+              return String(value);
+            }
+            const abs = Math.abs(bytes);
+            if (abs < 1024) {
+              return `${numberFormatter.format(bytes)} B`;
+            }
+            const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+            const exponent = Math.min(Math.floor(Math.log(abs) / Math.log(1024)), units.length - 1);
+            const scaled = bytes / 1024 ** exponent;
+            const formatted = Math.abs(scaled) >= 10 ? scaled.toFixed(0) : scaled.toFixed(1);
+            return `${formatted.replace(/\.0$/, '')} ${units[exponent]}`;
+          };
+
+          const formatSizeMetricLabel = (key) => {
+            if (key === 'memory') return 'In-memory data';
+            if (key === 'disk') return 'Disk file';
+            if (typeof key === 'string' && key.startsWith('index.')) {
+              const suffix = key.slice(6) || 'unnamed';
+              return `Index "${suffix}"`;
+            }
+            if (!key) return 'Metric';
+            return String(key).replace(/\./g, ' › ');
           };
 
           const isSelected = (name) => selectedCollectionName.value === name;
@@ -1607,8 +1725,10 @@
             indexMessages.success = '';
             lastQueryParameters = null;
             resetExportState();
+            resetSizeMetrics();
             syncDefaultsFormWithCollection(collection);
             if (collection) {
+              refreshSizeMetrics();
               await loadIndexes();
               await runQuery();
             }
@@ -1675,6 +1795,54 @@
               handleRequestError(error);
             } finally {
               indexesLoading.value = false;
+            }
+          };
+
+          const refreshSizeMetrics = async () => {
+            if (sizeMetrics.loading) return;
+            const collection = selectedCollection.value;
+            if (!collection) {
+              resetSizeMetrics();
+              return;
+            }
+            sizeMetrics.loading = true;
+            sizeMetrics.error = '';
+            const collectionName = collection.name;
+            const url = `/v1/collections/${encodeURIComponent(collectionName)}:size`;
+            const entry = createActivityEntry({
+              label: 'Get collection size metrics',
+              method: 'POST',
+              url,
+              target: collectionName,
+            });
+            try {
+              const resp = await axios.post(url);
+              markConnectionOnline();
+              const payload = resp?.data;
+              const normalized = payload && typeof payload === 'object' && !Array.isArray(payload)
+                ? payload
+                : {};
+              if (selectedCollection.value?.name === collectionName) {
+                sizeMetrics.data = normalized;
+                sizeMetrics.updatedAt = new Date();
+                sizeMetrics.error = '';
+              }
+              completeActivityEntry(entry, {
+                detail: 'Size metrics retrieved successfully.',
+                statusCode: resp.status,
+              });
+            } catch (error) {
+              if (selectedCollection.value?.name === collectionName) {
+                sizeMetrics.error = error?.response?.data?.error || 'Failed to load size metrics.';
+                sizeMetrics.data = null;
+                sizeMetrics.updatedAt = null;
+              }
+              failActivityEntry(entry, error, { fallback: 'Failed to load size metrics.' });
+              handleRequestError(error);
+            } finally {
+              if (selectedCollection.value?.name === collectionName) {
+                sizeMetrics.loading = false;
+              }
             }
           };
 
@@ -2273,6 +2441,9 @@
             connectionStatus,
             activityLog,
             exportState,
+            sizeMetrics,
+            sizeMetricsEntries,
+            sizeMetricsUpdatedLabel,
             connectionStatusLabel,
             connectionStatusDescription,
             connectionStatusBadgeClass,
@@ -2316,6 +2487,7 @@
             formatDocument,
             formatTableValue,
             refreshConnectionStatus,
+            refreshSizeMetrics,
             formatActivityTime,
             formatDuration,
             activityStatusLabel,
