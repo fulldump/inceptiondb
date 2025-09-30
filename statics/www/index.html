@@ -343,14 +343,11 @@
                           class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                           :disabled="exportState.running || queryRows.length === 0"
                           @click="exportResults"
-                          title="Download the current results as JSON Lines"
+                          title="Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections."
                         >
                           {{ exportState.running ? 'Exporting…' : 'Export JSONL' }}
                         </button>
                       </div>
-                      <p class="text-[11px] text-slate-500">
-                        Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections.
-                      </p>
                       <p v-if="exportState.error" class="text-xs text-rose-400">{{ exportState.error }}</p>
                       <p v-else-if="exportState.progress" class="text-xs text-slate-400">{{ exportState.progress }}</p>
                     </div>
