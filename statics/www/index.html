@@ -1159,6 +1159,10 @@
             importCsv: false,
             indexes: false,
           });
+          const cardLoadTracker = reactive({
+            metrics: {},
+            indexes: {},
+          });
           const createForm = reactive({ open: false, name: '', error: '' });
           const indexForm = reactive({
             open: false,
@@ -1927,6 +1931,27 @@
             createForm.error = '';
           };
 
+          const getCardLoadState = (card, collectionName) => {
+            if (!collectionName) return 'idle';
+            const tracker = cardLoadTracker[card];
+            if (!tracker) return 'idle';
+            return tracker[collectionName] || 'idle';
+          };
+
+          const setCardLoadState = (card, collectionName, state) => {
+            if (!collectionName) return;
+            if (!cardLoadTracker[card]) {
+              cardLoadTracker[card] = {};
+            }
+            cardLoadTracker[card][collectionName] = state;
+          };
+
+          const clearCardLoadState = (card, collectionName) => {
+            if (!collectionName) return;
+            if (!cardLoadTracker[card]) return;
+            delete cardLoadTracker[card][collectionName];
+          };
+
           const toggleCard = (name) => {
             if (!Object.prototype.hasOwnProperty.call(collapsibleCards, name)) {
               return;
@@ -1934,6 +1959,20 @@
             collapsibleCards[name] = !collapsibleCards[name];
             if (!collapsibleCards[name] && name === 'defaults') {
               defaultsHelpOpen.value = false;
+            }
+            if (collapsibleCards[name] && selectedCollection.value) {
+              const collectionName = selectedCollection.value.name;
+              if (name === 'metrics') {
+                const state = getCardLoadState('metrics', collectionName);
+                if (state === 'idle' || state === 'failed') {
+                  refreshSizeMetrics();
+                }
+              } else if (name === 'indexes') {
+                const state = getCardLoadState('indexes', collectionName);
+                if (state === 'idle' || state === 'failed') {
+                  loadIndexes();
+                }
+              }
             }
           };
 
@@ -2418,8 +2457,14 @@
             resetSizeMetrics();
             syncDefaultsFormWithCollection(collection);
             if (collection) {
-              refreshSizeMetrics();
-              await loadIndexes();
+              clearCardLoadState('metrics', collection.name);
+              clearCardLoadState('indexes', collection.name);
+              if (collapsibleCards.metrics) {
+                refreshSizeMetrics();
+              }
+              if (collapsibleCards.indexes) {
+                await loadIndexes();
+              }
               await runQuery();
             }
           });
@@ -2458,29 +2503,38 @@
           };
 
           const loadIndexes = async () => {
-            if (!selectedCollection.value) return;
+            const collection = selectedCollection.value;
+            if (!collection) return;
+            const collectionName = collection.name;
+            setCardLoadState('indexes', collectionName, 'loading');
             indexesLoading.value = true;
-            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:listIndexes`;
+            const url = `/v1/collections/${encodeURIComponent(collectionName)}:listIndexes`;
             const entry = createActivityEntry({
               label: 'List indexes',
               method: 'POST',
               url,
-              target: selectedCollection.value.name,
+              target: collectionName,
             });
             try {
               const resp = await axios.post(url);
               markConnectionOnline();
               const list = Array.isArray(resp.data) ? resp.data : [];
-              indexes.value = list;
               completeActivityEntry(entry, {
                 detail: `Loaded ${list.length} indexes.`,
                 statusCode: resp.status,
               });
-              if (!list.some((idx) => idx.name === selectedIndexName.value)) {
-                selectedIndexName.value = '';
+              if (selectedCollection.value?.name === collectionName) {
+                indexes.value = list;
+                if (!list.some((idx) => idx.name === selectedIndexName.value)) {
+                  selectedIndexName.value = '';
+                }
               }
+              setCardLoadState('indexes', collectionName, 'loaded');
             } catch (error) {
-              indexes.value = [];
+              if (selectedCollection.value?.name === collectionName) {
+                indexes.value = [];
+              }
+              setCardLoadState('indexes', collectionName, 'failed');
               failActivityEntry(entry, error, { fallback: 'Failed to load indexes.' });
               handleRequestError(error);
             } finally {
@@ -2498,6 +2552,7 @@
             sizeMetrics.loading = true;
             sizeMetrics.error = '';
             const collectionName = collection.name;
+            setCardLoadState('metrics', collectionName, 'loading');
             const url = `/v1/collections/${encodeURIComponent(collectionName)}:size`;
             const entry = createActivityEntry({
               label: 'Get collection size metrics',
@@ -2517,6 +2572,7 @@
                 sizeMetrics.updatedAt = new Date();
                 sizeMetrics.error = '';
               }
+              setCardLoadState('metrics', collectionName, 'loaded');
               completeActivityEntry(entry, {
                 detail: 'Size metrics retrieved successfully.',
                 statusCode: resp.status,
@@ -2527,6 +2583,7 @@
                 sizeMetrics.data = null;
                 sizeMetrics.updatedAt = null;
               }
+              setCardLoadState('metrics', collectionName, 'failed');
               failActivityEntry(entry, error, { fallback: 'Failed to load size metrics.' });
               handleRequestError(error);
             } finally {
