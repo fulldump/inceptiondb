@@ -721,23 +721,26 @@
             :title="activityMarkerTitle(entry)"
             :aria-label="activityMarkerTitle(entry)"
             role="listitem"
-            @click="openActivityDetail(entry)"
+            @click="openActivityDetail(entry, $event)"
           ></button>
         </div>
       </div>
-      <div v-if="activityDetailOpen && selectedActivityEntry" class="fixed inset-0 z-50 flex justify-end">
+      <div v-if="activityDetailOpen && selectedActivityEntry" class="fixed inset-0 z-50">
         <button
           type="button"
           class="absolute inset-0 cursor-default bg-transparent"
           aria-label="Close request details"
           @click="closeActivityDetail"
         ></button>
-        <div
-          class="pointer-events-auto relative mr-24 mt-auto mb-auto w-80 max-w-[90vw] rounded-xl border border-slate-800 bg-slate-950/95 p-5 shadow-2xl"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="activity-detail-title"
-        >
+        <div class="pointer-events-none absolute inset-0">
+          <div
+            ref="activityDetailCard"
+            class="pointer-events-auto absolute right-24 w-80 max-w-[90vw] -translate-y-1/2 transform rounded-xl border border-slate-800 bg-slate-950/95 p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="activity-detail-title"
+            :style="{ top: `${activityDetailPosition}px` }"
+          >
           <div class="flex items-start justify-between gap-3">
             <div class="space-y-1">
               <p id="activity-detail-title" class="text-sm font-semibold text-slate-100">{{ selectedActivityEntry.label || 'Request details' }}</p>
@@ -782,12 +785,13 @@
               Close
             </button>
           </div>
+          </div>
         </div>
       </div>
     </div>
 
     <script>
-      const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount } = Vue;
+      const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } = Vue;
 
       createApp({
         setup() {
@@ -838,6 +842,9 @@
           const activityLog = ref([]);
           const activityDetailOpen = ref(false);
           const selectedActivityEntry = ref(null);
+          const activityDetailCard = ref(null);
+          const activityDetailPosition = ref(window.innerHeight ? window.innerHeight / 2 : 0);
+          const activityDetailAnchor = reactive({ top: 0, height: 0 });
           const exportState = reactive({
             running: false,
             progress: '',
@@ -1007,14 +1014,54 @@
             return segments.join(' · ') || 'Request';
           };
 
-          const openActivityDetail = (entry) => {
-            selectedActivityEntry.value = entry || null;
-            activityDetailOpen.value = Boolean(entry);
+          const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+          const updateActivityDetailPosition = () => {
+            const viewportHeight = window.innerHeight || 0;
+            const cardEl = activityDetailCard.value;
+            const cardHeight = cardEl ? cardEl.offsetHeight : 0;
+            const halfCard = cardHeight ? cardHeight / 2 : 0;
+            const margin = 16;
+            const anchorCenter = activityDetailAnchor.height
+              ? activityDetailAnchor.top + activityDetailAnchor.height / 2
+              : viewportHeight / 2;
+
+            if (!viewportHeight) {
+              activityDetailPosition.value = anchorCenter;
+              return;
+            }
+
+            const minTop = margin + halfCard;
+            const maxTop = viewportHeight - margin - halfCard;
+            activityDetailPosition.value = clamp(anchorCenter, minTop, maxTop);
+          };
+
+          const openActivityDetail = (entry, event) => {
+            if (!entry) {
+              closeActivityDetail();
+              return;
+            }
+
+            selectedActivityEntry.value = entry;
+            activityDetailOpen.value = true;
+
+            if (event?.currentTarget instanceof HTMLElement) {
+              const rect = event.currentTarget.getBoundingClientRect();
+              activityDetailAnchor.top = rect.top;
+              activityDetailAnchor.height = rect.height;
+            } else {
+              activityDetailAnchor.top = window.innerHeight ? window.innerHeight / 2 : 0;
+              activityDetailAnchor.height = 0;
+            }
+
+            nextTick(updateActivityDetailPosition);
           };
 
           const closeActivityDetail = () => {
             activityDetailOpen.value = false;
             selectedActivityEntry.value = null;
+            activityDetailAnchor.top = 0;
+            activityDetailAnchor.height = 0;
           };
 
           const clearActivityLog = () => {
@@ -1027,7 +1074,9 @@
             const stillExists = entries.some(entry => entry.id === selectedActivityEntry.value.id);
             if (!stillExists) {
               closeActivityDetail();
+              return;
             }
+            nextTick(updateActivityDetailPosition);
           }, { deep: true });
 
           const handleKeydown = (event) => {
@@ -1035,6 +1084,11 @@
               event.preventDefault();
               closeActivityDetail();
             }
+          };
+
+          const handleResize = () => {
+            if (!activityDetailOpen.value) return;
+            nextTick(updateActivityDetailPosition);
           };
 
           const connectionStatusLabel = computed(() => {
@@ -2188,6 +2242,7 @@
             loadCollections();
             statusPoller = window.setInterval(checkBackendStatus, 30000);
             window.addEventListener('keydown', handleKeydown);
+            window.addEventListener('resize', handleResize);
           });
 
           onBeforeUnmount(() => {
@@ -2196,6 +2251,7 @@
               statusPoller = null;
             }
             window.removeEventListener('keydown', handleKeydown);
+            window.removeEventListener('resize', handleResize);
           });
 
           return {
@@ -2280,6 +2336,8 @@
             clearActivityLog,
             activityMarkerClass,
             activityMarkerTitle,
+            activityDetailCard,
+            activityDetailPosition,
             openActivityDetail,
             closeActivityDetail,
           };
