@@ -1213,6 +1213,160 @@
             return Math.max(0, Math.floor(num));
           };
 
+          const DEFAULT_LIMIT = 25;
+
+          const parseRouteHash = (hash) => {
+            if (typeof hash !== 'string') {
+              return { collection: '', params: {} };
+            }
+            const trimmed = hash.replace(/^#/, '');
+            if (!trimmed) {
+              return { collection: '', params: {} };
+            }
+            const [pathPart, searchPart = ''] = trimmed.split('?');
+            const segments = pathPart.split('/').filter(Boolean);
+            let collection = '';
+            if (segments[0] === 'collections' && segments[1]) {
+              try {
+                collection = decodeURIComponent(segments[1]);
+              } catch (err) {
+                collection = segments[1];
+              }
+            }
+            const params = {};
+            try {
+              const search = new URLSearchParams(searchPart);
+              for (const [key, value] of search.entries()) {
+                params[key] = value;
+              }
+            } catch (err) {
+              // Ignore malformed query parameters.
+            }
+            return { collection, params };
+          };
+
+          const parseRouteState = (hash) => {
+            const { collection, params } = parseRouteHash(hash);
+            const state = { collection: collection || '' };
+            if (params.skip !== undefined) {
+              state.skip = toNonNegativeInteger(params.skip, 0);
+            }
+            if (params.limit !== undefined) {
+              state.limit = toNonNegativeInteger(params.limit, DEFAULT_LIMIT);
+            }
+            if (params.query !== undefined) {
+              state.query = params.query;
+            }
+            return state;
+          };
+
+          const isMeaningfulQueryText = (text) => {
+            if (typeof text !== 'string') return false;
+            const trimmed = text.trim();
+            if (!trimmed) return false;
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return Object.keys(parsed).length > 0;
+              }
+              return true;
+            } catch (err) {
+              return true;
+            }
+          };
+
+          const buildRouteHash = ({ collection, skip, limit, query }) => {
+            let path = '#/';
+            if (collection) {
+              path = `#/collections/${encodeURIComponent(collection)}`;
+            }
+            const params = new URLSearchParams();
+            if (typeof skip === 'number' && skip > 0) {
+              params.set('skip', String(skip));
+            }
+            if (typeof limit === 'number' && (limit !== DEFAULT_LIMIT || params.has('skip'))) {
+              params.set('limit', String(limit));
+            }
+            if (typeof query === 'string' && isMeaningfulQueryText(query)) {
+              params.set('query', query);
+            }
+            const queryString = params.toString();
+            return queryString ? `${path}?${queryString}` : path;
+          };
+
+          let restoringRoute = false;
+          let pendingRouteState = null;
+          let programmaticNavigation = false;
+
+          const syncRouteToCurrentState = (overrides = {}) => {
+            if (typeof window === 'undefined') return;
+            if (restoringRoute) return;
+            const collection =
+              overrides.collection !== undefined ? overrides.collection : selectedCollectionName.value;
+            const skipValue =
+              overrides.skip !== undefined
+                ? toNonNegativeInteger(overrides.skip, 0)
+                : toNonNegativeInteger(collection ? appliedSkip.value : skip.value, 0);
+            const limitValue =
+              overrides.limit !== undefined
+                ? toNonNegativeInteger(overrides.limit, DEFAULT_LIMIT)
+                : toNonNegativeInteger(collection ? appliedLimit.value : limit.value, DEFAULT_LIMIT);
+            const queryValue = overrides.query !== undefined ? overrides.query : filterText.value;
+            const nextHash = buildRouteHash({
+              collection,
+              skip: skipValue,
+              limit: limitValue,
+              query: queryValue,
+            });
+            if (window.location.hash === nextHash) return;
+            programmaticNavigation = true;
+            window.location.hash = nextHash;
+          };
+
+          const applyRouteState = (state) => {
+            pendingRouteState = state;
+            restoringRoute = true;
+            if (state.limit !== undefined) {
+              limit.value = toNonNegativeInteger(state.limit, DEFAULT_LIMIT);
+              appliedLimit.value = toNonNegativeInteger(limit.value, DEFAULT_LIMIT);
+            }
+            if (!state.collection) {
+              selectedCollectionName.value = '';
+              const queryText =
+                state.query !== undefined && state.query !== null && String(state.query).trim()
+                  ? state.query
+                  : emptyJsonObjectText;
+              filterText.value = queryText;
+              filterError.value = '';
+              const normalizedSkip = state.skip !== undefined ? toNonNegativeInteger(state.skip, 0) : 0;
+              skip.value = normalizedSkip;
+              appliedSkip.value = normalizedSkip;
+              restoringRoute = false;
+              pendingRouteState = null;
+              return;
+            }
+            if (selectedCollectionName.value === state.collection) {
+              selectedCollectionName.value = '';
+            }
+            selectedCollectionName.value = state.collection;
+          };
+
+          const currentRouteState = () => {
+            if (typeof window === 'undefined') {
+              return { collection: '' };
+            }
+            return parseRouteState(window.location.hash);
+          };
+
+          const handleHashChange = () => {
+            if (programmaticNavigation) {
+              programmaticNavigation = false;
+              return;
+            }
+            const nextState = currentRouteState();
+            applyRouteState(nextState);
+          };
+
           const createActivityEntry = ({ label, method, url, target }) => {
             const entry = {
               id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -2395,16 +2549,28 @@
           });
 
           watch(selectedCollection, async (collection) => {
+            const routeSnapshot = restoringRoute ? pendingRouteState : null;
             indexes.value = [];
             selectedIndexName.value = '';
             mapValue.value = '';
             reverse.value = false;
             resetRangeFields();
-            filterText.value = '{\n\n}';
+            const routeQueryText =
+              routeSnapshot && routeSnapshot.query !== undefined && routeSnapshot.query !== null
+                ? String(routeSnapshot.query)
+                : '';
+            filterText.value = routeQueryText.trim() ? routeQueryText : '{\n\n}';
             filterError.value = '';
-            skip.value = 0;
-            appliedSkip.value = 0;
-            appliedLimit.value = toNonNegativeInteger(limit.value, 25);
+            const normalizedSkip =
+              routeSnapshot && routeSnapshot.skip !== undefined
+                ? toNonNegativeInteger(routeSnapshot.skip, 0)
+                : 0;
+            skip.value = normalizedSkip;
+            appliedSkip.value = normalizedSkip;
+            if (routeSnapshot && routeSnapshot.limit !== undefined) {
+              limit.value = toNonNegativeInteger(routeSnapshot.limit, DEFAULT_LIMIT);
+            }
+            appliedLimit.value = toNonNegativeInteger(limit.value, DEFAULT_LIMIT);
             queryRows.value = [];
             queryError.value = '';
             queryStats.elapsed = '';
@@ -2417,10 +2583,23 @@
             resetExportState();
             resetSizeMetrics();
             syncDefaultsFormWithCollection(collection);
-            if (collection) {
-              refreshSizeMetrics();
-              await loadIndexes();
-              await runQuery();
+            if (!collection) {
+              if (!restoringRoute) {
+                syncRouteToCurrentState({
+                  collection: '',
+                  skip: normalizedSkip,
+                  limit: limit.value,
+                  query: filterText.value,
+                });
+              }
+              return;
+            }
+            refreshSizeMetrics();
+            await loadIndexes();
+            await runQuery();
+            if (restoringRoute) {
+              restoringRoute = false;
+              pendingRouteState = null;
             }
           });
 
@@ -2672,6 +2851,12 @@
                 collection: selectedCollection.value.name,
                 payload: JSON.parse(JSON.stringify(payload)),
               };
+              syncRouteToCurrentState({
+                collection: selectedCollection.value.name,
+                skip: payload.skip,
+                limit: payload.limit,
+                query: filterText.value,
+              });
               markConnectionOnline();
               completeActivityEntry(entry, {
                 detail: `Retrieved ${parsedRows.length} documents in ${elapsed} ms.`,
@@ -2841,7 +3026,7 @@
           };
 
           const commitLimit = () => {
-            const normalized = toNonNegativeInteger(limit.value, 25);
+            const normalized = toNonNegativeInteger(limit.value, DEFAULT_LIMIT);
             const previous = appliedLimit.value;
             if (normalized !== limit.value) {
               limit.value = normalized;
@@ -2857,7 +3042,9 @@
           watch(selectedCollectionName, () => {
             clearEditingDocuments();
             defaultsHelpOpen.value = false;
-            skip.value = 0;
+            if (!restoringRoute) {
+              skip.value = 0;
+            }
             csvImportForm.error = '';
             csvImportForm.success = '';
             csvImportForm.progress = '';
@@ -3115,10 +3302,22 @@
 
           onMounted(() => {
             beginConnectionCheck();
-            loadCollections();
-            statusPoller = window.setInterval(checkBackendStatus, 30000);
             window.addEventListener('keydown', handleKeydown);
             window.addEventListener('resize', handleResize);
+            window.addEventListener('hashchange', handleHashChange);
+            const initialRoute = currentRouteState();
+            if (
+              initialRoute.collection ||
+              initialRoute.query !== undefined ||
+              initialRoute.skip !== undefined ||
+              initialRoute.limit !== undefined
+            ) {
+              applyRouteState(initialRoute);
+            } else if (typeof window !== 'undefined' && !window.location.hash) {
+              syncRouteToCurrentState();
+            }
+            loadCollections();
+            statusPoller = window.setInterval(checkBackendStatus, 30000);
           });
 
           onBeforeUnmount(() => {
@@ -3128,6 +3327,7 @@
             }
             window.removeEventListener('keydown', handleKeydown);
             window.removeEventListener('resize', handleResize);
+            window.removeEventListener('hashchange', handleHashChange);
           });
 
           return {
