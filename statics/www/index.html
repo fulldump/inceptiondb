@@ -6,6 +6,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     <link rel="stylesheet" href="/lib/tailwind.min.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%230f172a'/><text x='50' y='58' font-size='52' text-anchor='middle' fill='white'>IDB</text></svg>">
+    <style>
+      @keyframes activity-marker-enter {
+        0% {
+          opacity: 0;
+          transform: scale(0.6);
+        }
+
+        60% {
+          opacity: 1;
+          transform: scale(1.18);
+        }
+
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      .activity-marker {
+        width: 12px;
+        height: 12px;
+        border-radius: 9999px;
+        background-color: var(--activity-marker-color, #38bdf8);
+        box-shadow: 0 0 0 2px var(--activity-marker-glow, rgba(56, 189, 248, 0.35));
+        animation: activity-marker-enter 220ms cubic-bezier(0.26, 0.65, 0.39, 1);
+      }
+
+      .activity-marker-selected {
+        box-shadow:
+          0 0 0 2px var(--activity-marker-glow, rgba(56, 189, 248, 0.35)),
+          0 0 12px var(--activity-marker-glow, rgba(56, 189, 248, 0.55));
+      }
+
+      .activity-marker--pending {
+        --activity-marker-color: #38bdf8;
+        --activity-marker-glow: rgba(56, 189, 248, 0.35);
+      }
+
+      .activity-marker--success {
+        --activity-marker-color: #34d399;
+        --activity-marker-glow: rgba(52, 211, 153, 0.35);
+      }
+
+      .activity-marker--error {
+        --activity-marker-color: #f87171;
+        --activity-marker-glow: rgba(248, 113, 113, 0.35);
+      }
+    </style>
     <script src="/lib/axios.min.js"></script>
     <script src="/lib/vue.global.prod.js"></script>
   </head>
@@ -665,9 +713,11 @@
             v-for="entry in activityLog"
             :key="entry.id"
             type="button"
-            class="transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
-            :class="[activityMarkerClass(entry), activityDetailOpen && selectedActivityEntry && selectedActivityEntry.id === entry.id ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : '']"
-            :style="activityMarkerStyle(entry)"
+            class="activity-marker transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
+            :class="[
+              activityMarkerClass(entry),
+              activityDetailOpen && selectedActivityEntry && selectedActivityEntry.id === entry.id ? 'activity-marker-selected' : ''
+            ]"
             :title="activityMarkerTitle(entry)"
             :aria-label="activityMarkerTitle(entry)"
             role="listitem"
@@ -941,42 +991,11 @@
           const activityMarkerClass = (entry) => {
             switch (entry?.status) {
               case 'success':
-                return 'ring-emerald-300/80';
+                return 'activity-marker--success';
               case 'error':
-                return 'ring-rose-300/80';
+                return 'activity-marker--error';
               default:
-                return 'ring-sky-300/80';
-            }
-          };
-
-          const activityMarkerStyle = (entry) => {
-            const base = {
-              width: '12px',
-              height: '12px',
-              borderRadius: '9999px',
-              backgroundColor: '#38bdf8',
-              boxShadow: '0 0 0 2px rgba(56, 189, 248, 0.35)',
-            };
-
-            if (!entry || !entry.status) {
-              return base;
-            }
-
-            switch (entry.status) {
-              case 'success':
-                return {
-                  ...base,
-                  backgroundColor: '#34d399',
-                  boxShadow: '0 0 0 2px rgba(52, 211, 153, 0.35)',
-                };
-              case 'error':
-                return {
-                  ...base,
-                  backgroundColor: '#f87171',
-                  boxShadow: '0 0 0 2px rgba(248, 113, 113, 0.35)',
-                };
-              default:
-                return base;
+                return 'activity-marker--pending';
             }
           };
 
@@ -2260,7 +2279,6 @@
             activityStatusBadgeClass,
             clearActivityLog,
             activityMarkerClass,
-            activityMarkerStyle,
             activityMarkerTitle,
             openActivityDetail,
             closeActivityDetail,
