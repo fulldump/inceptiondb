@@ -653,16 +653,21 @@
       </main>
       <div
         v-if="activityLog.length > 0"
-        class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-8 flex-col items-center justify-center space-y-2 sm:flex"
+        class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-12 flex-col items-center justify-center sm:flex"
         aria-hidden="false"
       >
-        <div class="pointer-events-auto flex flex-col items-center gap-2" role="list" aria-label="Recent requests">
+        <div
+          class="pointer-events-auto flex max-h-[80vh] flex-col items-center gap-2 overflow-y-auto rounded-full border border-slate-800/70 bg-slate-950/85 px-3 py-4 shadow-2xl"
+          role="list"
+          aria-label="Recent requests"
+        >
           <button
             v-for="entry in activityLog"
             :key="entry.id"
             type="button"
-            class="h-2.5 w-2.5 rounded-full transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
+            class="transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
             :class="[activityMarkerClass(entry), activityDetailOpen && selectedActivityEntry && selectedActivityEntry.id === entry.id ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : '']"
+            :style="activityMarkerStyle(entry)"
             :title="activityMarkerTitle(entry)"
             :aria-label="activityMarkerTitle(entry)"
             role="listitem"
@@ -936,11 +941,42 @@
           const activityMarkerClass = (entry) => {
             switch (entry?.status) {
               case 'success':
-                return 'bg-emerald-400 shadow shadow-emerald-500/40';
+                return 'ring-emerald-300/80';
               case 'error':
-                return 'bg-rose-400 shadow shadow-rose-500/40';
+                return 'ring-rose-300/80';
               default:
-                return 'bg-sky-400 shadow shadow-sky-500/40';
+                return 'ring-sky-300/80';
+            }
+          };
+
+          const activityMarkerStyle = (entry) => {
+            const base = {
+              width: '12px',
+              height: '12px',
+              borderRadius: '9999px',
+              backgroundColor: '#38bdf8',
+              boxShadow: '0 0 0 2px rgba(56, 189, 248, 0.35)',
+            };
+
+            if (!entry || !entry.status) {
+              return base;
+            }
+
+            switch (entry.status) {
+              case 'success':
+                return {
+                  ...base,
+                  backgroundColor: '#34d399',
+                  boxShadow: '0 0 0 2px rgba(52, 211, 153, 0.35)',
+                };
+              case 'error':
+                return {
+                  ...base,
+                  backgroundColor: '#f87171',
+                  boxShadow: '0 0 0 2px rgba(248, 113, 113, 0.35)',
+                };
+              default:
+                return base;
             }
           };
 
@@ -2224,6 +2260,7 @@
             activityStatusBadgeClass,
             clearActivityLog,
             activityMarkerClass,
+            activityMarkerStyle,
             activityMarkerTitle,
             openActivityDetail,
             closeActivityDetail,
