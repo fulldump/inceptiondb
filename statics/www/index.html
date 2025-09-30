@@ -647,57 +647,88 @@
                 </ul>
               </div>
 
-              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Activity log</h3>
-                    <p class="mt-1 text-xs text-slate-400">Latest API calls for this session.</p>
-                  </div>
-                  <button
-                    type="button"
-                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    :disabled="activityLog.length === 0"
-                    @click="clearActivityLog"
-                  >
-                    Clear log
-                  </button>
-                </div>
-                <div v-if="activityLog.length === 0" class="text-sm text-slate-400">No activity recorded yet.</div>
-                <ul v-else class="space-y-3">
-                  <li
-                    v-for="entry in activityLog"
-                    :key="entry.id"
-                    class="rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-2"
-                  >
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="space-y-1 min-w-0">
-                        <p class="text-sm font-semibold text-slate-200 flex flex-wrap items-baseline gap-2">
-                          <span class="text-[11px] uppercase tracking-wide text-slate-500">{{ entry.method }}</span>
-                          <span class="truncate">{{ entry.label }}</span>
-                        </p>
-                        <p class="text-xs text-slate-500 break-all">{{ entry.url }}</p>
-                        <p v-if="entry.target" class="text-[11px] uppercase tracking-wide text-slate-500">Target: {{ entry.target }}</p>
-                      </div>
-                      <span
-                        class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
-                        :class="activityStatusBadgeClass(entry.status)"
-                      >
-                        {{ activityStatusLabel(entry.status) }}
-                      </span>
-                    </div>
-                    <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                      <span>{{ formatActivityTime(entry.startedAt) }}</span>
-                      <span v-if="entry.durationMs !== null">{{ formatDuration(entry.durationMs) }}</span>
-                    </div>
-                    <p class="text-xs text-slate-300">{{ entry.detail }}</p>
-                    <p v-if="entry.statusCode" class="text-[11px] uppercase tracking-wide text-slate-500">HTTP {{ entry.statusCode }}</p>
-                  </li>
-                </ul>
-              </div>
             </div>
           </section>
         </div>
       </main>
+      <div
+        v-if="activityLog.length > 0"
+        class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-8 flex-col items-center justify-center space-y-2 sm:flex"
+        aria-hidden="false"
+      >
+        <div class="pointer-events-auto flex flex-col items-center gap-2" role="list" aria-label="Recent requests">
+          <button
+            v-for="entry in activityLog"
+            :key="entry.id"
+            type="button"
+            class="h-2.5 w-2.5 rounded-full transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
+            :class="[activityMarkerClass(entry), activityDetailOpen && selectedActivityEntry && selectedActivityEntry.id === entry.id ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : '']"
+            :title="activityMarkerTitle(entry)"
+            :aria-label="activityMarkerTitle(entry)"
+            role="listitem"
+            @click="openActivityDetail(entry)"
+          ></button>
+        </div>
+      </div>
+      <div v-if="activityDetailOpen && selectedActivityEntry" class="fixed inset-0 z-50 flex justify-end">
+        <button
+          type="button"
+          class="absolute inset-0 cursor-default bg-transparent"
+          aria-label="Close request details"
+          @click="closeActivityDetail"
+        ></button>
+        <div
+          class="pointer-events-auto relative mr-24 mt-auto mb-auto w-80 max-w-[90vw] rounded-xl border border-slate-800 bg-slate-950/95 p-5 shadow-2xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="activity-detail-title"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="space-y-1">
+              <p id="activity-detail-title" class="text-sm font-semibold text-slate-100">{{ selectedActivityEntry.label || 'Request details' }}</p>
+              <p class="text-xs text-slate-400">
+                <span class="uppercase tracking-wide text-slate-300">{{ selectedActivityEntry.method }}</span>
+                <span class="mx-1 text-slate-600">•</span>
+                <span>{{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
+              </p>
+            </div>
+            <span
+              class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+              :class="activityStatusBadgeClass(selectedActivityEntry.status)"
+            >
+              {{ activityStatusLabel(selectedActivityEntry.status) }}
+            </span>
+          </div>
+          <p class="mt-3 break-all text-xs text-slate-300">{{ selectedActivityEntry.url }}</p>
+          <p v-if="selectedActivityEntry.target" class="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
+            Target: {{ selectedActivityEntry.target }}
+          </p>
+          <p v-if="selectedActivityEntry.statusCode" class="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
+            HTTP {{ selectedActivityEntry.statusCode }}
+          </p>
+          <p class="mt-3 text-sm text-slate-200">{{ selectedActivityEntry.detail }}</p>
+          <div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+            <span>Started {{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
+            <span v-if="selectedActivityEntry.durationMs !== null">Duration {{ formatDuration(selectedActivityEntry.durationMs) }}</span>
+          </div>
+          <div class="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+              @click="clearActivityLog"
+            >
+              Clear log
+            </button>
+            <button
+              type="button"
+              class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+              @click="closeActivityDetail"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -750,6 +781,8 @@
           const EXPORT_BATCH_SIZE = 1000;
           const MAX_EXPORT_BATCHES = 10000;
           const activityLog = ref([]);
+          const activityDetailOpen = ref(false);
+          const selectedActivityEntry = ref(null);
           const exportState = reactive({
             running: false,
             progress: '',
@@ -900,8 +933,53 @@
             }
           };
 
+          const activityMarkerClass = (entry) => {
+            switch (entry?.status) {
+              case 'success':
+                return 'bg-emerald-400 shadow shadow-emerald-500/40';
+              case 'error':
+                return 'bg-rose-400 shadow shadow-rose-500/40';
+              default:
+                return 'bg-sky-400 shadow shadow-sky-500/40';
+            }
+          };
+
+          const activityMarkerTitle = (entry) => {
+            if (!entry) return 'Request';
+            const segments = [];
+            if (entry.method) segments.push(String(entry.method).toUpperCase());
+            if (entry.label) segments.push(entry.label);
+            return segments.join(' · ') || 'Request';
+          };
+
+          const openActivityDetail = (entry) => {
+            selectedActivityEntry.value = entry || null;
+            activityDetailOpen.value = Boolean(entry);
+          };
+
+          const closeActivityDetail = () => {
+            activityDetailOpen.value = false;
+            selectedActivityEntry.value = null;
+          };
+
           const clearActivityLog = () => {
             activityLog.value = [];
+            closeActivityDetail();
+          };
+
+          watch(activityLog, (entries) => {
+            if (!activityDetailOpen.value || !selectedActivityEntry.value) return;
+            const stillExists = entries.some(entry => entry.id === selectedActivityEntry.value.id);
+            if (!stillExists) {
+              closeActivityDetail();
+            }
+          }, { deep: true });
+
+          const handleKeydown = (event) => {
+            if (event.key === 'Escape' && activityDetailOpen.value) {
+              event.preventDefault();
+              closeActivityDetail();
+            }
           };
 
           const connectionStatusLabel = computed(() => {
@@ -2054,6 +2132,7 @@
             beginConnectionCheck();
             loadCollections();
             statusPoller = window.setInterval(checkBackendStatus, 30000);
+            window.addEventListener('keydown', handleKeydown);
           });
 
           onBeforeUnmount(() => {
@@ -2061,6 +2140,7 @@
               window.clearInterval(statusPoller);
               statusPoller = null;
             }
+            window.removeEventListener('keydown', handleKeydown);
           });
 
           return {
@@ -2094,6 +2174,8 @@
             createForm,
             connectionStatus,
             activityLog,
+            activityDetailOpen,
+            selectedActivityEntry,
             exportState,
             connectionStatusLabel,
             connectionStatusDescription,
@@ -2141,6 +2223,10 @@
             activityStatusLabel,
             activityStatusBadgeClass,
             clearActivityLog,
+            activityMarkerClass,
+            activityMarkerTitle,
+            openActivityDetail,
+            closeActivityDetail,
           };
         },
       }).mount('#app');
