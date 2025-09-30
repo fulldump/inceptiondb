@@ -248,30 +248,46 @@
 
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
                 <div class="border-b border-slate-800 px-5 py-3">
-                  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <p class="text-sm font-semibold text-slate-200">Results</p>
                       <p class="text-xs text-slate-400">Switch between JSON cards and a table layout to review your documents.</p>
                     </div>
-                    <div class="inline-flex overflow-hidden rounded-md border border-slate-700" role="group" aria-label="Select results layout">
-                      <button
-                        type="button"
-                        class="px-3 py-1.5 text-xs font-semibold transition"
-                        :class="resultsViewMode === 'cards' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
-                        :aria-pressed="resultsViewMode === 'cards'"
-                        @click="selectResultsView('cards')"
-                      >
-                        JSON cards
-                      </button>
-                      <button
-                        type="button"
-                        class="border-l border-slate-700 px-3 py-1.5 text-xs font-semibold transition"
-                        :class="resultsViewMode === 'table' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
-                        :aria-pressed="resultsViewMode === 'table'"
-                        @click="selectResultsView('table')"
-                      >
-                        Table view
-                      </button>
+                    <div class="flex flex-col items-stretch gap-2 text-right md:items-end">
+                      <div class="inline-flex overflow-hidden rounded-md border border-slate-700 self-end" role="group" aria-label="Select results layout">
+                        <button
+                          type="button"
+                          class="px-3 py-1.5 text-xs font-semibold transition"
+                          :class="resultsViewMode === 'cards' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+                          :aria-pressed="resultsViewMode === 'cards'"
+                          @click="selectResultsView('cards')"
+                        >
+                          JSON cards
+                        </button>
+                        <button
+                          type="button"
+                          class="border-l border-slate-700 px-3 py-1.5 text-xs font-semibold transition"
+                          :class="resultsViewMode === 'table' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+                          :aria-pressed="resultsViewMode === 'table'"
+                          @click="selectResultsView('table')"
+                        >
+                          Table view
+                        </button>
+                      </div>
+                      <div class="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          :disabled="exportState.running || queryRows.length === 0"
+                          @click="exportResults"
+                          title="Download the current results as JSON Lines"
+                        >
+                          {{ exportState.running ? 'Exporting…' : 'Export JSONL' }}
+                        </button>
+                      </div>
+                      <p class="text-[11px] text-slate-500">Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections.</p>
+                      <p v-if="exportState.error" class="text-xs text-rose-400">{{ exportState.error }}</p>
+                      <p v-else-if="exportState.progress" class="text-xs text-slate-400">{{ exportState.progress }}</p>
                     </div>
                   </div>
                 </div>
@@ -722,7 +738,14 @@
             isChecking: false,
           });
           const MAX_ACTIVITY_LOG_ENTRIES = 50;
+          const EXPORT_BATCH_SIZE = 1000;
+          const MAX_EXPORT_BATCHES = 10000;
           const activityLog = ref([]);
+          const exportState = reactive({
+            running: false,
+            progress: '',
+            error: '',
+          });
 
           const timeFormatter = new Intl.DateTimeFormat('en-US', {
             hour: 'numeric',
@@ -768,6 +791,70 @@
             const statusCode = error?.response?.status;
             const detail = error?.response?.data?.error || error?.message || fallback || 'Request failed.';
             completeActivityEntry(entry, { status: 'error', detail, statusCode });
+          };
+
+          const resetExportState = () => {
+            exportState.running = false;
+            exportState.progress = '';
+            exportState.error = '';
+          };
+
+          const attachRawLine = (target, rawLine) => {
+            if (!target || typeof target !== 'object') return;
+            Object.defineProperty(target, '__rawLine', {
+              value: rawLine,
+              enumerable: false,
+              configurable: true,
+              writable: false,
+            });
+          };
+
+          const toJsonlLine = (row) => {
+            if (!row) return null;
+            if (typeof row === 'object') {
+              if (typeof row.__rawLine === 'string') {
+                return row.__rawLine;
+              }
+              if (Object.prototype.hasOwnProperty.call(row, '_raw') && typeof row._raw === 'string') {
+                return row._raw;
+              }
+              try {
+                return JSON.stringify(row);
+              } catch (err) {
+                return null;
+              }
+            }
+            try {
+              return JSON.stringify(row);
+            } catch (err) {
+              return null;
+            }
+          };
+
+          const sanitizeFilename = (value) => {
+            if (typeof value !== 'string' || !value) return 'collection';
+            return value
+              .toLowerCase()
+              .replace(/[^a-z0-9-_]+/g, '_')
+              .replace(/^_+|_+$/g, '') || 'collection';
+          };
+
+          const makeExportFilename = (collectionName) => {
+            const safeName = sanitizeFilename(collectionName);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            return `inceptiondb-${safeName}-${timestamp}.jsonl`;
+          };
+
+          const downloadJsonl = (chunks, filename) => {
+            const blob = new Blob(chunks, { type: 'application/x-ndjson' });
+            const objectUrl = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = objectUrl;
+            anchor.download = filename;
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(objectUrl);
           };
 
           const formatDuration = (ms) => {
@@ -1312,6 +1399,7 @@
 
           let statusPoller = null;
           let statusPromise = null;
+          let lastQueryParameters = null;
 
           const checkBackendStatus = async () => {
             if (statusPromise) return statusPromise;
@@ -1390,6 +1478,8 @@
             resetIndexForm();
             indexMessages.error = '';
             indexMessages.success = '';
+            lastQueryParameters = null;
+            resetExportState();
             if (collection) {
               await loadIndexes();
               await runQuery();
@@ -1476,7 +1566,7 @@
             }
           };
 
-          const buildQueryPayload = () => {
+          const buildQueryPayload = (overrides = {}) => {
             const parsedFilter = parseFilter();
             if (parsedFilter === null) {
               const error = new Error('invalid-filter');
@@ -1485,8 +1575,8 @@
             }
             const payload = {
               filter: parsedFilter,
-              limit: Number(pageSize.value) || 0,
-              skip: offset.value,
+              limit: overrides.limit !== undefined ? Number(overrides.limit) : Number(pageSize.value) || 0,
+              skip: overrides.skip !== undefined ? Number(overrides.skip) : offset.value,
             };
             const index = activeIndex.value;
             if (index) {
@@ -1516,6 +1606,24 @@
                   payload.to = to;
                 }
               }
+            }
+            if (!Number.isFinite(payload.limit) || payload.limit < 0) {
+              payload.limit = 0;
+            }
+            if (!Number.isFinite(payload.skip) || payload.skip < 0) {
+              payload.skip = 0;
+            }
+            if (overrides.value !== undefined) {
+              payload.value = overrides.value;
+            }
+            if (overrides.from !== undefined) {
+              payload.from = overrides.from;
+            }
+            if (overrides.to !== undefined) {
+              payload.to = overrides.to;
+            }
+            if (overrides.reverse !== undefined) {
+              payload.reverse = overrides.reverse;
             }
             return payload;
           };
@@ -1556,16 +1664,26 @@
               const raw = resp.data || '';
               const lines = raw.split('\n').filter(Boolean);
               const parsedRows = lines.map((line) => {
+                let parsed;
                 try {
-                  return JSON.parse(line);
+                  parsed = JSON.parse(line);
                 } catch (err) {
-                  return { _raw: line };
+                  parsed = { _raw: line };
                 }
+                attachRawLine(parsed, line);
+                return parsed;
               });
+              if (!exportState.running) {
+                resetExportState();
+              }
               queryRows.value = parsedRows;
               queryStats.returned = parsedRows.length;
               const elapsed = Math.round(performance.now() - started);
               queryStats.elapsed = `${elapsed} ms`;
+              lastQueryParameters = {
+                collection: selectedCollection.value.name,
+                payload: JSON.parse(JSON.stringify(payload)),
+              };
               markConnectionOnline();
               completeActivityEntry(entry, {
                 detail: `Retrieved ${parsedRows.length} documents in ${elapsed} ms.`,
@@ -1577,6 +1695,133 @@
               handleRequestError(error);
             } finally {
               queryLoading.value = false;
+            }
+          };
+
+          const exportResults = async () => {
+            if (!selectedCollection.value) {
+              exportState.error = 'Select a collection before exporting.';
+              exportState.progress = '';
+              return;
+            }
+            if (!Array.isArray(queryRows.value) || queryRows.value.length === 0) {
+              exportState.error = 'No results to export. Run a query first.';
+              exportState.progress = '';
+              return;
+            }
+            if (exportState.running) return;
+            exportState.error = '';
+            exportState.progress = '';
+            let exportAll = window.confirm('Export all matching documents? Click OK for all results, or Cancel to choose a different option.');
+            if (!exportAll) {
+              const exportPage = window.confirm('Export only the current page? Click OK to export the current page, or Cancel to abort.');
+              if (!exportPage) {
+                exportState.error = '';
+                exportState.progress = '';
+                return;
+              }
+            }
+            const collectionName = selectedCollection.value.name;
+            const filename = makeExportFilename(collectionName);
+            exportState.running = true;
+
+            if (!exportAll) {
+              const entry = createActivityEntry({
+                label: 'Export current page (JSONL)',
+                method: 'EXPORT',
+                url: 'local://export-page',
+                target: collectionName,
+              });
+              try {
+                const lines = queryRows.value
+                  .map((row) => toJsonlLine(row))
+                  .filter((line) => typeof line === 'string' && line.length > 0);
+                if (!lines.length) {
+                  throw new Error('The current page does not contain exportable documents.');
+                }
+                const normalized = lines.map((line) => (line.endsWith('\n') ? line : `${line}\n`));
+                downloadJsonl(normalized, filename);
+                exportState.progress = `Exported ${lines.length} documents to ${filename}.`;
+                completeActivityEntry(entry, { detail: exportState.progress, statusCode: 200 });
+              } catch (error) {
+                exportState.error = error?.message || 'Failed to export the current page.';
+                failActivityEntry(entry, error, { fallback: 'Failed to export the current page.' });
+              } finally {
+                exportState.running = false;
+              }
+              return;
+            }
+
+            if (!lastQueryParameters || lastQueryParameters.collection !== collectionName) {
+              exportState.error = 'Run the query before exporting all results.';
+              exportState.running = false;
+              return;
+            }
+
+            const url = `/v1/collections/${encodeURIComponent(collectionName)}:find`;
+            const entry = createActivityEntry({
+              label: 'Export all results (JSONL)',
+              method: 'POST',
+              url,
+              target: collectionName,
+            });
+            exportState.progress = 'Preparing export for all matching documents…';
+
+            try {
+              const template = JSON.parse(JSON.stringify(lastQueryParameters.payload || {}));
+              const chunks = [];
+              let totalExported = 0;
+              let batches = 0;
+              let lastStatusCode = null;
+              while (batches < MAX_EXPORT_BATCHES) {
+                const payload = JSON.parse(JSON.stringify(template));
+                payload.skip = totalExported;
+                payload.limit = EXPORT_BATCH_SIZE;
+                const resp = await axios({
+                  method: 'post',
+                  url,
+                  data: payload,
+                  transformResponse: (res) => res,
+                  responseType: 'text',
+                });
+                lastStatusCode = resp.status;
+                const text = resp.data || '';
+                if (text) {
+                  const normalizedText = text.endsWith('\n') ? text : `${text}\n`;
+                  chunks.push(normalizedText);
+                }
+                const exportedLines = text ? text.split('\n').filter(Boolean).length : 0;
+                totalExported += exportedLines;
+                batches += 1;
+                exportState.progress = exportedLines
+                  ? `Exported ${totalExported} documents…`
+                  : 'No more documents to export.';
+                entry.detail = exportState.progress;
+                markConnectionOnline();
+                if (exportedLines < EXPORT_BATCH_SIZE) {
+                  break;
+                }
+              }
+              if (batches >= MAX_EXPORT_BATCHES) {
+                throw new Error('Export stopped after reaching the maximum number of batches. Refine the query or request backend assistance for very large exports.');
+              }
+              if (!chunks.length) {
+                throw new Error('The query did not return any documents to export.');
+              }
+              downloadJsonl(chunks, filename);
+              exportState.progress = `Exported ${totalExported} documents to ${filename}.`;
+              completeActivityEntry(entry, {
+                detail: exportState.progress,
+                statusCode: lastStatusCode ?? 200,
+              });
+            } catch (error) {
+              exportState.error = error?.response?.data?.error || error?.message || 'Failed to export the results.';
+              failActivityEntry(entry, error, { fallback: 'Failed to export the results.' });
+              if (error?.isAxiosError || error?.response || error?.request) {
+                handleRequestError(error);
+              }
+            } finally {
+              exportState.running = false;
             }
           };
 
@@ -1840,6 +2085,7 @@
             createForm,
             connectionStatus,
             activityLog,
+            exportState,
             connectionStatusLabel,
             connectionStatusDescription,
             connectionStatusBadgeClass,
@@ -1861,6 +2107,7 @@
             toggleIndexForm,
             selectCollection,
             runQuery,
+            exportResults,
             nextPage,
             prevPage,
             documentId,
