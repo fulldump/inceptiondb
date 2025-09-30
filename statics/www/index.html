@@ -270,8 +270,16 @@
                 >
                   <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
-                      <p class="text-sm font-semibold text-slate-200">Results</p>
-                      <p class="text-xs text-slate-400">Switch between JSON cards and a table layout to review your documents.</p>
+                      <p class="text-sm font-semibold text-slate-200 flex items-center gap-1">
+                        <span>Results</span>
+                        <span
+                          class="text-base text-slate-400"
+                          title="Switch between JSON cards and a table layout to review your documents."
+                          aria-label="More information about results view options"
+                        >
+                          &nbsp;🛈
+                        </span>
+                      </p>
                     </div>
                     <div class="flex flex-col items-stretch gap-2 text-right md:items-end">
                       <div
@@ -304,14 +312,11 @@
                           class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                           :disabled="exportState.running || queryRows.length === 0"
                           @click="exportResults"
-                          title="Download the current results as JSON Lines"
+                          title="Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections."
                         >
                           {{ exportState.running ? 'Exporting…' : 'Export JSONL' }}
                         </button>
                       </div>
-                      <p class="text-[11px] text-slate-500">
-                        Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections.
-                      </p>
                       <p v-if="exportState.error" class="text-xs text-rose-400">{{ exportState.error }}</p>
                       <p v-else-if="exportState.progress" class="text-xs text-slate-400">{{ exportState.progress }}</p>
                     </div>
@@ -724,6 +729,74 @@
               </div>
 
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
+                <div class="space-y-2">
+                  <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Import CSV</h3>
+                  <p class="text-xs text-slate-400">
+                    Upload a CSV file to insert multiple documents at once. The first row should contain the field names.
+                  </p>
+                </div>
+                <div class="grid gap-3 md:grid-cols-2">
+                  <div class="md:col-span-2">
+                    <label for="csv-file" class="block text-xs uppercase tracking-wide text-slate-400">CSV file</label>
+                    <input
+                      :key="csvImportForm.inputKey"
+                      id="csv-file"
+                      type="file"
+                      accept=".csv,text/csv"
+                      class="mt-1 block w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 file:mr-4 file:rounded-md file:border-0 file:bg-slate-800 file:px-4 file:py-2 file:text-sm file:font-medium file:text-slate-100 hover:file:bg-slate-700"
+                      @change="onCsvFileChange"
+                    >
+                  </div>
+                  <div>
+                    <label for="csv-delimiter" class="block text-xs uppercase tracking-wide text-slate-400">Delimiter</label>
+                    <select
+                      id="csv-delimiter"
+                      v-model="csvImportForm.delimiter"
+                      class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    >
+                      <option value=",">Comma (,)</option>
+                      <option value=";">Semicolon (;)</option>
+                      <option value="\t">Tab</option>
+                      <option value="|">Pipe (|)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="csv-trim" class="block text-xs uppercase tracking-wide text-slate-400">Trim whitespace</label>
+                    <select
+                      id="csv-trim"
+                      v-model="csvImportForm.trimValues"
+                      class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    >
+                      <option :value="true">Yes</option>
+                      <option :value="false">No</option>
+                    </select>
+                  </div>
+                </div>
+                <p v-if="csvImportForm.fileName" class="text-xs text-slate-500">Selected file: {{ csvImportForm.fileName }}</p>
+                <div class="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="csvImportForm.importing"
+                    @click="resetCsvImportForm"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="!csvImportForm.file || csvImportForm.importing"
+                    @click="importCsv"
+                  >
+                    {{ csvImportForm.importing ? 'Importing…' : 'Import CSV' }}
+                  </button>
+                </div>
+                <p v-if="csvImportForm.error" class="text-sm text-rose-400">{{ csvImportForm.error }}</p>
+                <p v-else-if="csvImportForm.success" class="text-sm text-emerald-400">{{ csvImportForm.success }}</p>
+                <p v-else-if="csvImportForm.progress" class="text-sm text-slate-400">{{ csvImportForm.progress }}</p>
+              </div>
+
+              <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
                 <div class="flex items-center justify-between gap-3">
                   <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Indexes</h3>
                   <button
@@ -981,6 +1054,17 @@
           const editingDocuments = reactive({});
           const emptyJsonObjectText = '{\n\n}';
           const insertForm = reactive({ payload: emptyJsonObjectText, error: '', success: '' });
+          const csvImportForm = reactive({
+            file: null,
+            fileName: '',
+            delimiter: ',',
+            trimValues: true,
+            importing: false,
+            error: '',
+            success: '',
+            progress: '',
+            inputKey: 0,
+          });
           const defaultsForm = reactive({
             draft: emptyJsonObjectText,
             original: emptyJsonObjectText,
@@ -1144,6 +1228,264 @@
             anchor.click();
             document.body.removeChild(anchor);
             URL.revokeObjectURL(objectUrl);
+          };
+
+          const detectCsvDelimiter = (sample) => {
+            if (typeof sample !== 'string' || !sample) {
+              return null;
+            }
+            const candidates = [',', ';', '\t', '|'];
+            const lines = sample.split(/\r?\n/).slice(0, 5);
+            let bestDelimiter = null;
+            let bestScore = 0;
+            candidates.forEach((candidate) => {
+              let score = 0;
+              lines.forEach((line) => {
+                if (!line) return;
+                const parts = line.split(candidate);
+                if (parts.length > 1) {
+                  score += parts.length - 1;
+                }
+              });
+              if (score > bestScore) {
+                bestScore = score;
+                bestDelimiter = candidate;
+              }
+            });
+            return bestScore > 0 ? bestDelimiter : null;
+          };
+
+          const parseCsvRows = (text, delimiter) => {
+            const rows = [];
+            const sep = typeof delimiter === 'string' && delimiter.length > 0 ? delimiter : ',';
+            let value = '';
+            let row = [];
+            let inQuotes = false;
+            let i = 0;
+            while (i < text.length) {
+              const char = text[i];
+              if (inQuotes) {
+                if (char === '"') {
+                  if (text[i + 1] === '"') {
+                    value += '"';
+                    i += 1;
+                  } else {
+                    inQuotes = false;
+                  }
+                } else {
+                  value += char;
+                }
+              } else if (char === '"') {
+                inQuotes = true;
+              } else if (char === sep) {
+                row.push(value);
+                value = '';
+              } else if (char === '\n') {
+                row.push(value);
+                rows.push(row);
+                row = [];
+                value = '';
+              } else if (char === '\r') {
+                // ignore carriage returns; handled on next newline
+              } else {
+                value += char;
+              }
+              i += 1;
+            }
+            if (inQuotes) {
+              throw new Error('Unclosed quoted value in CSV data.');
+            }
+            if (value !== '' || row.length > 0) {
+              row.push(value);
+              rows.push(row);
+            }
+            return rows;
+          };
+
+          const buildCsvDocuments = (rows, trimValues) => {
+            if (!Array.isArray(rows) || rows.length === 0) {
+              throw new Error('The CSV file is missing a header row.');
+            }
+            const headerRow = rows[0];
+            const headers = headerRow.map((cell, idx) => {
+              const header = typeof cell === 'string' ? cell.trim() : '';
+              if (!header) {
+                throw new Error(`Column ${idx + 1} header is empty.`);
+              }
+              return header;
+            });
+            if (headers.length === 0) {
+              throw new Error('The CSV header row is empty.');
+            }
+            const documents = [];
+            for (let i = 1; i < rows.length; i += 1) {
+              const row = rows[i];
+              if (!Array.isArray(row)) {
+                continue;
+              }
+              const isEmpty = row.every((cell) => {
+                if (cell === null || cell === undefined) return true;
+                return String(cell).trim() === '';
+              });
+              if (isEmpty) {
+                continue;
+              }
+              const doc = {};
+              headers.forEach((header, idx) => {
+                let cell = row[idx];
+                if (cell === undefined || cell === null) {
+                  cell = '';
+                }
+                if (trimValues && typeof cell === 'string') {
+                  cell = cell.trim();
+                }
+                doc[header] = cell;
+              });
+              if (Object.keys(doc).length > 0) {
+                documents.push(doc);
+              }
+            }
+            return documents;
+          };
+
+          const onCsvFileChange = async (event) => {
+            csvImportForm.error = '';
+            csvImportForm.success = '';
+            csvImportForm.progress = '';
+            const files = event?.target?.files;
+            const file = files && files[0] ? files[0] : null;
+            csvImportForm.file = file;
+            csvImportForm.fileName = file?.name || '';
+            if (!file) {
+              return;
+            }
+            try {
+              const sampleText = await file.slice(0, 4096).text();
+              const detected = detectCsvDelimiter(sampleText);
+              if (detected) {
+                csvImportForm.delimiter = detected;
+              }
+            } catch (err) {
+              // Ignore auto-detection errors.
+            }
+          };
+
+          const resetCsvImportForm = () => {
+            if (csvImportForm.importing) {
+              return;
+            }
+            csvImportForm.file = null;
+            csvImportForm.fileName = '';
+            csvImportForm.error = '';
+            csvImportForm.success = '';
+            csvImportForm.progress = '';
+            csvImportForm.inputKey += 1;
+          };
+
+          const importCsv = async () => {
+            csvImportForm.error = '';
+            csvImportForm.success = '';
+            csvImportForm.progress = '';
+            if (!selectedCollection.value) {
+              csvImportForm.error = 'Select a collection before importing.';
+              return;
+            }
+            if (!csvImportForm.file) {
+              csvImportForm.error = 'Choose a CSV file to import.';
+              return;
+            }
+            let csvText;
+            try {
+              csvText = await csvImportForm.file.text();
+            } catch (err) {
+              csvImportForm.error = 'Failed to read the CSV file.';
+              return;
+            }
+            if (!csvText || csvText.trim().length === 0) {
+              csvImportForm.error = 'The selected file is empty.';
+              return;
+            }
+            csvImportForm.progress = 'Parsing CSV file…';
+            const sanitizedText = csvText.replace(/^\ufeff/, '');
+            let rows;
+            try {
+              rows = parseCsvRows(sanitizedText, csvImportForm.delimiter);
+            } catch (err) {
+              csvImportForm.progress = '';
+              csvImportForm.error = `Failed to parse CSV: ${err.message}`;
+              return;
+            }
+            if (!Array.isArray(rows) || rows.length === 0) {
+              csvImportForm.progress = '';
+              csvImportForm.error = 'The CSV file does not contain any rows.';
+              return;
+            }
+            const meaningfulRows = rows.filter((row, index) => {
+              if (!Array.isArray(row)) {
+                return false;
+              }
+              if (index === 0) {
+                return true;
+              }
+              return row.some((cell) => {
+                if (cell === null || cell === undefined) return false;
+                return String(cell).trim() !== '';
+              });
+            });
+            if (meaningfulRows.length <= 1) {
+              csvImportForm.progress = '';
+              csvImportForm.error = 'The CSV file must include a header row and at least one data row.';
+              return;
+            }
+            let documents;
+            try {
+              documents = buildCsvDocuments(meaningfulRows, csvImportForm.trimValues);
+            } catch (err) {
+              csvImportForm.progress = '';
+              csvImportForm.error = err.message || 'Failed to process the CSV file.';
+              return;
+            }
+            if (!documents || documents.length === 0) {
+              csvImportForm.progress = '';
+              csvImportForm.error = 'No documents were generated from the CSV file.';
+              return;
+            }
+            const ndjsonPayload = documents.map((doc) => JSON.stringify(doc)).join('\n');
+            csvImportForm.progress = `Uploading ${documents.length} ${documents.length === 1 ? 'record' : 'records'}…`;
+            csvImportForm.importing = true;
+            const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:insert`;
+            const entry = createActivityEntry({
+              label: 'Import CSV',
+              method: 'POST',
+              url,
+              target: selectedCollection.value.name,
+            });
+            try {
+              const resp = await axios.post(url, ndjsonPayload, {
+                headers: { 'Content-Type': 'application/json' },
+                responseType: 'text',
+                transformResponse: [(data) => data],
+              });
+              markConnectionOnline();
+              csvImportForm.success = `Imported ${documents.length} ${documents.length === 1 ? 'document' : 'documents'} from the CSV file.`;
+              csvImportForm.progress = '';
+              csvImportForm.file = null;
+              csvImportForm.fileName = '';
+              csvImportForm.inputKey += 1;
+              completeActivityEntry(entry, {
+                detail: `Imported ${documents.length} ${documents.length === 1 ? 'document' : 'documents'} from CSV.`,
+                statusCode: resp.status,
+              });
+              await runQuery();
+              await loadCollections();
+            } catch (error) {
+              csvImportForm.progress = '';
+              csvImportForm.error = error?.response?.data?.error || 'Failed to import the CSV file.';
+              failActivityEntry(entry, error, { fallback: 'Failed to import the CSV file.' });
+              handleRequestError(error);
+            } finally {
+              csvImportForm.importing = false;
+            }
           };
 
           const normalizeDefaults = (defaults) => {
@@ -2420,6 +2762,9 @@
             clearEditingDocuments();
             defaultsHelpOpen.value = false;
             skip.value = 0;
+            csvImportForm.error = '';
+            csvImportForm.success = '';
+            csvImportForm.progress = '';
           });
 
           watch(queryRows, (rows) => {
@@ -2717,6 +3062,7 @@
             indexForm,
             indexMessages,
             insertForm,
+            csvImportForm,
             defaultsForm,
             defaultsHelpOpen,
             createForm,
@@ -2765,6 +3111,9 @@
             resetDefaultsForm,
             saveDefaults,
             insertDocument,
+            onCsvFileChange,
+            resetCsvImportForm,
+            importCsv,
             createCollection,
             dropCollection,
             deleteRow,
