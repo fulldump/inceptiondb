@@ -65,35 +65,121 @@
 			--activity-marker-color: #f87171;
 			--activity-marker-glow: rgba(248, 113, 113, 0.35);
 		}
+
+		#activity-modal::backdrop {
+			background-color: rgba(15, 23, 42, 0.75);
+		}
 	</style>
 	<script src="/lib/axios.min.js"></script>
 	<script src="/lib/vue.global.prod.js"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-<div id="app" class="min-h-screen flex">
-	<aside class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col">
-		<div class="px-6 py-5 border-b border-slate-800">
-			<div class="flex items-center justify-between">
-				<h1 class="text-xl font-semibold tracking-wide">InceptionDB</h1>
-				<a
-								class="text-slate-400 hover:text-slate-200"
-								href="https://github.com/fulldump/inceptiondb"
-								target="_blank"
-								rel="noopener"
-								aria-label="GitHub repository"
-				>
-					<svg class="w-6 h-6" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-						<path
-										fill-rule="evenodd"
-										d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
-										clip-rule="evenodd"
-						/>
-					</svg>
-				</a>
+<div id="app">
+	<dialog
+					id="activity-modal"
+					ref="activityModal"
+					aria-labelledby="activity-modal-title"
+					class="mx-auto mt-24 w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-0 text-left text-slate-100 shadow-2xl"
+	>
+		<div v-if="selectedActivityEntry" class="flex flex-col gap-4 p-6">
+			<div class="flex items-start justify-between gap-3">
+				<div class="space-y-1">
+					<p id="activity-modal-title" class="text-sm font-semibold text-slate-100">{{ selectedActivityEntry.label || 'Request details' }}</p>
+					<p class="text-xs text-slate-400">
+						<span class="uppercase tracking-wide text-slate-300">{{ selectedActivityEntry.method }}</span>
+						<span class="mx-1 text-slate-600">&nbsp;</span>
+						<span>{{ selectedActivityEntry.url }}</span>
+						<span>&nbsp;(Status {{ selectedActivityEntry.statusCode }})</span>
+					</p>
+				</div>
 			</div>
-			<div class="mt-4 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-				<p class="text-xs uppercase tracking-wide text-slate-400">API status</p>
-				<div class="mt-2 flex items-center justify-between gap-3">
+			<div v-if="false && activityRequestHeaders(selectedActivityEntry).length > 0" class="space-y-2">
+				<p class="text-[11px] uppercase tracking-wide text-slate-500">Request headers</p>
+				<ul class="space-y-1 text-xs text-slate-300">
+					<li
+									v-for="header in activityRequestHeaders(selectedActivityEntry)"
+									:key="`${header.key}:${header.value}`"
+									class="break-all"
+					>
+						<span class="text-slate-400">{{ header.key }}:</span>
+						{{ header.value }}
+					</li>
+				</ul>
+			</div>
+			<div v-if="false && activityRequestBody(selectedActivityEntry)" class="space-y-2">
+				<p class="text-[11px] uppercase tracking-wide text-slate-500">Request body</p>
+				<pre class="max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words">{{ activityRequestBody(selectedActivityEntry) }}</pre>
+			</div>
+			<div v-if="activityRequestTabEntries.length > 0" class="space-y-2">
+				<p v-if="false" class="text-[11px] uppercase tracking-wide text-slate-500">Request formats</p>
+				<div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60">
+					<div class="flex items-center gap-1 border-b border-slate-800 px-2 py-1">
+						<button
+										v-for="tab in activityRequestTabEntries"
+										:key="tab.id"
+										type="button"
+										class="rounded-md px-3 py-1.5 text-xs font-medium transition"
+										:class="selectedActivityRequestTab === tab.id
+                                                                ? 'bg-slate-900 text-sky-300 border border-slate-700'
+                                                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'"
+										@click="selectedActivityRequestTab = tab.id"
+						>
+							{{ tab.label }}
+						</button>
+					</div>
+					<pre
+									v-if="activeActivityRequestTabContent"
+									class="max-h-48 overflow-y-auto bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
+					>{{ activeActivityRequestTabContent }}</pre>
+				</div>
+			</div>
+			<div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+				<span v-if="false">Started {{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
+				<span v-if="selectedActivityEntry.durationMs !== null">Duration {{ formatDuration(selectedActivityEntry.durationMs) }}</span>
+			</div>
+			<div class="flex flex-wrap justify-end gap-2 pt-2">
+				<button
+								type="button"
+								class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+								@click="clearActivityLog"
+								v-if="false"
+				>
+					Clear log
+				</button>
+				<button
+								type="button"
+								class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+								@click="closeActivityModal"
+				>
+					Close
+				</button>
+			</div>
+		</div>
+	</dialog>
+	<div class="min-h-screen flex">
+		<aside class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col">
+			<div class="px-6 py-5 border-b border-slate-800">
+				<div class="flex items-center justify-between">
+					<h1 class="text-xl font-semibold tracking-wide">InceptionDB</h1>
+					<a
+									class="text-slate-400 hover:text-slate-200"
+									href="https://github.com/fulldump/inceptiondb"
+									target="_blank"
+									rel="noopener"
+									aria-label="GitHub repository"
+					>
+						<svg class="w-6 h-6" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+							<path
+											fill-rule="evenodd"
+											d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+											clip-rule="evenodd"
+							/>
+						</svg>
+					</a>
+				</div>
+				<div class="mt-4 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+					<p class="text-xs uppercase tracking-wide text-slate-400">API status</p>
+					<div class="mt-2 flex items-center justify-between gap-3">
               <span
 											class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold"
 											:class="connectionStatusBadgeClass"
@@ -101,325 +187,437 @@
                 <span class="h-2 w-2 rounded-full" :class="connectionStatusDotClass"></span>
                 {{ connectionStatusLabel }}
               </span>
-					<button
-									type="button"
-									class="text-xs font-medium text-slate-300 hover:text-white transition disabled:cursor-not-allowed disabled:opacity-50"
-									:disabled="connectionStatusChecking"
-									@click="refreshConnectionStatus"
-					>
-						{{ connectionStatusButtonLabel }}
-					</button>
-				</div>
-				<p v-if="connectionStatusDescription" class="mt-2 text-xs text-slate-400">
-					{{ connectionStatusDescription }}
-				</p>
-			</div>
-			<button
-							type="button"
-							class="mt-5 w-full rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-100 bg-slate-800 hover:bg-slate-700 transition"
-							@click="toggleCreateForm"
-			>
-				{{ createForm.open ? 'Cancel' : 'New collection' }}
-			</button>
-			<form v-if="createForm.open" class="mt-4 space-y-3" @submit.prevent="createCollection">
-				<div>
-					<label for="new-collection" class="block text-xs uppercase tracking-wide text-slate-400">Name</label>
-					<input
-									id="new-collection"
-									v-model="createForm.name"
-									type="text"
-									required
-									class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-									placeholder="customers"
-					>
+						<button
+										type="button"
+										class="text-xs font-medium text-slate-300 hover:text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+										:disabled="connectionStatusChecking"
+										@click="refreshConnectionStatus"
+						>
+							{{ connectionStatusButtonLabel }}
+						</button>
+					</div>
+					<p v-if="connectionStatusDescription" class="mt-2 text-xs text-slate-400">
+						{{ connectionStatusDescription }}
+					</p>
 				</div>
 				<button
-								type="submit"
-								class="w-full rounded-md bg-sky-600 hover:bg-sky-500 px-3 py-2 text-sm font-semibold text-white transition"
-				>
-					Create collection
-				</button>
-				<p v-if="createForm.error" class="text-sm text-rose-400">{{ createForm.error }}</p>
-			</form>
-		</div>
-		<div class="flex-1 overflow-y-auto">
-			<div v-if="collectionsLoading" class="px-6 py-4 text-sm text-slate-400">Loading collections…</div>
-			<div v-else-if="collectionsError" class="px-6 py-4 text-sm text-rose-400">{{ collectionsError }}</div>
-			<nav v-else class="py-2">
-				<button
-								v-for="collection in collections"
-								:key="collection.name"
 								type="button"
-								class="w-full px-6 py-3 text-left hover:bg-slate-800 transition"
-								:class="{
+								class="mt-5 w-full rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-100 bg-slate-800 hover:bg-slate-700 transition"
+								@click="toggleCreateForm"
+				>
+					{{ createForm.open ? 'Cancel' : 'New collection' }}
+				</button>
+				<form v-if="createForm.open" class="mt-4 space-y-3" @submit.prevent="createCollection">
+					<div>
+						<label for="new-collection" class="block text-xs uppercase tracking-wide text-slate-400">Name</label>
+						<input
+										id="new-collection"
+										v-model="createForm.name"
+										type="text"
+										required
+										class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+										placeholder="customers"
+						>
+					</div>
+					<button
+									type="submit"
+									class="w-full rounded-md bg-sky-600 hover:bg-sky-500 px-3 py-2 text-sm font-semibold text-white transition"
+					>
+						Create collection
+					</button>
+					<p v-if="createForm.error" class="text-sm text-rose-400">{{ createForm.error }}</p>
+				</form>
+			</div>
+			<div class="flex-1 overflow-y-auto">
+				<div v-if="collectionsLoading" class="px-6 py-4 text-sm text-slate-400">Loading collections…</div>
+				<div v-else-if="collectionsError" class="px-6 py-4 text-sm text-rose-400">{{ collectionsError }}</div>
+				<nav v-else class="py-2">
+					<button
+									v-for="collection in collections"
+									:key="collection.name"
+									type="button"
+									class="w-full px-6 py-3 text-left hover:bg-slate-800 transition"
+									:class="{
                 'bg-slate-800 text-sky-300': isSelected(collection.name),
                 'text-slate-200': !isSelected(collection.name)
               }"
-								@click="selectCollection(collection.name)"
-				>
-					<div class="flex items-center justify-between text-sm font-medium">
-						<span class="truncate">{{ collection.name }}</span>
-						<span class="text-xs text-slate-400" v-if="collection.total !== undefined">{{ prettyTotal(collection.total) }}</span>
-					</div>
-					<p class="mt-1 text-xs text-slate-500" v-if="collection.indexes">{{ collection.indexes }} indexes</p>
-				</button>
-				<p v-if="collections.length === 0" class="px-6 py-4 text-sm text-slate-500">No collections registered yet.</p>
-			</nav>
-		</div>
-	</aside>
-
-	<main class="flex-1">
-		<div v-if="!selectedCollection" class="flex h-full flex-col items-center justify-center text-center gap-3 px-6">
-			<h2 class="text-2xl font-semibold text-slate-200">Welcome to InceptionDB</h2>
-			<p class="text-slate-400 max-w-md">Select or create a collection in the sidebar to start querying, inserting, or deleting documents.</p>
-		</div>
-
-		<div v-else class="flex flex-col gap-6 p-6">
-			<header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-				<div>
-					<h2 class="text-2xl font-semibold text-slate-100">Collection {{ selectedCollection.name }}</h2>
-					<p class="text-sm text-slate-400 flex flex-wrap items-center gap-3">
-						<span v-if="selectedCollection.total !== undefined">Total: {{ selectedCollection.total }}</span>
-						<span v-if="queryStats.elapsed">Last query: {{ queryStats.elapsed }}</span>
-						<span v-if="queryStats.returned">Documents listed: {{ queryStats.returned }}</span>
-					</p>
-				</div>
-				<div class="flex flex-wrap gap-2">
-					<button
-									type="button"
-									class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 transition"
-									@click="runQuery"
+									@click="selectCollection(collection.name)"
 					>
-						Run query
+						<div class="flex items-center justify-between text-sm font-medium">
+							<span class="truncate">{{ collection.name }}</span>
+							<span class="text-xs text-slate-400" v-if="collection.total !== undefined">{{ prettyTotal(collection.total) }}</span>
+						</div>
+						<p class="mt-1 text-xs text-slate-500" v-if="collection.indexes">{{ collection.indexes }} indexes</p>
 					</button>
-					<button
-									type="button"
-									class="rounded-md border border-rose-500/40 bg-rose-600/20 px-3 py-2 text-sm font-medium text-rose-300 hover:bg-rose-600/30 transition"
-									@click="dropCollection"
-					>
-						Delete collection
-					</button>
-				</div>
-			</header>
+					<p v-if="collections.length === 0" class="px-6 py-4 text-sm text-slate-500">No collections registered yet.</p>
+				</nav>
+			</div>
+		</aside>
 
-			<section class="grid gap-6 lg:grid-cols-[2fr_1fr]">
-				<div class="space-y-6">
-					<div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-5">
-						<div>
-							<label for="filter" class="block text-xs uppercase tracking-wide text-slate-400">Filter (JSON)</label>
-							<textarea
-											id="filter"
-											v-model="filterText"
-											rows="4"
-											class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-											placeholder="{ }"
-							></textarea>
-							<p v-if="filterError" class="mt-2 text-sm text-rose-400">{{ filterError }}</p>
-						</div>
+		<main class="flex-1">
+			<div v-if="!selectedCollection" class="flex h-full flex-col items-center justify-center text-center gap-3 px-6">
+				<h2 class="text-2xl font-semibold text-slate-200">Welcome to InceptionDB</h2>
+				<p class="text-slate-400 max-w-md">Select or create a collection in the sidebar to start querying, inserting, or deleting documents.</p>
+			</div>
 
-						<div>
-							<label class="block text-xs uppercase tracking-wide text-slate-400">Index</label>
-							<select
-											v-model="selectedIndexName"
-											class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-							>
-								<option value="">No index (full scan)</option>
-								<option v-for="index in indexes" :key="index.name" :value="index.name">
-									{{ index.name }} · {{ index.type }}
-								</option>
-							</select>
-						</div>
-
-						<div v-if="activeIndex && activeIndex.type === 'map'" class="grid gap-2">
-							<label class="block text-xs uppercase tracking-wide text-slate-400">Index value</label>
-							<input
-											type="text"
-											v-model="mapValue"
-											class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-											placeholder="Enter a unique value"
-							>
-						</div>
-
-						<div v-if="activeIndex && activeIndex.type === 'btree'" class="space-y-4">
-							<div>
-								<span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">From (inclusive)</span>
-								<div class="grid gap-3 md:grid-cols-2">
-									<label v-for="field in activeIndex.fields" :key="'from-' + field" class="text-sm text-slate-300">
-										<span class="block text-xs uppercase tracking-wide text-slate-500">{{ field }}</span>
-										<input
-														type="text"
-														v-model="rangeFrom[field]"
-														class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-										>
-									</label>
-								</div>
-							</div>
-							<div>
-								<span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">To (exclusive)</span>
-								<div class="grid gap-3 md:grid-cols-2">
-									<label v-for="field in activeIndex.fields" :key="'to-' + field" class="text-sm text-slate-300">
-										<span class="block text-xs uppercase tracking-wide text-slate-500">{{ field }}</span>
-										<input
-														type="text"
-														v-model="rangeTo[field]"
-														class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-										>
-									</label>
-								</div>
-							</div>
-							<label class="inline-flex items-center gap-2 text-sm text-slate-300">
-								<input type="checkbox" v-model="reverse" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
-								Reverse order
-							</label>
-						</div>
-
+			<div v-else class="flex flex-col gap-6 p-6">
+				<header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+					<div>
+						<h2 class="text-2xl font-semibold text-slate-100">Collection {{ selectedCollection.name }}</h2>
+						<p class="text-sm text-slate-400 flex flex-wrap items-center gap-3">
+							<span v-if="selectedCollection.total !== undefined">Total: {{ selectedCollection.total }}</span>
+							<span v-if="queryStats.elapsed">Last query: {{ queryStats.elapsed }}</span>
+							<span v-if="queryStats.returned">Documents listed: {{ queryStats.returned }}</span>
+						</p>
 					</div>
-
-					<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-						<div
-										v-if="queryRows.length > 0"
-										class="border-b border-slate-800 px-5 py-3"
+					<div class="flex flex-wrap gap-2">
+						<button
+										type="button"
+										class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 transition"
+										@click="runQuery"
 						>
-							<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+							Run query
+						</button>
+						<button
+										type="button"
+										class="rounded-md border border-rose-500/40 bg-rose-600/20 px-3 py-2 text-sm font-medium text-rose-300 hover:bg-rose-600/30 transition"
+										@click="dropCollection"
+						>
+							Delete collection
+						</button>
+					</div>
+				</header>
+
+				<section class="grid gap-6 lg:grid-cols-[2fr_1fr]">
+					<div class="space-y-6">
+						<div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-5">
+							<div>
+								<label for="filter" class="block text-xs uppercase tracking-wide text-slate-400">Filter (JSON)</label>
+								<textarea
+												id="filter"
+												v-model="filterText"
+												rows="4"
+												class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+												placeholder="{ }"
+								></textarea>
+								<p v-if="filterError" class="mt-2 text-sm text-rose-400">{{ filterError }}</p>
+							</div>
+
+							<div>
+								<label class="block text-xs uppercase tracking-wide text-slate-400">Index</label>
+								<select
+												v-model="selectedIndexName"
+												class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+								>
+									<option value="">No index (full scan)</option>
+									<option v-for="index in indexes" :key="index.name" :value="index.name">
+										{{ index.name }} · {{ index.type }}
+									</option>
+								</select>
+							</div>
+
+							<div v-if="activeIndex && activeIndex.type === 'map'" class="grid gap-2">
+								<label class="block text-xs uppercase tracking-wide text-slate-400">Index value</label>
+								<input
+												type="text"
+												v-model="mapValue"
+												class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+												placeholder="Enter a unique value"
+								>
+							</div>
+
+							<div v-if="activeIndex && activeIndex.type === 'btree'" class="space-y-4">
 								<div>
-									<p class="text-sm font-semibold text-slate-200 flex items-center gap-1">
-										<span>Results</span>
-										<span
-														class="text-base text-slate-400"
-														title="Switch between JSON cards and a table layout to review your documents."
-														aria-label="More information about results view options"
-										>
+									<span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">From (inclusive)</span>
+									<div class="grid gap-3 md:grid-cols-2">
+										<label v-for="field in activeIndex.fields" :key="'from-' + field" class="text-sm text-slate-300">
+											<span class="block text-xs uppercase tracking-wide text-slate-500">{{ field }}</span>
+											<input
+															type="text"
+															v-model="rangeFrom[field]"
+															class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+											>
+										</label>
+									</div>
+								</div>
+								<div>
+									<span class="block text-xs uppercase tracking-wide text-slate-400 mb-2">To (exclusive)</span>
+									<div class="grid gap-3 md:grid-cols-2">
+										<label v-for="field in activeIndex.fields" :key="'to-' + field" class="text-sm text-slate-300">
+											<span class="block text-xs uppercase tracking-wide text-slate-500">{{ field }}</span>
+											<input
+															type="text"
+															v-model="rangeTo[field]"
+															class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+											>
+										</label>
+									</div>
+								</div>
+								<label class="inline-flex items-center gap-2 text-sm text-slate-300">
+									<input type="checkbox" v-model="reverse" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
+									Reverse order
+								</label>
+							</div>
+
+						</div>
+
+						<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
+							<div
+											v-if="queryRows.length > 0"
+											class="border-b border-slate-800 px-5 py-3"
+							>
+								<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+									<div>
+										<p class="text-sm font-semibold text-slate-200 flex items-center gap-1">
+											<span>Results</span>
+											<span
+															class="text-base text-slate-400"
+															title="Switch between JSON cards and a table layout to review your documents."
+															aria-label="More information about results view options"
+											>
                           &nbsp;🛈
                         </span>
-									</p>
-								</div>
-								<div class="flex flex-col items-stretch gap-2 text-right md:items-end">
-									<div
-													class="inline-flex overflow-hidden rounded-md border border-slate-700 self-end"
-													role="group"
-													aria-label="Select results layout"
-									>
-										<button
-														type="button"
-														class="px-3 py-1.5 text-xs font-semibold transition"
-														:class="resultsViewMode === 'cards' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
-														:aria-pressed="resultsViewMode === 'cards'"
-														@click="selectResultsView('cards')"
-										>
-											JSON cards
-										</button>
-										<button
-														type="button"
-														class="border-l border-slate-700 px-3 py-1.5 text-xs font-semibold transition"
-														:class="resultsViewMode === 'table' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
-														:aria-pressed="resultsViewMode === 'table'"
-														@click="selectResultsView('table')"
-										>
-											Table view
-										</button>
+										</p>
 									</div>
-									<div class="flex flex-wrap items-center justify-end gap-2">
-										<button
-														type="button"
-														class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-														:disabled="exportState.running || queryRows.length === 0"
-														@click="exportResults"
-														title="Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections."
+									<div class="flex flex-col items-stretch gap-2 text-right md:items-end">
+										<div
+														class="inline-flex overflow-hidden rounded-md border border-slate-700 self-end"
+														role="group"
+														aria-label="Select results layout"
 										>
-											{{ exportState.running ? 'Exporting…' : 'Export JSONL' }}
-										</button>
+											<button
+															type="button"
+															class="px-3 py-1.5 text-xs font-semibold transition"
+															:class="resultsViewMode === 'cards' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+															:aria-pressed="resultsViewMode === 'cards'"
+															@click="selectResultsView('cards')"
+											>
+												JSON cards
+											</button>
+											<button
+															type="button"
+															class="border-l border-slate-700 px-3 py-1.5 text-xs font-semibold transition"
+															:class="resultsViewMode === 'table' ? 'bg-slate-800 text-slate-100' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+															:aria-pressed="resultsViewMode === 'table'"
+															@click="selectResultsView('table')"
+											>
+												Table view
+											</button>
+										</div>
+										<div class="flex flex-wrap items-center justify-end gap-2">
+											<button
+															type="button"
+															class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+															:disabled="exportState.running || queryRows.length === 0"
+															@click="exportResults"
+															title="Large exports may take time and significant browser memory. A backend endpoint that streams compressed archives would help when exporting million-document collections."
+											>
+												{{ exportState.running ? 'Exporting…' : 'Export JSONL' }}
+											</button>
+										</div>
+										<p v-if="exportState.error" class="text-xs text-rose-400">{{ exportState.error }}</p>
+										<p v-else-if="exportState.progress" class="text-xs text-slate-400">{{ exportState.progress }}</p>
 									</div>
-									<p v-if="exportState.error" class="text-xs text-rose-400">{{ exportState.error }}</p>
-									<p v-else-if="exportState.progress" class="text-xs text-slate-400">{{ exportState.progress }}</p>
 								</div>
 							</div>
-						</div>
-						<div class="p-5 space-y-4">
-							<div v-if="queryLoading" class="text-sm text-slate-400">Running query…</div>
-							<div v-else-if="queryError" class="text-sm text-rose-400">{{ queryError }}</div>
-							<div v-else-if="queryRows.length === 0" class="text-sm text-slate-400">No documents found.</div>
-							<div v-else class="space-y-5">
-								<div class="flex flex-col items-center gap-2">
-									<div class="inline-flex items-stretch overflow-hidden rounded-md border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-200">
-										<button
-														type="button"
-														class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-r border-slate-700"
-														:disabled="disablePrev"
-														@click="prevPage"
-										>
-											Previous
-										</button>
-										<div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
-											<span class="text-[10px] uppercase tracking-wide text-slate-400">skip</span>
-											<input
-															v-model.number="skip"
-															type="number"
-															min="0"
-															class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-															@change="commitSkip"
-															@keyup.enter="commitSkip"
+							<div class="p-5 space-y-4">
+								<div v-if="queryLoading" class="text-sm text-slate-400">Running query…</div>
+								<div v-else-if="queryError" class="text-sm text-rose-400">{{ queryError }}</div>
+								<div v-else-if="queryRows.length === 0" class="text-sm text-slate-400">No documents found.</div>
+								<div v-else class="space-y-5">
+									<div class="flex flex-col items-center gap-2">
+										<div class="inline-flex items-stretch overflow-hidden rounded-md border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-200">
+											<button
+															type="button"
+															class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-r border-slate-700"
+															:disabled="disablePrev"
+															@click="prevPage"
 											>
-										</div>
-										<div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
-											<span class="text-[10px] uppercase tracking-wide text-slate-400">limit</span>
-											<input
-															v-model.number="limit"
-															type="number"
-															min="0"
-															class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-															@change="commitLimit"
-															@keyup.enter="commitLimit"
+												Previous
+											</button>
+											<div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
+												<span class="text-[10px] uppercase tracking-wide text-slate-400">skip</span>
+												<input
+																v-model.number="skip"
+																type="number"
+																min="0"
+																class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+																@change="commitSkip"
+																@keyup.enter="commitSkip"
+												>
+											</div>
+											<div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
+												<span class="text-[10px] uppercase tracking-wide text-slate-400">limit</span>
+												<input
+																v-model.number="limit"
+																type="number"
+																min="0"
+																class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+																@change="commitLimit"
+																@keyup.enter="commitLimit"
+												>
+											</div>
+											<button
+															type="button"
+															class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-l border-slate-700"
+															:disabled="disableNext"
+															@click="nextPage"
 											>
+												Next
+											</button>
 										</div>
-										<button
-														type="button"
-														class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-l border-slate-700"
-														:disabled="disableNext"
-														@click="nextPage"
-										>
-											Next
-										</button>
+										<p class="text-[11px] text-slate-400">{{ pageInfo }}</p>
 									</div>
-									<p class="text-[11px] text-slate-400">{{ pageInfo }}</p>
-								</div>
-								<div v-if="resultsViewMode === 'cards'" class="space-y-4">
-									<div
-													v-for="(row, idx) in queryRows"
-													:key="idx"
-													class="rounded-lg border border-slate-800 bg-slate-950 p-4"
-									>
-										<div class="mb-3 flex flex-wrap items-start justify-between gap-3 text-xs text-slate-500">
-											<div class="space-y-1">
-												<p class="text-sm font-semibold text-slate-200">Document #{{ offset + idx + 1 }}</p>
-												<p v-if="documentId(row)" class="text-[11px] uppercase tracking-wide text-slate-500">ID: {{ documentId(row) }}</p>
+									<div v-if="resultsViewMode === 'cards'" class="space-y-4">
+										<div
+														v-for="(row, idx) in queryRows"
+														:key="idx"
+														class="rounded-lg border border-slate-800 bg-slate-950 p-4"
+										>
+											<div class="mb-3 flex flex-wrap items-start justify-between gap-3 text-xs text-slate-500">
+												<div class="space-y-1">
+													<p class="text-sm font-semibold text-slate-200">Document #{{ offset + idx + 1 }}</p>
+													<p v-if="documentId(row)" class="text-[11px] uppercase tracking-wide text-slate-500">ID: {{ documentId(row) }}</p>
+												</div>
+												<div class="flex flex-wrap items-center gap-2">
+													<button
+																	v-if="canEditDocument(row) && !isEditingRow(row)"
+																	type="button"
+																	class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+																	@click="openEditRow(row)"
+													>
+														Edit
+													</button>
+													<button
+																	v-if="canDeleteRow(row)"
+																	type="button"
+																	class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
+																	@click="deleteRow(row)"
+													>
+														Delete
+													</button>
+												</div>
 											</div>
-											<div class="flex flex-wrap items-center gap-2">
-												<button
-																v-if="canEditDocument(row) && !isEditingRow(row)"
-																type="button"
-																class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
-																@click="openEditRow(row)"
-												>
-													Edit
-												</button>
-												<button
-																v-if="canDeleteRow(row)"
-																type="button"
-																class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
-																@click="deleteRow(row)"
-												>
-													Delete
-												</button>
+											<div
+															v-if="isEditingRow(row) && editingDocuments[documentId(row)]"
+															class="mb-3 space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
+											>
+												<label class="block text-xs uppercase tracking-wide text-slate-400">Edit document</label>
+												<textarea
+																v-model="editingDocuments[documentId(row)].draft"
+																@input="onEditDraftInput(row)"
+																rows="10"
+																class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+												></textarea>
+												<p class="text-[11px] text-slate-500">
+													Set a field to <span class="font-mono text-slate-300">null</span> to remove it.
+												</p>
+												<div class="flex justify-end gap-2">
+													<button
+																	type="button"
+																	class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition disabled:cursor-not-allowed disabled:opacity-60"
+																	:disabled="editingDocuments[documentId(row)].saving"
+																	@click="closeEditRow(row)"
+													>
+														Cancel
+													</button>
+													<button
+																	type="button"
+																	class="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 transition disabled:cursor-not-allowed disabled:opacity-60"
+																	:disabled="editingDocuments[documentId(row)].saving"
+																	@click="saveEditRow(row)"
+													>
+														{{ editingDocuments[documentId(row)].saving ? 'Saving…' : 'Save changes' }}
+													</button>
+												</div>
+												<p v-if="editingDocuments[documentId(row)].error" class="text-sm text-rose-400">
+													{{ editingDocuments[documentId(row)].error }}
+												</p>
+												<p v-else-if="editingDocuments[documentId(row)].success" class="text-sm text-emerald-400">
+													{{ editingDocuments[documentId(row)].success }}
+												</p>
 											</div>
+											<pre class="whitespace-pre-wrap break-words text-sm text-slate-200 font-mono">{{ formatDocument(row) }}</pre>
+											<p v-if="!canEditDocument(row)" class="mt-3 text-xs text-slate-500">
+												The document must include an "id" field to enable editing or deletion.
+											</p>
+										</div>
+									</div>
+									<div v-else class="space-y-4">
+										<div class="overflow-x-auto">
+											<table class="min-w-full divide-y divide-slate-800 text-sm">
+												<thead class="bg-slate-950/40 text-slate-300">
+												<tr>
+													<th scope="col" class="px-4 py-2 text-left font-semibold">#</th>
+													<th
+																	v-for="column in tableColumns"
+																	:key="column"
+																	scope="col"
+																	class="px-4 py-2 text-left font-semibold"
+													>
+														{{ column }}
+													</th>
+													<th scope="col" class="px-4 py-2 text-left font-semibold">Actions</th>
+												</tr>
+												</thead>
+												<tbody class="divide-y divide-slate-800 text-slate-200">
+												<tr
+																v-for="(row, idx) in queryRows"
+																:key="idx"
+																class="transition hover:bg-slate-900/70"
+												>
+													<td class="px-4 py-2 align-top text-xs text-slate-400">{{ offset + idx + 1 }}</td>
+													<td
+																	v-for="column in tableColumns"
+																	:key="column"
+																	class="px-4 py-2 align-top"
+													>
+														<span class="font-mono text-xs break-words">{{ formatTableValue(row, column) }}</span>
+													</td>
+													<td class="px-4 py-2 align-top">
+														<div class="flex flex-wrap gap-2">
+															<button
+																			v-if="canEditDocument(row) && !isEditingRow(row)"
+																			type="button"
+																			class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 transition"
+																			@click="openEditRow(row)"
+															>
+																Edit
+															</button>
+															<button
+																			v-if="isEditingRow(row) && editingDocuments[documentId(row)]"
+																			type="button"
+																			class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 transition"
+																			@click="closeEditRow(row)"
+															>
+																Close editor
+															</button>
+															<button
+																			v-if="canDeleteRow(row)"
+																			type="button"
+																			class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-[11px] font-semibold text-rose-200 hover:bg-rose-600/30 transition"
+																			@click="deleteRow(row)"
+															>
+																Delete
+															</button>
+														</div>
+													</td>
+												</tr>
+												</tbody>
+											</table>
 										</div>
 										<div
-														v-if="isEditingRow(row) && editingDocuments[documentId(row)]"
-														class="mb-3 space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
+														v-for="editing in openEditingRows"
+														:key="editing.id"
+														class="space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
 										>
-											<label class="block text-xs uppercase tracking-wide text-slate-400">Edit document</label>
+											<div class="flex flex-wrap items-center justify-between gap-2">
+												<p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Edit document {{ editing.id }}</p>
+												<p class="text-[11px] text-slate-500">Document #{{ editing.position }}</p>
+											</div>
 											<textarea
-															v-model="editingDocuments[documentId(row)].draft"
-															@input="onEditDraftInput(row)"
+															v-model="editing.state.draft"
+															@input="onEditDraftInput(editing.row)"
 															rows="10"
 															class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
 											></textarea>
@@ -430,717 +628,516 @@
 												<button
 																type="button"
 																class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition disabled:cursor-not-allowed disabled:opacity-60"
-																:disabled="editingDocuments[documentId(row)].saving"
-																@click="closeEditRow(row)"
+																:disabled="editing.state.saving"
+																@click="closeEditRow(editing.row)"
 												>
 													Cancel
 												</button>
 												<button
 																type="button"
 																class="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 transition disabled:cursor-not-allowed disabled:opacity-60"
-																:disabled="editingDocuments[documentId(row)].saving"
-																@click="saveEditRow(row)"
+																:disabled="editing.state.saving"
+																@click="saveEditRow(editing.row)"
 												>
-													{{ editingDocuments[documentId(row)].saving ? 'Saving…' : 'Save changes' }}
+													{{ editing.state.saving ? 'Saving…' : 'Save changes' }}
 												</button>
 											</div>
-											<p v-if="editingDocuments[documentId(row)].error" class="text-sm text-rose-400">
-												{{ editingDocuments[documentId(row)].error }}
+											<p v-if="editing.state.error" class="text-sm text-rose-400">
+												{{ editing.state.error }}
 											</p>
-											<p v-else-if="editingDocuments[documentId(row)].success" class="text-sm text-emerald-400">
-												{{ editingDocuments[documentId(row)].success }}
+											<p v-else-if="editing.state.success" class="text-sm text-emerald-400">
+												{{ editing.state.success }}
 											</p>
 										</div>
-										<pre class="whitespace-pre-wrap break-words text-sm text-slate-200 font-mono">{{ formatDocument(row) }}</pre>
-										<p v-if="!canEditDocument(row)" class="mt-3 text-xs text-slate-500">
-											The document must include an "id" field to enable editing or deletion.
-										</p>
 									</div>
-								</div>
-								<div v-else class="space-y-4">
-									<div class="overflow-x-auto">
-										<table class="min-w-full divide-y divide-slate-800 text-sm">
-											<thead class="bg-slate-950/40 text-slate-300">
-											<tr>
-												<th scope="col" class="px-4 py-2 text-left font-semibold">#</th>
-												<th
-																v-for="column in tableColumns"
-																:key="column"
-																scope="col"
-																class="px-4 py-2 text-left font-semibold"
-												>
-													{{ column }}
-												</th>
-												<th scope="col" class="px-4 py-2 text-left font-semibold">Actions</th>
-											</tr>
-											</thead>
-											<tbody class="divide-y divide-slate-800 text-slate-200">
-											<tr
-															v-for="(row, idx) in queryRows"
-															:key="idx"
-															class="transition hover:bg-slate-900/70"
-											>
-												<td class="px-4 py-2 align-top text-xs text-slate-400">{{ offset + idx + 1 }}</td>
-												<td
-																v-for="column in tableColumns"
-																:key="column"
-																class="px-4 py-2 align-top"
-												>
-													<span class="font-mono text-xs break-words">{{ formatTableValue(row, column) }}</span>
-												</td>
-												<td class="px-4 py-2 align-top">
-													<div class="flex flex-wrap gap-2">
-														<button
-																		v-if="canEditDocument(row) && !isEditingRow(row)"
-																		type="button"
-																		class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 transition"
-																		@click="openEditRow(row)"
-														>
-															Edit
-														</button>
-														<button
-																		v-if="isEditingRow(row) && editingDocuments[documentId(row)]"
-																		type="button"
-																		class="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 transition"
-																		@click="closeEditRow(row)"
-														>
-															Close editor
-														</button>
-														<button
-																		v-if="canDeleteRow(row)"
-																		type="button"
-																		class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-[11px] font-semibold text-rose-200 hover:bg-rose-600/30 transition"
-																		@click="deleteRow(row)"
-														>
-															Delete
-														</button>
-													</div>
-												</td>
-											</tr>
-											</tbody>
-										</table>
-									</div>
-									<div
-													v-for="editing in openEditingRows"
-													:key="editing.id"
-													class="space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
-									>
-										<div class="flex flex-wrap items-center justify-between gap-2">
-											<p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Edit document {{ editing.id }}</p>
-											<p class="text-[11px] text-slate-500">Document #{{ editing.position }}</p>
-										</div>
-										<textarea
-														v-model="editing.state.draft"
-														@input="onEditDraftInput(editing.row)"
-														rows="10"
-														class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-										></textarea>
-										<p class="text-[11px] text-slate-500">
-											Set a field to <span class="font-mono text-slate-300">null</span> to remove it.
-										</p>
-										<div class="flex justify-end gap-2">
+									<div class="flex flex-col items-center gap-2">
+										<div class="inline-flex items-stretch overflow-hidden rounded-md border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-200">
 											<button
 															type="button"
-															class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition disabled:cursor-not-allowed disabled:opacity-60"
-															:disabled="editing.state.saving"
-															@click="closeEditRow(editing.row)"
+															class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-r border-slate-700"
+															:disabled="disablePrev"
+															@click="prevPage"
 											>
-												Cancel
+												Previous
 											</button>
+											<div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
+												<span class="text-[10px] uppercase tracking-wide text-slate-400">skip</span>
+												<input
+																v-model.number="skip"
+																type="number"
+																min="0"
+																class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+																@change="commitSkip"
+																@keyup.enter="commitSkip"
+												>
+											</div>
+											<div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
+												<span class="text-[10px] uppercase tracking-wide text-slate-400">limit</span>
+												<input
+																v-model.number="limit"
+																type="number"
+																min="0"
+																class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+																@change="commitLimit"
+																@keyup.enter="commitLimit"
+												>
+											</div>
 											<button
 															type="button"
-															class="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 transition disabled:cursor-not-allowed disabled:opacity-60"
-															:disabled="editing.state.saving"
-															@click="saveEditRow(editing.row)"
+															class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-l border-slate-700"
+															:disabled="disableNext"
+															@click="nextPage"
 											>
-												{{ editing.state.saving ? 'Saving…' : 'Save changes' }}
+												Next
 											</button>
 										</div>
-										<p v-if="editing.state.error" class="text-sm text-rose-400">
-											{{ editing.state.error }}
-										</p>
-										<p v-else-if="editing.state.success" class="text-sm text-emerald-400">
-											{{ editing.state.success }}
-										</p>
+										<p class="text-[11px] text-slate-400">{{ pageInfo }}</p>
 									</div>
-								</div>
-								<div class="flex flex-col items-center gap-2">
-									<div class="inline-flex items-stretch overflow-hidden rounded-md border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-200">
-										<button
-														type="button"
-														class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-r border-slate-700"
-														:disabled="disablePrev"
-														@click="prevPage"
-										>
-											Previous
-										</button>
-										<div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
-											<span class="text-[10px] uppercase tracking-wide text-slate-400">skip</span>
-											<input
-															v-model.number="skip"
-															type="number"
-															min="0"
-															class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-															@change="commitSkip"
-															@keyup.enter="commitSkip"
-											>
-										</div>
-										<div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
-											<span class="text-[10px] uppercase tracking-wide text-slate-400">limit</span>
-											<input
-															v-model.number="limit"
-															type="number"
-															min="0"
-															class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-															@change="commitLimit"
-															@keyup.enter="commitLimit"
-											>
-										</div>
-										<button
-														type="button"
-														class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-l border-slate-700"
-														:disabled="disableNext"
-														@click="nextPage"
-										>
-											Next
-										</button>
-									</div>
-									<p class="text-[11px] text-slate-400">{{ pageInfo }}</p>
 								</div>
 							</div>
 						</div>
 					</div>
-				</div>
 
-				<div class="space-y-6">
-					<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-						<button
-										type="button"
-										class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
-										@click="toggleCard('metrics')"
-										:aria-expanded="collapsibleCards.metrics"
-										aria-controls="card-content-metrics"
-						>
-							<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection metrics</h3>
-							<span class="text-lg leading-none text-slate-400">
+					<div class="space-y-6">
+						<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
+							<button
+											type="button"
+											class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+											@click="toggleCard('metrics')"
+											:aria-expanded="collapsibleCards.metrics"
+											aria-controls="card-content-metrics"
+							>
+								<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection metrics</h3>
+								<span class="text-lg leading-none text-slate-400">
                     {{ collapsibleCards.metrics ? '−' : '+' }}
                   </span>
-						</button>
-						<div
-										v-if="collapsibleCards.metrics"
-										id="card-content-metrics"
-										class="space-y-4 border-t border-slate-800/80 px-5 py-4"
-						>
-							<div class="flex items-start justify-between gap-3">
-								<p class="text-xs text-slate-400">Estimated storage usage returned by the size endpoint.</p>
-								<button
-												type="button"
-												class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-												:disabled="!selectedCollection || sizeMetrics.loading"
-												@click="refreshSizeMetrics"
-								>
-									{{ sizeMetrics.loading ? 'Refreshing…' : 'Refresh' }}
-								</button>
-							</div>
-							<p v-if="!selectedCollection" class="text-sm text-slate-400">
-								Select a collection to inspect its metrics.
-							</p>
-							<p v-else-if="sizeMetrics.loading" class="text-sm text-slate-400">Loading metrics…</p>
-							<p v-else-if="sizeMetrics.error" class="text-sm text-rose-400">{{ sizeMetrics.error }}</p>
-							<div v-else-if="sizeMetricsEntries.length > 0" class="space-y-3">
-								<p v-if="sizeMetricsUpdatedLabel" class="text-[11px] uppercase tracking-wide text-slate-500">
-									Updated at {{ sizeMetricsUpdatedLabel }}
-								</p>
-								<dl class="divide-y divide-slate-800 rounded-lg border border-slate-800/70 bg-slate-950/60">
-									<div
-													v-for="entry in sizeMetricsEntries"
-													:key="entry.key"
-													class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+							</button>
+							<div
+											v-if="collapsibleCards.metrics"
+											id="card-content-metrics"
+											class="space-y-4 border-t border-slate-800/80 px-5 py-4"
+							>
+								<div class="flex items-start justify-between gap-3">
+									<p class="text-xs text-slate-400">Estimated storage usage returned by the size endpoint.</p>
+									<button
+													type="button"
+													class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+													:disabled="!selectedCollection || sizeMetrics.loading"
+													@click="refreshSizeMetrics"
 									>
-										<dt class="text-slate-300">{{ entry.label }}</dt>
-										<dd class="font-mono text-slate-100" :title="entry.tooltip">{{ entry.value }}</dd>
-									</div>
-								</dl>
+										{{ sizeMetrics.loading ? 'Refreshing…' : 'Refresh' }}
+									</button>
+								</div>
+								<p v-if="!selectedCollection" class="text-sm text-slate-400">
+									Select a collection to inspect its metrics.
+								</p>
+								<p v-else-if="sizeMetrics.loading" class="text-sm text-slate-400">Loading metrics…</p>
+								<p v-else-if="sizeMetrics.error" class="text-sm text-rose-400">{{ sizeMetrics.error }}</p>
+								<div v-else-if="sizeMetricsEntries.length > 0" class="space-y-3">
+									<p v-if="sizeMetricsUpdatedLabel" class="text-[11px] uppercase tracking-wide text-slate-500">
+										Updated at {{ sizeMetricsUpdatedLabel }}
+									</p>
+									<dl class="divide-y divide-slate-800 rounded-lg border border-slate-800/70 bg-slate-950/60">
+										<div
+														v-for="entry in sizeMetricsEntries"
+														:key="entry.key"
+														class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+										>
+											<dt class="text-slate-300">{{ entry.label }}</dt>
+											<dd class="font-mono text-slate-100" :title="entry.tooltip">{{ entry.value }}</dd>
+										</div>
+									</dl>
+								</div>
+								<p v-else-if="sizeMetrics.data" class="text-sm text-slate-400">No metrics reported for this collection.</p>
+								<p v-else class="text-sm text-slate-400">Metrics will appear after refreshing.</p>
 							</div>
-							<p v-else-if="sizeMetrics.data" class="text-sm text-slate-400">No metrics reported for this collection.</p>
-							<p v-else class="text-sm text-slate-400">Metrics will appear after refreshing.</p>
 						</div>
-					</div>
 
-					<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-						<button
-										type="button"
-										class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
-										@click="toggleCard('defaults')"
-										:aria-expanded="collapsibleCards.defaults"
-										aria-controls="card-content-defaults"
-						>
-							<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection defaults</h3>
-							<span class="text-lg leading-none text-slate-400">
+						<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
+							<button
+											type="button"
+											class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+											@click="toggleCard('defaults')"
+											:aria-expanded="collapsibleCards.defaults"
+											aria-controls="card-content-defaults"
+							>
+								<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection defaults</h3>
+								<span class="text-lg leading-none text-slate-400">
                     {{ collapsibleCards.defaults ? '−' : '+' }}
                   </span>
-						</button>
-						<div
-										v-if="collapsibleCards.defaults"
-										id="card-content-defaults"
-										class="space-y-4 border-t border-slate-800/80 px-5 py-4"
-						>
-							<div class="flex items-start justify-between gap-2">
-								<p class="text-xs text-slate-400">
-									Documents missing fields will receive these values when inserted.
-								</p>
-								<button
-												type="button"
-												class="text-base leading-none text-slate-400 transition hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/70 rounded-full"
-												@click="defaultsHelpOpen = !defaultsHelpOpen"
-												:aria-expanded="defaultsHelpOpen"
-												aria-label="Toggle special values help"
-								>
-									<span aria-hidden="true">🛈</span>
-								</button>
-							</div>
+							</button>
 							<div
-											v-if="defaultsHelpOpen"
-											class="space-y-2 rounded-lg border border-slate-800/70 bg-slate-950/60 p-3 text-[11px] text-slate-400"
+											v-if="collapsibleCards.defaults"
+											id="card-content-defaults"
+											class="space-y-4 border-t border-slate-800/80 px-5 py-4"
 							>
-								<p class="text-xs font-semibold uppercase tracking-wide text-slate-300">Special values</p>
-								<ul class="list-disc space-y-1 pl-4">
-									<li>
-										<span class="font-mono text-slate-200">uuid()</span>
-										Generate a unique identifier.
-									</li>
-									<li>
-										<span class="font-mono text-slate-200">unixnano()</span>
-										Insert the current timestamp in nanoseconds.
-									</li>
-									<li>
-										<span class="font-mono text-slate-200">auto()</span>
-										Assign an auto-incrementing number within the collection.
-									</li>
-								</ul>
-							</div>
-							<textarea
-											v-model="defaultsForm.draft"
-											rows="8"
-											class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-											placeholder='{"verified": false}'
-											:disabled="!selectedCollection"
-							></textarea>
-							<div class="flex justify-end gap-2">
-								<button
-												type="button"
-												class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-												:disabled="!selectedCollection || defaultsForm.saving || defaultsForm.draft === defaultsForm.original"
-												@click="resetDefaultsForm"
+								<div class="flex items-start justify-between gap-2">
+									<p class="text-xs text-slate-400">
+										Documents missing fields will receive these values when inserted.
+									</p>
+									<button
+													type="button"
+													class="text-base leading-none text-slate-400 transition hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/70 rounded-full"
+													@click="defaultsHelpOpen = !defaultsHelpOpen"
+													:aria-expanded="defaultsHelpOpen"
+													aria-label="Toggle special values help"
+									>
+										<span aria-hidden="true">🛈</span>
+									</button>
+								</div>
+								<div
+												v-if="defaultsHelpOpen"
+												class="space-y-2 rounded-lg border border-slate-800/70 bg-slate-950/60 p-3 text-[11px] text-slate-400"
 								>
-									Reset changes
-								</button>
-								<button
-												type="button"
-												class="rounded-md bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
-												:disabled="!selectedCollection || defaultsForm.saving"
-												@click="saveDefaults"
-								>
-									{{ defaultsForm.saving ? 'Saving…' : 'Save defaults' }}
-								</button>
+									<p class="text-xs font-semibold uppercase tracking-wide text-slate-300">Special values</p>
+									<ul class="list-disc space-y-1 pl-4">
+										<li>
+											<span class="font-mono text-slate-200">uuid()</span>
+											Generate a unique identifier.
+										</li>
+										<li>
+											<span class="font-mono text-slate-200">unixnano()</span>
+											Insert the current timestamp in nanoseconds.
+										</li>
+										<li>
+											<span class="font-mono text-slate-200">auto()</span>
+											Assign an auto-incrementing number within the collection.
+										</li>
+									</ul>
+								</div>
+								<textarea
+												v-model="defaultsForm.draft"
+												rows="8"
+												class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+												placeholder='{"verified": false}'
+												:disabled="!selectedCollection"
+								></textarea>
+								<div class="flex justify-end gap-2">
+									<button
+													type="button"
+													class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+													:disabled="!selectedCollection || defaultsForm.saving || defaultsForm.draft === defaultsForm.original"
+													@click="resetDefaultsForm"
+									>
+										Reset changes
+									</button>
+									<button
+													type="button"
+													class="rounded-md bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+													:disabled="!selectedCollection || defaultsForm.saving"
+													@click="saveDefaults"
+									>
+										{{ defaultsForm.saving ? 'Saving…' : 'Save defaults' }}
+									</button>
+								</div>
+								<p v-if="defaultsForm.error" class="text-sm text-rose-400">{{ defaultsForm.error }}</p>
+								<p v-else-if="defaultsForm.success" class="text-sm text-emerald-400">{{ defaultsForm.success }}</p>
 							</div>
-							<p v-if="defaultsForm.error" class="text-sm text-rose-400">{{ defaultsForm.error }}</p>
-							<p v-else-if="defaultsForm.success" class="text-sm text-emerald-400">{{ defaultsForm.success }}</p>
 						</div>
-					</div>
 
-					<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-						<button
-										type="button"
-										class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
-										@click="toggleCard('insert')"
-										:aria-expanded="collapsibleCards.insert"
-										aria-controls="card-content-insert"
-						>
-							<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Insert document</h3>
-							<span class="text-lg leading-none text-slate-400">
+						<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
+							<button
+											type="button"
+											class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+											@click="toggleCard('insert')"
+											:aria-expanded="collapsibleCards.insert"
+											aria-controls="card-content-insert"
+							>
+								<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Insert document</h3>
+								<span class="text-lg leading-none text-slate-400">
                     {{ collapsibleCards.insert ? '−' : '+' }}
                   </span>
-						</button>
-						<div
-										v-if="collapsibleCards.insert"
-										id="card-content-insert"
-										class="space-y-4 border-t border-slate-800/80 px-5 py-4"
-						>
+							</button>
+							<div
+											v-if="collapsibleCards.insert"
+											id="card-content-insert"
+											class="space-y-4 border-t border-slate-800/80 px-5 py-4"
+							>
                   <textarea
 													v-model="insertForm.payload"
 													rows="8"
 													class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
 													placeholder='{"name": "Ada"}'
 									></textarea>
-							<div class="flex justify-end">
-								<button
-												type="button"
-												class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 transition"
-												@click="insertDocument"
-								>
-									Insert
-								</button>
+								<div class="flex justify-end">
+									<button
+													type="button"
+													class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 transition"
+													@click="insertDocument"
+									>
+										Insert
+									</button>
+								</div>
+								<p v-if="insertForm.error" class="text-sm text-rose-400">{{ insertForm.error }}</p>
+								<p v-else-if="insertForm.success" class="text-sm text-emerald-400">{{ insertForm.success }}</p>
 							</div>
-							<p v-if="insertForm.error" class="text-sm text-rose-400">{{ insertForm.error }}</p>
-							<p v-else-if="insertForm.success" class="text-sm text-emerald-400">{{ insertForm.success }}</p>
 						</div>
-					</div>
 
-					<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-						<button
-										type="button"
-										class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
-										@click="toggleCard('importCsv')"
-										:aria-expanded="collapsibleCards.importCsv"
-										aria-controls="card-content-import"
-						>
-							<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Import CSV</h3>
-							<span class="text-lg leading-none text-slate-400">
+						<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
+							<button
+											type="button"
+											class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+											@click="toggleCard('importCsv')"
+											:aria-expanded="collapsibleCards.importCsv"
+											aria-controls="card-content-import"
+							>
+								<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Import CSV</h3>
+								<span class="text-lg leading-none text-slate-400">
                     {{ collapsibleCards.importCsv ? '−' : '+' }}
                   </span>
-						</button>
-						<div
-										v-if="collapsibleCards.importCsv"
-										id="card-content-import"
-										class="space-y-4 border-t border-slate-800/80 px-5 py-4"
-						>
-							<p class="text-xs text-slate-400">
-								Upload a CSV file to insert multiple documents at once. The first row should contain the field names.
-							</p>
-							<div class="grid gap-3 md:grid-cols-2">
-								<div class="md:col-span-2">
-									<label for="csv-file" class="block text-xs uppercase tracking-wide text-slate-400">CSV file</label>
-									<input
-													:key="csvImportForm.inputKey"
-													id="csv-file"
-													type="file"
-													accept=".csv,text/csv"
-													class="mt-1 block w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 file:mr-4 file:rounded-md file:border-0 file:bg-slate-800 file:px-4 file:py-2 file:text-sm file:font-medium file:text-slate-100 hover:file:bg-slate-700"
-													@change="onCsvFileChange"
-									>
+							</button>
+							<div
+											v-if="collapsibleCards.importCsv"
+											id="card-content-import"
+											class="space-y-4 border-t border-slate-800/80 px-5 py-4"
+							>
+								<p class="text-xs text-slate-400">
+									Upload a CSV file to insert multiple documents at once. The first row should contain the field names.
+								</p>
+								<div class="grid gap-3 md:grid-cols-2">
+									<div class="md:col-span-2">
+										<label for="csv-file" class="block text-xs uppercase tracking-wide text-slate-400">CSV file</label>
+										<input
+														:key="csvImportForm.inputKey"
+														id="csv-file"
+														type="file"
+														accept=".csv,text/csv"
+														class="mt-1 block w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 file:mr-4 file:rounded-md file:border-0 file:bg-slate-800 file:px-4 file:py-2 file:text-sm file:font-medium file:text-slate-100 hover:file:bg-slate-700"
+														@change="onCsvFileChange"
+										>
+									</div>
+									<div>
+										<label for="csv-delimiter" class="block text-xs uppercase tracking-wide text-slate-400">Delimiter</label>
+										<select
+														id="csv-delimiter"
+														v-model="csvImportForm.delimiter"
+														class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+										>
+											<option value=",">Comma (,)</option>
+											<option value=";">Semicolon (;)</option>
+											<option value="\t">Tab</option>
+											<option value="|">Pipe (|)</option>
+										</select>
+									</div>
+									<div>
+										<label for="csv-trim" class="block text-xs uppercase tracking-wide text-slate-400">Trim whitespace</label>
+										<select
+														id="csv-trim"
+														v-model="csvImportForm.trimValues"
+														class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+										>
+											<option :value="true">Yes</option>
+											<option :value="false">No</option>
+										</select>
+									</div>
 								</div>
-								<div>
-									<label for="csv-delimiter" class="block text-xs uppercase tracking-wide text-slate-400">Delimiter</label>
-									<select
-													id="csv-delimiter"
-													v-model="csvImportForm.delimiter"
-													class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+								<p v-if="csvImportForm.fileName" class="text-xs text-slate-500">Selected file: {{ csvImportForm.fileName }}</p>
+								<div class="flex justify-end gap-2">
+									<button
+													type="button"
+													class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+													:disabled="csvImportForm.importing"
+													@click="resetCsvImportForm"
 									>
-										<option value=",">Comma (,)</option>
-										<option value=";">Semicolon (;)</option>
-										<option value="\t">Tab</option>
-										<option value="|">Pipe (|)</option>
-									</select>
-								</div>
-								<div>
-									<label for="csv-trim" class="block text-xs uppercase tracking-wide text-slate-400">Trim whitespace</label>
-									<select
-													id="csv-trim"
-													v-model="csvImportForm.trimValues"
-													class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+										Clear
+									</button>
+									<button
+													type="button"
+													class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+													:disabled="!csvImportForm.file || csvImportForm.importing"
+													@click="importCsv"
 									>
-										<option :value="true">Yes</option>
-										<option :value="false">No</option>
-									</select>
+										{{ csvImportForm.importing ? 'Importing…' : 'Import CSV' }}
+									</button>
 								</div>
+								<p v-if="csvImportForm.error" class="text-sm text-rose-400">{{ csvImportForm.error }}</p>
+								<p v-else-if="csvImportForm.success" class="text-sm text-emerald-400">{{ csvImportForm.success }}</p>
+								<p v-else-if="csvImportForm.progress" class="text-sm text-slate-400">{{ csvImportForm.progress }}</p>
 							</div>
-							<p v-if="csvImportForm.fileName" class="text-xs text-slate-500">Selected file: {{ csvImportForm.fileName }}</p>
-							<div class="flex justify-end gap-2">
-								<button
-												type="button"
-												class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-												:disabled="csvImportForm.importing"
-												@click="resetCsvImportForm"
-								>
-									Clear
-								</button>
-								<button
-												type="button"
-												class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
-												:disabled="!csvImportForm.file || csvImportForm.importing"
-												@click="importCsv"
-								>
-									{{ csvImportForm.importing ? 'Importing…' : 'Import CSV' }}
-								</button>
-							</div>
-							<p v-if="csvImportForm.error" class="text-sm text-rose-400">{{ csvImportForm.error }}</p>
-							<p v-else-if="csvImportForm.success" class="text-sm text-emerald-400">{{ csvImportForm.success }}</p>
-							<p v-else-if="csvImportForm.progress" class="text-sm text-slate-400">{{ csvImportForm.progress }}</p>
 						</div>
-					</div>
 
-					<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
-						<button
-										type="button"
-										class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
-										@click="toggleCard('indexes')"
-										:aria-expanded="collapsibleCards.indexes"
-										aria-controls="card-content-indexes"
-						>
-							<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Indexes</h3>
-							<span class="text-lg leading-none text-slate-400">
+						<div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
+							<button
+											type="button"
+											class="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+											@click="toggleCard('indexes')"
+											:aria-expanded="collapsibleCards.indexes"
+											aria-controls="card-content-indexes"
+							>
+								<h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Indexes</h3>
+								<span class="text-lg leading-none text-slate-400">
                     {{ collapsibleCards.indexes ? '−' : '+' }}
                   </span>
-						</button>
-						<div
-										v-if="collapsibleCards.indexes"
-										id="card-content-indexes"
-										class="space-y-4 border-t border-slate-800/80 px-5 py-4"
-						>
-							<div class="flex justify-end">
-								<button
-												type="button"
-												class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
-												@click="toggleIndexForm"
-								>
-									{{ indexForm.open ? 'Cancel' : 'New index' }}
-								</button>
-							</div>
-							<p v-if="indexMessages.error" class="text-sm text-rose-400">{{ indexMessages.error }}</p>
-							<p v-else-if="indexMessages.success" class="text-sm text-emerald-400">{{ indexMessages.success }}</p>
-							<form
-											v-if="indexForm.open"
-											class="space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
-											@submit.prevent="createIndex"
+							</button>
+							<div
+											v-if="collapsibleCards.indexes"
+											id="card-content-indexes"
+											class="space-y-4 border-t border-slate-800/80 px-5 py-4"
 							>
-								<div>
-									<label for="index-name" class="block text-xs uppercase tracking-wide text-slate-400">Name</label>
-									<input
-													id="index-name"
-													v-model="indexForm.name"
-													type="text"
-													required
-													class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-													placeholder="by_email"
-									>
-								</div>
-								<div>
-									<label for="index-type" class="block text-xs uppercase tracking-wide text-slate-400">Type</label>
-									<select
-													id="index-type"
-													v-model="indexForm.type"
-													class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-									>
-										<option value="map">Map</option>
-										<option value="btree">B-Tree</option>
-									</select>
-								</div>
-								<div v-if="indexForm.type === 'map'" class="space-y-2">
-									<div>
-										<label for="index-field" class="block text-xs uppercase tracking-wide text-slate-400">Field</label>
-										<input
-														id="index-field"
-														v-model="indexForm.field"
-														type="text"
-														required
-														class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-														placeholder="email"
-										>
-									</div>
-									<label class="inline-flex items-center gap-2 text-xs text-slate-300">
-										<input type="checkbox" v-model="indexForm.sparse" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
-										Sparse (ignore documents without the field)
-									</label>
-								</div>
-								<div v-else class="space-y-2">
-									<div>
-										<label for="index-fields" class="block text-xs uppercase tracking-wide text-slate-400">Fields</label>
-										<input
-														id="index-fields"
-														v-model="indexForm.fieldsText"
-														type="text"
-														required
-														class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-														placeholder="lastName, firstName"
-										>
-										<p class="mt-1 text-[11px] text-slate-500">
-											Separate fields with commas. Prefix with "-" for descending order.
-										</p>
-									</div>
-									<label class="inline-flex items-center gap-2 text-xs text-slate-300">
-										<input type="checkbox" v-model="indexForm.sparse" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
-										Sparse (ignore documents missing the fields)
-									</label>
-									<label class="inline-flex items-center gap-2 text-xs text-slate-300">
-										<input type="checkbox" v-model="indexForm.unique" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
-										Unique (reject duplicate combinations)
-									</label>
-								</div>
-								<div class="flex justify-end gap-2">
+								<div class="flex justify-end">
 									<button
 													type="button"
 													class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
 													@click="toggleIndexForm"
 									>
-										Cancel
-									</button>
-									<button
-													type="submit"
-													class="rounded-md bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-500 transition disabled:cursor-not-allowed disabled:opacity-60"
-													:disabled="indexForm.submitting"
-									>
-										{{ indexForm.submitting ? 'Creating…' : 'Create index' }}
+										{{ indexForm.open ? 'Cancel' : 'New index' }}
 									</button>
 								</div>
-							</form>
-							<div v-if="indexesLoading" class="text-sm text-slate-400">Loading indexes…</div>
-							<div v-else-if="indexes.length === 0" class="text-sm text-slate-400">This collection has no indexes yet.</div>
-							<ul v-else class="space-y-3 text-sm text-slate-300">
-								<li
-												v-for="index in indexes"
-												:key="index.name"
-												class="rounded-lg border border-slate-800 bg-slate-950 p-3"
+								<p v-if="indexMessages.error" class="text-sm text-rose-400">{{ indexMessages.error }}</p>
+								<p v-else-if="indexMessages.success" class="text-sm text-emerald-400">{{ indexMessages.success }}</p>
+								<form
+												v-if="indexForm.open"
+												class="space-y-3 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4"
+												@submit.prevent="createIndex"
 								>
-									<div class="flex items-start justify-between gap-3">
-										<div class="space-y-2">
-											<div class="flex items-center gap-2 text-slate-200">
-												<span class="font-semibold">{{ index.name }}</span>
-												<span class="rounded-full border border-slate-700/80 bg-slate-900 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-400">
-                              {{ index.type === 'btree' ? 'B-Tree' : 'Map' }}
-                            </span>
-											</div>
-											<p v-if="index.type === 'map'" class="text-xs text-slate-400">Field: {{ index.field }}</p>
-											<p v-else-if="index.type === 'btree'" class="text-xs text-slate-400">Fields: {{ Array.isArray(index.fields) ? index.fields.join(', ') : '' }}</p>
-											<div class="flex flex-wrap gap-2 text-[11px] uppercase tracking-wide text-slate-400">
-												<span v-if="index.unique" class="rounded bg-slate-800 px-2 py-0.5 text-emerald-300/90">Unique</span>
-												<span v-if="index.sparse" class="rounded bg-slate-800 px-2 py-0.5 text-slate-200/80">Sparse</span>
-											</div>
+									<div>
+										<label for="index-name" class="block text-xs uppercase tracking-wide text-slate-400">Name</label>
+										<input
+														id="index-name"
+														v-model="indexForm.name"
+														type="text"
+														required
+														class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+														placeholder="by_email"
+										>
+									</div>
+									<div>
+										<label for="index-type" class="block text-xs uppercase tracking-wide text-slate-400">Type</label>
+										<select
+														id="index-type"
+														v-model="indexForm.type"
+														class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+										>
+											<option value="map">Map</option>
+											<option value="btree">B-Tree</option>
+										</select>
+									</div>
+									<div v-if="indexForm.type === 'map'" class="space-y-2">
+										<div>
+											<label for="index-field" class="block text-xs uppercase tracking-wide text-slate-400">Field</label>
+											<input
+															id="index-field"
+															v-model="indexForm.field"
+															type="text"
+															required
+															class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+															placeholder="email"
+											>
 										</div>
+										<label class="inline-flex items-center gap-2 text-xs text-slate-300">
+											<input type="checkbox" v-model="indexForm.sparse" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
+											Sparse (ignore documents without the field)
+										</label>
+									</div>
+									<div v-else class="space-y-2">
+										<div>
+											<label for="index-fields" class="block text-xs uppercase tracking-wide text-slate-400">Fields</label>
+											<input
+															id="index-fields"
+															v-model="indexForm.fieldsText"
+															type="text"
+															required
+															class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+															placeholder="lastName, firstName"
+											>
+											<p class="mt-1 text-[11px] text-slate-500">
+												Separate fields with commas. Prefix with "-" for descending order.
+											</p>
+										</div>
+										<label class="inline-flex items-center gap-2 text-xs text-slate-300">
+											<input type="checkbox" v-model="indexForm.sparse" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
+											Sparse (ignore documents missing the fields)
+										</label>
+										<label class="inline-flex items-center gap-2 text-xs text-slate-300">
+											<input type="checkbox" v-model="indexForm.unique" class="h-4 w-4 rounded border-slate-700 bg-slate-900">
+											Unique (reject duplicate combinations)
+										</label>
+									</div>
+									<div class="flex justify-end gap-2">
 										<button
 														type="button"
-														class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
-														@click="removeIndex(index)"
+														class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+														@click="toggleIndexForm"
 										>
-											Delete
+											Cancel
+										</button>
+										<button
+														type="submit"
+														class="rounded-md bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-500 transition disabled:cursor-not-allowed disabled:opacity-60"
+														:disabled="indexForm.submitting"
+										>
+											{{ indexForm.submitting ? 'Creating…' : 'Create index' }}
 										</button>
 									</div>
-								</li>
-							</ul>
+								</form>
+								<div v-if="indexesLoading" class="text-sm text-slate-400">Loading indexes…</div>
+								<div v-else-if="indexes.length === 0" class="text-sm text-slate-400">This collection has no indexes yet.</div>
+								<ul v-else class="space-y-3 text-sm text-slate-300">
+									<li
+													v-for="index in indexes"
+													:key="index.name"
+													class="rounded-lg border border-slate-800 bg-slate-950 p-3"
+									>
+										<div class="flex items-start justify-between gap-3">
+											<div class="space-y-2">
+												<div class="flex items-center gap-2 text-slate-200">
+													<span class="font-semibold">{{ index.name }}</span>
+													<span class="rounded-full border border-slate-700/80 bg-slate-900 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-400">
+                              {{ index.type === 'btree' ? 'B-Tree' : 'Map' }}
+                            </span>
+												</div>
+												<p v-if="index.type === 'map'" class="text-xs text-slate-400">Field: {{ index.field }}</p>
+												<p v-else-if="index.type === 'btree'" class="text-xs text-slate-400">Fields: {{ Array.isArray(index.fields) ? index.fields.join(', ') : '' }}</p>
+												<div class="flex flex-wrap gap-2 text-[11px] uppercase tracking-wide text-slate-400">
+													<span v-if="index.unique" class="rounded bg-slate-800 px-2 py-0.5 text-emerald-300/90">Unique</span>
+													<span v-if="index.sparse" class="rounded bg-slate-800 px-2 py-0.5 text-slate-200/80">Sparse</span>
+												</div>
+											</div>
+											<button
+															type="button"
+															class="rounded-md border border-rose-500/40 bg-rose-600/20 px-2 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 transition"
+															@click="removeIndex(index)"
+											>
+												Delete
+											</button>
+										</div>
+									</li>
+								</ul>
+							</div>
 						</div>
-					</div>
 
-				</div>
-			</section>
-		</div>
-	</main>
-	<div
-					v-if="activityLog.length > 0"
-					class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-12 flex-col items-center justify-center sm:flex"
-					aria-hidden="false"
-	>
+					</div>
+				</section>
+			</div>
+		</main>
 		<div
-						class="pointer-events-auto flex max-h-[80vh] flex-col items-center gap-2 overflow-y-auto rounded-full bg-slate-950/85 px-3 py-4 shadow-2xl"
-						role="list"
-						aria-label="Recent requests"
+						v-if="activityLog.length > 0"
+						class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-12 flex-col items-center justify-center sm:flex"
+						aria-hidden="false"
 		>
-			<button
-							v-for="entry in activityLog"
-							:key="entry.id"
-							type="button"
-							class="activity-marker transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
-							:class="[
+			<div
+							class="pointer-events-auto flex max-h-[80vh] flex-col items-center gap-2 overflow-y-auto rounded-full bg-slate-950/85 px-3 py-4 shadow-2xl"
+							role="list"
+							aria-label="Recent requests"
+			>
+				<button
+								v-for="entry in activityLog"
+								:key="entry.id"
+								type="button"
+								class="activity-marker transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 hover:scale-125"
+								:class="[
               activityMarkerClass(entry),
               activityDetailOpen && selectedActivityEntry && selectedActivityEntry.id === entry.id ? 'activity-marker-selected' : ''
             ]"
-							:title="activityMarkerTitle(entry)"
-							:aria-label="activityMarkerTitle(entry)"
-							role="listitem"
-							@click="openActivityDetail(entry, $event)"
-			></button>
-		</div>
-	</div>
-	<div v-if="activityDetailOpen && selectedActivityEntry" class="fixed inset-0 z-50">
-		<button
-						type="button"
-						class="absolute inset-0 cursor-default bg-transparent"
-						aria-label="Close request details"
-						@click="closeActivityDetail"
-		></button>
-		<div class="pointer-events-none absolute inset-0">
-			<div
-							ref="activityDetailCard"
-							class="pointer-events-auto absolute right-24 w-80 max-w-[90vw] -translate-y-1/2 transform rounded-xl border border-slate-800 bg-slate-950/95 p-5 shadow-2xl"
-							role="dialog"
-							aria-modal="true"
-							aria-labelledby="activity-detail-title"
-							:style="{ top: `${activityDetailPosition}px` }"
-			>
-				<div class="flex items-start justify-between gap-3">
-					<div class="space-y-1">
-						<p id="activity-detail-title" class="text-sm font-semibold text-slate-100">{{ selectedActivityEntry.label || 'Request details' }}</p>
-						<p class="text-xs text-slate-400">
-							<span class="uppercase tracking-wide text-slate-300">{{ selectedActivityEntry.method }}</span>
-							<span class="mx-1 text-slate-600">•</span>
-							<span>{{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
-						</p>
-					</div>
-					<span
-									class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
-									:class="activityStatusBadgeClass(selectedActivityEntry.status)"
-					>
-              {{ activityStatusLabel(selectedActivityEntry.status) }}
-            </span>
-				</div>
-				<p class="mt-3 break-all text-xs text-slate-300">{{ selectedActivityEntry.url }}</p>
-				<p v-if="selectedActivityEntry.target" class="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
-					Target: {{ selectedActivityEntry.target }}
-				</p>
-				<p v-if="selectedActivityEntry.statusCode" class="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
-					HTTP {{ selectedActivityEntry.statusCode }}
-				</p>
-				<p class="mt-3 text-sm text-slate-200">{{ selectedActivityEntry.detail }}</p>
-				<div
-								v-if="activityRequestHeaders(selectedActivityEntry).length > 0"
-								class="mt-4"
-				>
-					<p class="text-[11px] uppercase tracking-wide text-slate-500">Request headers</p>
-					<ul class="mt-2 space-y-1 text-xs text-slate-300">
-						<li
-										v-for="header in activityRequestHeaders(selectedActivityEntry)"
-										:key="`${header.key}:${header.value}`"
-										class="break-all"
-						>
-							<span class="text-slate-400">{{ header.key }}:</span>
-							{{ header.value }}
-						</li>
-					</ul>
-				</div>
-				<div v-if="activityRequestBody(selectedActivityEntry)" class="mt-4">
-					<p class="text-[11px] uppercase tracking-wide text-slate-500">Request body</p>
-					<pre
-									class="mt-2 max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
-					>{{ activityRequestBody(selectedActivityEntry) }}</pre>
-				</div>
-				<div v-if="buildCurlCommand(selectedActivityEntry)" class="mt-4">
-					<p class="text-[11px] uppercase tracking-wide text-slate-500">Repeat with curl</p>
-					<pre
-									class="mt-2 max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
-					>{{ buildCurlCommand(selectedActivityEntry) }}</pre>
-				</div>
-				<div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-					<span>Started {{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
-					<span v-if="selectedActivityEntry.durationMs !== null">Duration {{ formatDuration(selectedActivityEntry.durationMs) }}</span>
-				</div>
-				<div class="mt-4 flex flex-wrap justify-end gap-2">
-					<button
-									type="button"
-									class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
-									@click="clearActivityLog"
-					>
-						Clear log
-					</button>
-					<button
-									type="button"
-									class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
-									@click="closeActivityDetail"
-					>
-						Close
-					</button>
-				</div>
+								:title="activityMarkerTitle(entry)"
+								:aria-label="activityMarkerTitle(entry)"
+								role="listitem"
+								@click="openActivityDetail(entry)"
+				></button>
 			</div>
 		</div>
 	</div>
+
 </div>
 
 <script>
@@ -1227,9 +1224,10 @@
 			const activityLog = ref([]);
 			const activityDetailOpen = ref(false);
 			const selectedActivityEntry = ref(null);
-			const activityDetailCard = ref(null);
-			const activityDetailPosition = ref(window.innerHeight ? window.innerHeight / 2 : 0);
-			const activityDetailAnchor = reactive({ top: 0, height: 0 });
+			const activityModal = ref(null);
+			const modalMode = ref('welcome');
+			const modalOpen = ref(false);
+			const selectedActivityRequestTab = ref('http');
 			const exportState = reactive({
 				running: false,
 				progress: '',
@@ -1937,6 +1935,95 @@
 				}
 			};
 
+			const buildHttpRequest = (entry) => {
+				if (!entry?.request) return '';
+				const method = (entry.request.method || '').toUpperCase() || 'GET';
+				const rawUrl = entry.request.url || '';
+				if (!rawUrl) return '';
+				let path = rawUrl;
+				let host = '';
+				try {
+					const parsed = new URL(rawUrl, window.location.origin);
+					host = parsed.host;
+					path = `${parsed.pathname || '/'}${parsed.search || ''}` || '/';
+				} catch (error) {
+					path = rawUrl;
+				}
+				if (!path) {
+					path = '/';
+				}
+				const lines = [`${method} ${path} HTTP/1.1`];
+				const headers = activityRequestHeaders(entry);
+				const hasHostHeader = headers.some(({ key }) => key.toLowerCase() === 'host');
+				if (host && !hasHostHeader) {
+					lines.push(`Host: ${host}`);
+				}
+				headers.forEach(({ key, value }) => {
+					lines.push(`${key}: ${value}`);
+				});
+				const body = activityRequestBody(entry);
+				if (body) {
+					lines.push('');
+					lines.push(body);
+				}
+				return lines.join('\n');
+			};
+
+			const buildJavascriptRequest = (entry) => {
+				if (!entry?.request) return '';
+				const method = (entry.request.method || '').toUpperCase() || 'GET';
+				const rawUrl = entry.request.url || '';
+				if (!rawUrl) return '';
+				let absoluteUrl = rawUrl;
+				try {
+					absoluteUrl = new URL(rawUrl, window.location.origin).toString();
+				} catch (error) {
+					absoluteUrl = rawUrl;
+				}
+				const lines = [`const response = await fetch(${JSON.stringify(absoluteUrl)}, {`];
+				lines.push(`  method: '${method}',`);
+				const headers = activityRequestHeaders(entry);
+				if (headers.length > 0) {
+					lines.push('  headers: {');
+					headers.forEach(({ key, value }) => {
+						lines.push(`    ${JSON.stringify(key)}: ${JSON.stringify(value)},`);
+					});
+					const lastIndex = lines.length - 1;
+					lines[lastIndex] = lines[lastIndex].replace(/,$/, '');
+					lines.push('  },');
+				}
+				const body = entry.request.body;
+				if (body !== undefined && body !== null && body !== '') {
+					if (typeof body === 'string') {
+						lines.push(`  body: ${JSON.stringify(body)},`);
+					} else {
+						try {
+							const serialized = JSON.stringify(body, null, 2);
+							lines.push('  body: JSON.stringify(');
+							serialized.split('\n').forEach((line) => {
+								lines.push(`    ${line}`);
+							});
+							lines.push('  ),');
+						} catch (error) {
+							lines.push(`  body: ${JSON.stringify(String(body))},`);
+						}
+					}
+				}
+				const lastLineIndex = lines.length - 1;
+				if (lastLineIndex >= 1 && lines[lastLineIndex].trim().endsWith(',')) {
+					lines[lastLineIndex] = lines[lastLineIndex].replace(/,$/, '');
+				}
+				lines.push('});');
+				lines.push('');
+				lines.push('if (!response.ok) {');
+				lines.push("  throw new Error('Request failed');");
+				lines.push('}');
+				lines.push('');
+				lines.push('const data = await response.json();');
+				lines.push('console.log(data);');
+				return lines.join('\n');
+			};
+
 			const escapeSingleQuotes = (value) => String(value).replace(/'/g, "'\"'\"'");
 
 			const buildCurlCommand = (entry) => {
@@ -1974,54 +2061,101 @@
 				return lines.join(' \\\n');
 			};
 
-			const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+			const activityRequestTabDefinitions = [
+				{ id: 'http', label: 'HTTP', builder: buildHttpRequest },
+				{ id: 'javascript', label: 'JavaScript', builder: buildJavascriptRequest },
+				{ id: 'curl', label: 'cURL', builder: buildCurlCommand },
+			];
 
-			const updateActivityDetailPosition = () => {
-				const viewportHeight = window.innerHeight || 0;
-				const cardEl = activityDetailCard.value;
-				const cardHeight = cardEl ? cardEl.offsetHeight : 0;
-				const halfCard = cardHeight ? cardHeight / 2 : 0;
-				const margin = 16;
-				const anchorCenter = activityDetailAnchor.height
-								? activityDetailAnchor.top + activityDetailAnchor.height / 2
-								: viewportHeight / 2;
+			const activityRequestTabEntries = computed(() => {
+				const entry = selectedActivityEntry.value;
+				if (!entry) return [];
+				return activityRequestTabDefinitions
+								.map((tab) => {
+									const content = tab.builder(entry);
+									if (!content || String(content).trim() === '') {
+										return null;
+									}
+									return { id: tab.id, label: tab.label, content };
+								})
+								.filter(Boolean);
+			});
 
-				if (!viewportHeight) {
-					activityDetailPosition.value = anchorCenter;
+			const activeActivityRequestTabContent = computed(() => {
+				const tabs = activityRequestTabEntries.value;
+				if (!tabs.length) return '';
+				const active = tabs.find((tab) => tab.id === selectedActivityRequestTab.value);
+				return active ? active.content : tabs[0].content;
+			});
+
+			watch(activityRequestTabEntries, (tabs) => {
+				if (!Array.isArray(tabs) || tabs.length === 0) {
+					selectedActivityRequestTab.value = '';
 					return;
 				}
+				if (!tabs.some((tab) => tab.id === selectedActivityRequestTab.value)) {
+					selectedActivityRequestTab.value = tabs[0].id;
+				}
+			});
 
-				const minTop = margin + halfCard;
-				const maxTop = viewportHeight - margin - halfCard;
-				activityDetailPosition.value = clamp(anchorCenter, minTop, maxTop);
+			const showActivityModal = () => {
+				const modalEl = activityModal.value;
+				if (!modalEl) return;
+
+				if (typeof modalEl.showModal === 'function') {
+					if (!modalEl.open) {
+						modalEl.showModal();
+					}
+				} else {
+					modalEl.setAttribute('open', '');
+					modalEl.style.display = 'block';
+				}
+
+				modalOpen.value = true;
 			};
 
-			const openActivityDetail = (entry, event) => {
+			const hideActivityModal = () => {
+				const modalEl = activityModal.value;
+				if (!modalEl) return;
+
+				if (typeof modalEl.close === 'function') {
+					if (modalEl.open) {
+						modalEl.close();
+					}
+				} else {
+					modalEl.removeAttribute('open');
+					modalEl.style.display = 'none';
+				}
+
+				modalOpen.value = false;
+			};
+
+			const openActivityDetail = (entry) => {
 				if (!entry) {
 					closeActivityDetail();
 					return;
 				}
 
 				selectedActivityEntry.value = entry;
+				selectedActivityRequestTab.value = 'http';
 				activityDetailOpen.value = true;
-
-				if (event?.currentTarget instanceof HTMLElement) {
-					const rect = event.currentTarget.getBoundingClientRect();
-					activityDetailAnchor.top = rect.top;
-					activityDetailAnchor.height = rect.height;
-				} else {
-					activityDetailAnchor.top = window.innerHeight ? window.innerHeight / 2 : 0;
-					activityDetailAnchor.height = 0;
-				}
-
-				nextTick(updateActivityDetailPosition);
+				modalMode.value = 'activity';
+				showActivityModal();
 			};
 
 			const closeActivityDetail = () => {
 				activityDetailOpen.value = false;
 				selectedActivityEntry.value = null;
-				activityDetailAnchor.top = 0;
-				activityDetailAnchor.height = 0;
+				hideActivityModal();
+			};
+
+			const closeActivityModal = () => {
+				if (modalMode.value === 'activity' && activityDetailOpen.value) {
+					closeActivityDetail();
+					return;
+				}
+
+				hideActivityModal();
 			};
 
 			const clearActivityLog = () => {
@@ -2034,21 +2168,14 @@
 				const stillExists = entries.some(entry => entry.id === selectedActivityEntry.value.id);
 				if (!stillExists) {
 					closeActivityDetail();
-					return;
 				}
-				nextTick(updateActivityDetailPosition);
 			}, { deep: true });
 
 			const handleKeydown = (event) => {
-				if (event.key === 'Escape' && activityDetailOpen.value) {
+				if (event.key === 'Escape' && modalOpen.value) {
 					event.preventDefault();
-					closeActivityDetail();
+					closeActivityModal();
 				}
-			};
-
-			const handleResize = () => {
-				if (!activityDetailOpen.value) return;
-				nextTick(updateActivityDetailPosition);
 			};
 
 			const resetSizeMetrics = () => {
@@ -3525,7 +3652,6 @@
 			onMounted(() => {
 				beginConnectionCheck();
 				window.addEventListener('keydown', handleKeydown);
-				window.addEventListener('resize', handleResize);
 				window.addEventListener('hashchange', handleHashChange);
 				const initialRoute = currentRouteState();
 				if (
@@ -3548,7 +3674,6 @@
 					statusPoller = null;
 				}
 				window.removeEventListener('keydown', handleKeydown);
-				window.removeEventListener('resize', handleResize);
 				window.removeEventListener('hashchange', handleHashChange);
 			});
 
@@ -3651,11 +3776,15 @@
 				activityMarkerTitle,
 				activityRequestHeaders,
 				activityRequestBody,
+				activityRequestTabEntries,
+				selectedActivityRequestTab,
+				activeActivityRequestTabContent,
 				buildCurlCommand,
-				activityDetailCard,
-				activityDetailPosition,
+				activityModal,
+				modalMode,
 				openActivityDetail,
 				closeActivityDetail,
+				closeActivityModal,
 			};
 		},
 	}).mount('#app');
