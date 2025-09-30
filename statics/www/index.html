@@ -495,11 +495,25 @@
             <div class="space-y-6">
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
                 <div class="space-y-2">
-                  <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection defaults</h3>
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Collection defaults</h3>
+                    <button
+                      type="button"
+                      class="text-base leading-none text-slate-400 transition hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/70 rounded-full"
+                      @click="defaultsHelpOpen = !defaultsHelpOpen"
+                      :aria-expanded="defaultsHelpOpen"
+                      aria-label="Toggle special values help"
+                    >
+                      <span aria-hidden="true">🛈</span>
+                    </button>
+                  </div>
                   <p class="text-xs text-slate-400">
                     Documents missing fields will receive these values when inserted.
                   </p>
-                  <div class="space-y-2 rounded-lg border border-slate-800/70 bg-slate-950/60 p-3 text-[11px] text-slate-400">
+                  <div
+                    v-if="defaultsHelpOpen"
+                    class="space-y-2 rounded-lg border border-slate-800/70 bg-slate-950/60 p-3 text-[11px] text-slate-400"
+                  >
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-300">Special values</p>
                     <ul class="list-disc space-y-1 pl-4">
                       <li>
@@ -789,6 +803,7 @@
             success: '',
             saving: false,
           });
+          const defaultsHelpOpen = ref(false);
           const createForm = reactive({ open: false, name: '', error: '' });
           const indexForm = reactive({
             open: false,
@@ -1952,6 +1967,7 @@
 
           watch(selectedCollectionName, () => {
             clearEditingDocuments();
+            defaultsHelpOpen.value = false;
           });
 
           watch(queryRows, (rows) => {
@@ -2252,6 +2268,7 @@
             indexMessages,
             insertForm,
             defaultsForm,
+            defaultsHelpOpen,
             createForm,
             connectionStatus,
             activityLog,
