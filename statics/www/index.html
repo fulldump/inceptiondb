@@ -61,17 +61,109 @@
 			--activity-marker-glow: rgba(52, 211, 153, 0.35);
 		}
 
-		.activity-marker--error {
-			--activity-marker-color: #f87171;
-			--activity-marker-glow: rgba(248, 113, 113, 0.35);
-		}
-	</style>
+                .activity-marker--error {
+                        --activity-marker-color: #f87171;
+                        --activity-marker-glow: rgba(248, 113, 113, 0.35);
+                }
+
+                #activity-modal::backdrop {
+                        background-color: rgba(15, 23, 42, 0.75);
+                }
+        </style>
 	<script src="/lib/axios.min.js"></script>
 	<script src="/lib/vue.global.prod.js"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-<div id="app" class="min-h-screen flex">
-	<aside class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col">
+<div id="app">
+        <dialog
+                id="activity-modal"
+                ref="activityModal"
+                aria-labelledby="activity-modal-title"
+                class="mx-auto mt-24 w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-0 text-left text-slate-100 shadow-2xl"
+        >
+                <div v-if="modalMode === 'welcome'" class="space-y-4 p-6">
+                        <h2 id="activity-modal-title" class="text-2xl font-semibold tracking-tight">hello world</h2>
+                        <p class="text-sm text-slate-300">
+                                Welcome to InceptionDB.
+                        </p>
+                        <button
+                                type="button"
+                                class="inline-flex w-full justify-center rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
+                                @click="closeActivityModal"
+                        >
+                                Close
+                        </button>
+                </div>
+                <div v-else-if="modalMode === 'activity' && selectedActivityEntry" class="flex flex-col gap-4 p-6">
+                        <div class="flex items-start justify-between gap-3">
+                                <div class="space-y-1">
+                                        <p id="activity-modal-title" class="text-sm font-semibold text-slate-100">{{ selectedActivityEntry.label || 'Request details' }}</p>
+                                        <p class="text-xs text-slate-400">
+                                                <span class="uppercase tracking-wide text-slate-300">{{ selectedActivityEntry.method }}</span>
+                                                <span class="mx-1 text-slate-600">•</span>
+                                                <span>{{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
+                                        </p>
+                                </div>
+                                <span
+                                        class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+                                        :class="activityStatusBadgeClass(selectedActivityEntry.status)"
+                                >
+                                        {{ activityStatusLabel(selectedActivityEntry.status) }}
+                                </span>
+                        </div>
+                        <p class="break-all text-xs text-slate-300">{{ selectedActivityEntry.url }}</p>
+                        <p v-if="selectedActivityEntry.target" class="text-[11px] uppercase tracking-wide text-slate-500">
+                                Target: {{ selectedActivityEntry.target }}
+                        </p>
+                        <p v-if="selectedActivityEntry.statusCode" class="text-[11px] uppercase tracking-wide text-slate-500">
+                                HTTP {{ selectedActivityEntry.statusCode }}
+                        </p>
+                        <p class="text-sm text-slate-200">{{ selectedActivityEntry.detail }}</p>
+                        <div v-if="activityRequestHeaders(selectedActivityEntry).length > 0" class="space-y-2">
+                                <p class="text-[11px] uppercase tracking-wide text-slate-500">Request headers</p>
+                                <ul class="space-y-1 text-xs text-slate-300">
+                                        <li
+                                                v-for="header in activityRequestHeaders(selectedActivityEntry)"
+                                                :key="`${header.key}:${header.value}`"
+                                                class="break-all"
+                                        >
+                                                <span class="text-slate-400">{{ header.key }}:</span>
+                                                {{ header.value }}
+                                        </li>
+                                </ul>
+                        </div>
+                        <div v-if="activityRequestBody(selectedActivityEntry)" class="space-y-2">
+                                <p class="text-[11px] uppercase tracking-wide text-slate-500">Request body</p>
+                                <pre class="max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words">{{ activityRequestBody(selectedActivityEntry) }}</pre>
+                        </div>
+                        <div v-if="buildCurlCommand(selectedActivityEntry)" class="space-y-2">
+                                <p class="text-[11px] uppercase tracking-wide text-slate-500">Repeat with curl</p>
+                                <pre class="max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words">{{ buildCurlCommand(selectedActivityEntry) }}</pre>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                                <span>Started {{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
+                                <span v-if="selectedActivityEntry.durationMs !== null">Duration {{ formatDuration(selectedActivityEntry.durationMs) }}</span>
+                        </div>
+                        <div class="flex flex-wrap justify-end gap-2 pt-2">
+                                <button
+                                        type="button"
+                                        class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+                                        @click="clearActivityLog"
+                                >
+                                        Clear log
+                                </button>
+                                <button
+                                        type="button"
+                                        class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+                                        @click="closeActivityModal"
+                                >
+                                        Close
+                                </button>
+                        </div>
+                </div>
+        </dialog>
+        <div class="min-h-screen flex">
+        <aside class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col">
 		<div class="px-6 py-5 border-b border-slate-800">
 			<div class="flex items-center justify-between">
 				<h1 class="text-xl font-semibold tracking-wide">InceptionDB</h1>
@@ -1023,12 +1115,13 @@
 				</div>
 			</section>
 		</div>
-	</main>
-	<div
-					v-if="activityLog.length > 0"
-					class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-12 flex-col items-center justify-center sm:flex"
-					aria-hidden="false"
-	>
+        </main>
+        </div>
+        <div
+                                        v-if="activityLog.length > 0"
+                                        class="pointer-events-none fixed inset-y-0 right-4 z-40 hidden w-12 flex-col items-center justify-center sm:flex"
+                                        aria-hidden="false"
+        >
 		<div
 						class="pointer-events-auto flex max-h-[80vh] flex-col items-center gap-2 overflow-y-auto rounded-full bg-slate-950/85 px-3 py-4 shadow-2xl"
 						role="list"
@@ -1046,105 +1139,15 @@
 							:title="activityMarkerTitle(entry)"
 							:aria-label="activityMarkerTitle(entry)"
 							role="listitem"
-							@click="openActivityDetail(entry, $event)"
-			></button>
-		</div>
-	</div>
-	<div v-if="activityDetailOpen && selectedActivityEntry" class="fixed inset-0 z-50">
-		<button
-						type="button"
-						class="absolute inset-0 cursor-default bg-transparent"
-						aria-label="Close request details"
-						@click="closeActivityDetail"
-		></button>
-		<div class="pointer-events-none absolute inset-0">
-			<div
-							ref="activityDetailCard"
-							class="pointer-events-auto absolute right-24 w-80 max-w-[90vw] -translate-y-1/2 transform rounded-xl border border-slate-800 bg-slate-950/95 p-5 shadow-2xl"
-							role="dialog"
-							aria-modal="true"
-							aria-labelledby="activity-detail-title"
-							:style="{ top: `${activityDetailPosition}px` }"
-			>
-				<div class="flex items-start justify-between gap-3">
-					<div class="space-y-1">
-						<p id="activity-detail-title" class="text-sm font-semibold text-slate-100">{{ selectedActivityEntry.label || 'Request details' }}</p>
-						<p class="text-xs text-slate-400">
-							<span class="uppercase tracking-wide text-slate-300">{{ selectedActivityEntry.method }}</span>
-							<span class="mx-1 text-slate-600">•</span>
-							<span>{{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
-						</p>
-					</div>
-					<span
-									class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
-									:class="activityStatusBadgeClass(selectedActivityEntry.status)"
-					>
-              {{ activityStatusLabel(selectedActivityEntry.status) }}
-            </span>
-				</div>
-				<p class="mt-3 break-all text-xs text-slate-300">{{ selectedActivityEntry.url }}</p>
-				<p v-if="selectedActivityEntry.target" class="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
-					Target: {{ selectedActivityEntry.target }}
-				</p>
-				<p v-if="selectedActivityEntry.statusCode" class="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
-					HTTP {{ selectedActivityEntry.statusCode }}
-				</p>
-				<p class="mt-3 text-sm text-slate-200">{{ selectedActivityEntry.detail }}</p>
-				<div
-								v-if="activityRequestHeaders(selectedActivityEntry).length > 0"
-								class="mt-4"
-				>
-					<p class="text-[11px] uppercase tracking-wide text-slate-500">Request headers</p>
-					<ul class="mt-2 space-y-1 text-xs text-slate-300">
-						<li
-										v-for="header in activityRequestHeaders(selectedActivityEntry)"
-										:key="`${header.key}:${header.value}`"
-										class="break-all"
-						>
-							<span class="text-slate-400">{{ header.key }}:</span>
-							{{ header.value }}
-						</li>
-					</ul>
-				</div>
-				<div v-if="activityRequestBody(selectedActivityEntry)" class="mt-4">
-					<p class="text-[11px] uppercase tracking-wide text-slate-500">Request body</p>
-					<pre
-									class="mt-2 max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
-					>{{ activityRequestBody(selectedActivityEntry) }}</pre>
-				</div>
-				<div v-if="buildCurlCommand(selectedActivityEntry)" class="mt-4">
-					<p class="text-[11px] uppercase tracking-wide text-slate-500">Repeat with curl</p>
-					<pre
-									class="mt-2 max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
-					>{{ buildCurlCommand(selectedActivityEntry) }}</pre>
-				</div>
-				<div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-					<span>Started {{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
-					<span v-if="selectedActivityEntry.durationMs !== null">Duration {{ formatDuration(selectedActivityEntry.durationMs) }}</span>
-				</div>
-				<div class="mt-4 flex flex-wrap justify-end gap-2">
-					<button
-									type="button"
-									class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
-									@click="clearActivityLog"
-					>
-						Clear log
-					</button>
-					<button
-									type="button"
-									class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
-									@click="closeActivityDetail"
-					>
-						Close
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
+                                                        @click="openActivityDetail(entry)"
+                        ></button>
+                </div>
+        </div>
 </div>
 
 <script>
-	const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } = Vue;
+<script>
+        const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } = Vue;
 
 	createApp({
 		setup() {
@@ -1224,12 +1227,12 @@
 			const MAX_ACTIVITY_LOG_ENTRIES = 15;
 			const EXPORT_BATCH_SIZE = 1000;
 			const MAX_EXPORT_BATCHES = 10000;
-			const activityLog = ref([]);
-			const activityDetailOpen = ref(false);
-			const selectedActivityEntry = ref(null);
-			const activityDetailCard = ref(null);
-			const activityDetailPosition = ref(window.innerHeight ? window.innerHeight / 2 : 0);
-			const activityDetailAnchor = reactive({ top: 0, height: 0 });
+                        const activityLog = ref([]);
+                        const activityDetailOpen = ref(false);
+                        const selectedActivityEntry = ref(null);
+                        const activityModal = ref(null);
+                        const modalMode = ref('welcome');
+                        const modalOpen = ref(false);
 			const exportState = reactive({
 				running: false,
 				progress: '',
@@ -1974,82 +1977,84 @@
 				return lines.join(' \\\n');
 			};
 
-			const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+                        const showActivityModal = () => {
+                                const modalEl = activityModal.value;
+                                if (!modalEl) return;
 
-			const updateActivityDetailPosition = () => {
-				const viewportHeight = window.innerHeight || 0;
-				const cardEl = activityDetailCard.value;
-				const cardHeight = cardEl ? cardEl.offsetHeight : 0;
-				const halfCard = cardHeight ? cardHeight / 2 : 0;
-				const margin = 16;
-				const anchorCenter = activityDetailAnchor.height
-								? activityDetailAnchor.top + activityDetailAnchor.height / 2
-								: viewportHeight / 2;
+                                if (typeof modalEl.showModal === 'function') {
+                                        if (!modalEl.open) {
+                                                modalEl.showModal();
+                                        }
+                                } else {
+                                        modalEl.setAttribute('open', '');
+                                        modalEl.style.display = 'block';
+                                }
 
-				if (!viewportHeight) {
-					activityDetailPosition.value = anchorCenter;
-					return;
-				}
+                                modalOpen.value = true;
+                        };
 
-				const minTop = margin + halfCard;
-				const maxTop = viewportHeight - margin - halfCard;
-				activityDetailPosition.value = clamp(anchorCenter, minTop, maxTop);
-			};
+                        const hideActivityModal = () => {
+                                const modalEl = activityModal.value;
+                                if (!modalEl) return;
 
-			const openActivityDetail = (entry, event) => {
-				if (!entry) {
-					closeActivityDetail();
-					return;
-				}
+                                if (typeof modalEl.close === 'function') {
+                                        if (modalEl.open) {
+                                                modalEl.close();
+                                        }
+                                } else {
+                                        modalEl.removeAttribute('open');
+                                        modalEl.style.display = 'none';
+                                }
 
-				selectedActivityEntry.value = entry;
-				activityDetailOpen.value = true;
+                                modalOpen.value = false;
+                        };
 
-				if (event?.currentTarget instanceof HTMLElement) {
-					const rect = event.currentTarget.getBoundingClientRect();
-					activityDetailAnchor.top = rect.top;
-					activityDetailAnchor.height = rect.height;
-				} else {
-					activityDetailAnchor.top = window.innerHeight ? window.innerHeight / 2 : 0;
-					activityDetailAnchor.height = 0;
-				}
+                        const openActivityDetail = (entry) => {
+                                if (!entry) {
+                                        closeActivityDetail();
+                                        return;
+                                }
 
-				nextTick(updateActivityDetailPosition);
-			};
+                                selectedActivityEntry.value = entry;
+                                activityDetailOpen.value = true;
+                                modalMode.value = 'activity';
+                                showActivityModal();
+                        };
 
-			const closeActivityDetail = () => {
-				activityDetailOpen.value = false;
-				selectedActivityEntry.value = null;
-				activityDetailAnchor.top = 0;
-				activityDetailAnchor.height = 0;
-			};
+                        const closeActivityDetail = () => {
+                                activityDetailOpen.value = false;
+                                selectedActivityEntry.value = null;
+                                hideActivityModal();
+                        };
 
-			const clearActivityLog = () => {
-				activityLog.value = [];
-				closeActivityDetail();
+                        const closeActivityModal = () => {
+                                if (modalMode.value === 'activity' && activityDetailOpen.value) {
+                                        closeActivityDetail();
+                                        return;
+                                }
+
+                                hideActivityModal();
+                        };
+
+                        const clearActivityLog = () => {
+                                activityLog.value = [];
+                                closeActivityDetail();
 			};
 
 			watch(activityLog, (entries) => {
 				if (!activityDetailOpen.value || !selectedActivityEntry.value) return;
 				const stillExists = entries.some(entry => entry.id === selectedActivityEntry.value.id);
-				if (!stillExists) {
-					closeActivityDetail();
-					return;
-				}
-				nextTick(updateActivityDetailPosition);
-			}, { deep: true });
+                                if (!stillExists) {
+                                        closeActivityDetail();
+                                }
+                        }, { deep: true });
 
-			const handleKeydown = (event) => {
-				if (event.key === 'Escape' && activityDetailOpen.value) {
-					event.preventDefault();
-					closeActivityDetail();
-				}
-			};
-
-			const handleResize = () => {
-				if (!activityDetailOpen.value) return;
-				nextTick(updateActivityDetailPosition);
-			};
+                        const handleKeydown = (event) => {
+                                if (event.key === 'Escape' && modalOpen.value) {
+                                        event.preventDefault();
+                                        closeActivityModal();
+                                }
+                        };
 
 			const resetSizeMetrics = () => {
 				sizeMetrics.loading = false;
@@ -3522,11 +3527,12 @@
 				return text.length > 160 ? `${text.slice(0, 157)}…` : text;
 			};
 
-			onMounted(() => {
-				beginConnectionCheck();
-				window.addEventListener('keydown', handleKeydown);
-				window.addEventListener('resize', handleResize);
-				window.addEventListener('hashchange', handleHashChange);
+                        onMounted(() => {
+                                modalMode.value = 'welcome';
+                                showActivityModal();
+                                beginConnectionCheck();
+                                window.addEventListener('keydown', handleKeydown);
+                                window.addEventListener('hashchange', handleHashChange);
 				const initialRoute = currentRouteState();
 				if (
 								initialRoute.collection ||
@@ -3543,13 +3549,12 @@
 			});
 
 			onBeforeUnmount(() => {
-				if (statusPoller) {
-					window.clearInterval(statusPoller);
-					statusPoller = null;
-				}
-				window.removeEventListener('keydown', handleKeydown);
-				window.removeEventListener('resize', handleResize);
-				window.removeEventListener('hashchange', handleHashChange);
+                                if (statusPoller) {
+                                        window.clearInterval(statusPoller);
+                                        statusPoller = null;
+                                }
+                                window.removeEventListener('keydown', handleKeydown);
+                                window.removeEventListener('hashchange', handleHashChange);
 			});
 
 			return {
@@ -3649,13 +3654,14 @@
 				clearActivityLog,
 				activityMarkerClass,
 				activityMarkerTitle,
-				activityRequestHeaders,
-				activityRequestBody,
-				buildCurlCommand,
-				activityDetailCard,
-				activityDetailPosition,
-				openActivityDetail,
-				closeActivityDetail,
+                                activityRequestHeaders,
+                                activityRequestBody,
+                                buildCurlCommand,
+                                activityModal,
+                                modalMode,
+                                openActivityDetail,
+                                closeActivityDetail,
+                                closeActivityModal,
 			};
 		},
 	}).mount('#app');
