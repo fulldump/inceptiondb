@@ -1078,6 +1078,34 @@
             HTTP {{ selectedActivityEntry.statusCode }}
           </p>
           <p class="mt-3 text-sm text-slate-200">{{ selectedActivityEntry.detail }}</p>
+          <div
+            v-if="activityRequestHeaders(selectedActivityEntry).length > 0"
+            class="mt-4"
+          >
+            <p class="text-[11px] uppercase tracking-wide text-slate-500">Request headers</p>
+            <ul class="mt-2 space-y-1 text-xs text-slate-300">
+              <li
+                v-for="header in activityRequestHeaders(selectedActivityEntry)"
+                :key="`${header.key}:${header.value}`"
+                class="break-all"
+              >
+                <span class="text-slate-400">{{ header.key }}:</span>
+                {{ header.value }}
+              </li>
+            </ul>
+          </div>
+          <div v-if="activityRequestBody(selectedActivityEntry)" class="mt-4">
+            <p class="text-[11px] uppercase tracking-wide text-slate-500">Request body</p>
+            <pre
+              class="mt-2 max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
+            >{{ activityRequestBody(selectedActivityEntry) }}</pre>
+          </div>
+          <div v-if="buildCurlCommand(selectedActivityEntry)" class="mt-4">
+            <p class="text-[11px] uppercase tracking-wide text-slate-500">Repeat with curl</p>
+            <pre
+              class="mt-2 max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
+            >{{ buildCurlCommand(selectedActivityEntry) }}</pre>
+          </div>
           <div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
             <span>Started {{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
             <span v-if="selectedActivityEntry.durationMs !== null">Duration {{ formatDuration(selectedActivityEntry.durationMs) }}</span>
@@ -1371,12 +1399,50 @@
             applyRouteState(nextState);
           };
 
-          const createActivityEntry = ({ label, method, url, target }) => {
+          const createActivityEntry = ({
+            label,
+            method,
+            url,
+            target,
+            requestBody,
+            requestHeaders,
+          }) => {
+            const normalizedMethod = typeof method === 'string' ? method.toUpperCase() : '';
+            const normalizedUrl = typeof url === 'string' ? url : '';
+            const normalizedHeaders = {};
+            if (requestHeaders && typeof requestHeaders === 'object' && !Array.isArray(requestHeaders)) {
+              Object.keys(requestHeaders).forEach((key) => {
+                const headerValue = requestHeaders[key];
+                if (typeof key !== 'string' || key.trim() === '' || headerValue === undefined || headerValue === null) return;
+                normalizedHeaders[key] = String(headerValue);
+              });
+            }
+            const hasContentTypeHeader = Object.keys(normalizedHeaders).some(
+              (key) => key.toLowerCase() === 'content-type',
+            );
+            let normalizedBody = requestBody === undefined ? null : requestBody;
+            if (normalizedBody && typeof normalizedBody === 'object') {
+              try {
+                normalizedBody = JSON.parse(JSON.stringify(normalizedBody));
+              } catch (error) {
+                // Keep the original reference if cloning fails.
+              }
+            }
+            if (
+              normalizedBody !== null &&
+              normalizedMethod &&
+              normalizedMethod !== 'GET' &&
+              normalizedMethod !== 'HEAD' &&
+              !hasContentTypeHeader &&
+              typeof normalizedBody === 'object'
+            ) {
+              normalizedHeaders['Content-Type'] = 'application/json';
+            }
             const entry = {
               id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
               label,
-              method,
-              url,
+              method: normalizedMethod || method || '',
+              url: normalizedUrl,
               target: target || '',
               status: 'pending',
               statusCode: null,
@@ -1384,6 +1450,12 @@
               startedAt: new Date(),
               finishedAt: null,
               durationMs: null,
+              request: {
+                method: normalizedMethod || method || '',
+                url: normalizedUrl,
+                headers: normalizedHeaders,
+                body: normalizedBody,
+              },
             };
             activityLog.value.unshift(entry);
             if (activityLog.value.length > MAX_ACTIVITY_LOG_ENTRIES) {
@@ -1703,6 +1775,8 @@
               method: 'POST',
               url,
               target: selectedCollection.value.name,
+              requestBody: ndjsonPayload,
+              requestHeaders: { 'Content-Type': 'application/json' },
             });
             try {
               const resp = await axios.post(url, ndjsonPayload, {
@@ -1821,10 +1895,71 @@
 
           const activityMarkerTitle = (entry) => {
             if (!entry) return 'Request';
-            const segments = [];
-            if (entry.method) segments.push(String(entry.method).toUpperCase());
-            if (entry.label) segments.push(entry.label);
-            return segments.join(' · ') || 'Request';
+            if (entry.label) return entry.label;
+            if (entry.method) return String(entry.method).toUpperCase();
+            return 'Request';
+          };
+
+          const activityRequestHeaders = (entry) => {
+            if (!entry?.request || typeof entry.request !== 'object') return [];
+            const headers = entry.request.headers;
+            if (!headers || typeof headers !== 'object') return [];
+            return Object.keys(headers)
+              .filter((key) => key && key.trim() !== '' && headers[key] !== undefined && headers[key] !== null)
+              .map((key) => ({ key, value: String(headers[key]) }));
+          };
+
+          const activityRequestBody = (entry) => {
+            if (!entry?.request) return '';
+            const body = entry.request.body;
+            if (body === undefined || body === null || body === '') return '';
+            if (typeof body === 'string') return body;
+            try {
+              return JSON.stringify(body, null, 2);
+            } catch (err) {
+              try {
+                return String(body);
+              } catch (error) {
+                return '';
+              }
+            }
+          };
+
+          const escapeSingleQuotes = (value) => String(value).replace(/'/g, "'\"'\"'");
+
+          const buildCurlCommand = (entry) => {
+            if (!entry?.request) return '';
+            const method = (entry.request.method || '').toUpperCase();
+            const supportedMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+            if (!supportedMethods.includes(method)) return '';
+            const rawUrl = entry.request.url || '';
+            if (!rawUrl) return '';
+            let absoluteUrl = rawUrl;
+            try {
+              absoluteUrl = new URL(rawUrl, window.location.origin).toString();
+            } catch (error) {
+              absoluteUrl = rawUrl;
+            }
+            const lines = [`curl -X ${method} '${escapeSingleQuotes(absoluteUrl)}'`];
+            const headers = activityRequestHeaders(entry);
+            headers.forEach(({ key, value }) => {
+              lines.push(`  -H '${escapeSingleQuotes(`${key}: ${value}`)}'`);
+            });
+            const body = entry.request.body;
+            if (body !== undefined && body !== null && body !== '') {
+              let bodyString = '';
+              if (typeof body === 'string') {
+                bodyString = body;
+              } else {
+                try {
+                  bodyString = JSON.stringify(body);
+                } catch (error) {
+                  bodyString = String(body);
+                }
+              }
+              lines.push(`  --data-raw '${escapeSingleQuotes(bodyString)}'`);
+            }
+            return lines.join(' \\\n');
           };
 
           const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -2348,18 +2483,20 @@
             }
             state.saving = true;
             const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:patch`;
+            const requestPayload = {
+              filter: { id: row.id },
+              patch: preparedPatch,
+              limit: 1,
+            };
             const entry = createActivityEntry({
               label: `Edit document ${id}`,
               method: 'POST',
               url,
               target: selectedCollection.value.name,
+              requestBody: requestPayload,
             });
             try {
-              const resp = await axios.post(url, {
-                filter: { id: row.id },
-                patch: preparedPatch,
-                limit: 1,
-              });
+              const resp = await axios.post(url, requestPayload);
               markConnectionOnline();
               completeActivityEntry(entry, {
                 detail: `Document ${id} updated successfully.`,
@@ -2423,6 +2560,7 @@
               method: 'POST',
               url,
               target: selectedCollection.value.name,
+              requestBody: payload,
             });
             try {
               const resp = await axios.post(url, payload);
@@ -2453,14 +2591,16 @@
             const ok = window.confirm(confirmMessage);
             if (!ok) return;
             const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:dropIndex`;
+            const requestPayload = { name: index.name };
             const entry = createActivityEntry({
               label: `Delete index ${index.name}`,
               method: 'POST',
               url,
               target: selectedCollection.value.name,
+              requestBody: requestPayload,
             });
             try {
-              const resp = await axios.post(url, { name: index.name });
+              const resp = await axios.post(url, requestPayload);
               markConnectionOnline();
               if (selectedIndexName.value === index.name) {
                 selectedIndexName.value = '';
@@ -2874,6 +3014,7 @@
               method: 'POST',
               url,
               target: selectedCollection.value.name,
+              requestBody: payload,
             });
             try {
               const resp = await axios({
@@ -2989,16 +3130,22 @@
             }
 
             const url = `/v1/collections/${encodeURIComponent(collectionName)}:find`;
+            const template = JSON.parse(JSON.stringify(lastQueryParameters.payload || {}));
             const entry = createActivityEntry({
               label: 'Export all results (JSONL)',
               method: 'POST',
               url,
               target: collectionName,
+              requestBody: (() => {
+                const initialPayload = JSON.parse(JSON.stringify(template));
+                initialPayload.skip = 0;
+                initialPayload.limit = EXPORT_BATCH_SIZE;
+                return initialPayload;
+              })(),
             });
             exportState.progress = 'Preparing export for all matching documents…';
 
             try {
-              const template = JSON.parse(JSON.stringify(lastQueryParameters.payload || {}));
               const chunks = [];
               let totalExported = 0;
               let batches = 0;
@@ -3144,17 +3291,19 @@
             const ok = window.confirm(`Delete the document with id ${id}?`);
             if (!ok) return;
             const url = `/v1/collections/${encodeURIComponent(selectedCollection.value.name)}:remove`;
+            const requestPayload = {
+              filter: { id: row.id },
+              limit: 1,
+            };
             const entry = createActivityEntry({
               label: `Delete document ${id}`,
               method: 'POST',
               url,
               target: selectedCollection.value.name,
+              requestBody: requestPayload,
             });
             try {
-              const resp = await axios.post(url, {
-                filter: { id: row.id },
-                limit: 1,
-              });
+              const resp = await axios.post(url, requestPayload);
               markConnectionOnline();
               completeActivityEntry(entry, {
                 detail: `Deleted document with id ${id}.`,
@@ -3199,6 +3348,7 @@
               method: 'POST',
               url,
               target: selectedCollection.value.name,
+              requestBody: parsed,
             });
             try {
               const resp = await axios.post(url, parsed);
@@ -3245,6 +3395,7 @@
               method: 'POST',
               url,
               target: selectedCollection.value.name,
+              requestBody: payload,
             });
             try {
               const resp = await axios.post(url, payload);
@@ -3271,14 +3422,16 @@
               createForm.error = 'Provide a name for the collection.';
               return;
             }
+            const requestPayload = { name };
             const entry = createActivityEntry({
               label: `Create collection ${name}`,
               method: 'POST',
               url: '/v1/collections',
               target: name,
+              requestBody: requestPayload,
             });
             try {
-              const resp = await axios.post('/v1/collections', { name });
+              const resp = await axios.post('/v1/collections', requestPayload);
               markConnectionOnline();
               const created = resp?.data?.name || name;
               completeActivityEntry(entry, {
@@ -3484,6 +3637,9 @@
             clearActivityLog,
             activityMarkerClass,
             activityMarkerTitle,
+            activityRequestHeaders,
+            activityRequestBody,
+            buildCurlCommand,
             activityDetailCard,
             activityDetailPosition,
             openActivityDetail,
