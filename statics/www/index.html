@@ -136,9 +136,28 @@
                                 <p class="text-[11px] uppercase tracking-wide text-slate-500">Request body</p>
                                 <pre class="max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words">{{ activityRequestBody(selectedActivityEntry) }}</pre>
                         </div>
-                        <div v-if="buildCurlCommand(selectedActivityEntry)" class="space-y-2">
-                                <p class="text-[11px] uppercase tracking-wide text-slate-500">Repeat with curl</p>
-                                <pre class="max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words">{{ buildCurlCommand(selectedActivityEntry) }}</pre>
+                        <div v-if="activityRequestTabEntries.length > 0" class="space-y-2">
+                                <p class="text-[11px] uppercase tracking-wide text-slate-500">Request formats</p>
+                                <div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60">
+                                        <div class="flex items-center gap-1 border-b border-slate-800 px-2 py-1">
+                                                <button
+                                                        v-for="tab in activityRequestTabEntries"
+                                                        :key="tab.id"
+                                                        type="button"
+                                                        class="rounded-md px-3 py-1.5 text-xs font-medium transition"
+                                                        :class="selectedActivityRequestTab === tab.id
+                                                                ? 'bg-slate-900 text-sky-300 border border-slate-700'
+                                                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'"
+                                                        @click="selectedActivityRequestTab = tab.id"
+                                                >
+                                                        {{ tab.label }}
+                                                </button>
+                                        </div>
+                                        <pre
+                                                v-if="activeActivityRequestTabContent"
+                                                class="max-h-48 overflow-y-auto bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
+                                        >{{ activeActivityRequestTabContent }}</pre>
+                                </div>
                         </div>
                         <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
                                 <span>Started {{ formatActivityTime(selectedActivityEntry.startedAt) }}</span>
@@ -1233,6 +1252,7 @@
                         const activityModal = ref(null);
                         const modalMode = ref('welcome');
                         const modalOpen = ref(false);
+                        const selectedActivityRequestTab = ref('http');
 			const exportState = reactive({
 				running: false,
 				progress: '',
@@ -1924,29 +1944,118 @@
 								.map((key) => ({ key, value: String(headers[key]) }));
 			};
 
-			const activityRequestBody = (entry) => {
-				if (!entry?.request) return '';
-				const body = entry.request.body;
-				if (body === undefined || body === null || body === '') return '';
-				if (typeof body === 'string') return body;
-				try {
-					return JSON.stringify(body, null, 2);
-				} catch (err) {
-					try {
-						return String(body);
-					} catch (error) {
-						return '';
-					}
-				}
-			};
+                        const activityRequestBody = (entry) => {
+                                if (!entry?.request) return '';
+                                const body = entry.request.body;
+                                if (body === undefined || body === null || body === '') return '';
+                                if (typeof body === 'string') return body;
+                                try {
+                                        return JSON.stringify(body, null, 2);
+                                } catch (err) {
+                                        try {
+                                                return String(body);
+                                        } catch (error) {
+                                                return '';
+                                        }
+                                }
+                        };
 
-			const escapeSingleQuotes = (value) => String(value).replace(/'/g, "'\"'\"'");
+                        const buildHttpRequest = (entry) => {
+                                if (!entry?.request) return '';
+                                const method = (entry.request.method || '').toUpperCase() || 'GET';
+                                const rawUrl = entry.request.url || '';
+                                if (!rawUrl) return '';
+                                let path = rawUrl;
+                                let host = '';
+                                try {
+                                        const parsed = new URL(rawUrl, window.location.origin);
+                                        host = parsed.host;
+                                        path = `${parsed.pathname || '/'}${parsed.search || ''}` || '/';
+                                } catch (error) {
+                                        path = rawUrl;
+                                }
+                                if (!path) {
+                                        path = '/';
+                                }
+                                const lines = [`${method} ${path} HTTP/1.1`];
+                                const headers = activityRequestHeaders(entry);
+                                const hasHostHeader = headers.some(({ key }) => key.toLowerCase() === 'host');
+                                if (host && !hasHostHeader) {
+                                        lines.push(`Host: ${host}`);
+                                }
+                                headers.forEach(({ key, value }) => {
+                                        lines.push(`${key}: ${value}`);
+                                });
+                                const body = activityRequestBody(entry);
+                                if (body) {
+                                        lines.push('');
+                                        lines.push(body);
+                                }
+                                return lines.join('\n');
+                        };
 
-			const buildCurlCommand = (entry) => {
-				if (!entry?.request) return '';
-				const method = (entry.request.method || '').toUpperCase();
-				const supportedMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-				if (!supportedMethods.includes(method)) return '';
+                        const buildJavascriptRequest = (entry) => {
+                                if (!entry?.request) return '';
+                                const method = (entry.request.method || '').toUpperCase() || 'GET';
+                                const rawUrl = entry.request.url || '';
+                                if (!rawUrl) return '';
+                                let absoluteUrl = rawUrl;
+                                try {
+                                        absoluteUrl = new URL(rawUrl, window.location.origin).toString();
+                                } catch (error) {
+                                        absoluteUrl = rawUrl;
+                                }
+                                const lines = [`const response = await fetch(${JSON.stringify(absoluteUrl)}, {`];
+                                lines.push(`  method: '${method}',`);
+                                const headers = activityRequestHeaders(entry);
+                                if (headers.length > 0) {
+                                        lines.push('  headers: {');
+                                        headers.forEach(({ key, value }) => {
+                                                lines.push(`    ${JSON.stringify(key)}: ${JSON.stringify(value)},`);
+                                        });
+                                        const lastIndex = lines.length - 1;
+                                        lines[lastIndex] = lines[lastIndex].replace(/,$/, '');
+                                        lines.push('  },');
+                                }
+                                const body = entry.request.body;
+                                if (body !== undefined && body !== null && body !== '') {
+                                        if (typeof body === 'string') {
+                                                lines.push(`  body: ${JSON.stringify(body)},`);
+                                        } else {
+                                                try {
+                                                        const serialized = JSON.stringify(body, null, 2);
+                                                        lines.push('  body: JSON.stringify(');
+                                                        serialized.split('\n').forEach((line) => {
+                                                                lines.push(`    ${line}`);
+                                                        });
+                                                        lines.push('  ),');
+                                                } catch (error) {
+                                                        lines.push(`  body: ${JSON.stringify(String(body))},`);
+                                                }
+                                        }
+                                }
+                                const lastLineIndex = lines.length - 1;
+                                if (lastLineIndex >= 1 && lines[lastLineIndex].trim().endsWith(',')) {
+                                        lines[lastLineIndex] = lines[lastLineIndex].replace(/,$/, '');
+                                }
+                                lines.push('});');
+                                lines.push('');
+                                lines.push('if (!response.ok) {');
+                                lines.push("  throw new Error('Request failed');");
+                                lines.push('}');
+                                lines.push('');
+                                lines.push('const data = await response.json();');
+                                lines.push('console.log(data);');
+                                return lines.join('\n');
+                        };
+
+                        const escapeSingleQuotes = (value) => String(value).replace(/'/g, "'\"'\"'");
+
+                        const buildCurlCommand = (entry) => {
+                                if (!entry?.request) return '';
+                                const method = (entry.request.method || '').toUpperCase();
+                                const supportedMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+                                if (!supportedMethods.includes(method)) return '';
 				const rawUrl = entry.request.url || '';
 				if (!rawUrl) return '';
 				let absoluteUrl = rawUrl;
@@ -1973,9 +2082,46 @@
 						}
 					}
 					lines.push(`  --data-raw '${escapeSingleQuotes(bodyString)}'`);
-				}
-				return lines.join(' \\\n');
-			};
+                                }
+                                return lines.join(' \\\n');
+                        };
+
+                        const activityRequestTabDefinitions = [
+                                { id: 'http', label: 'HTTP', builder: buildHttpRequest },
+                                { id: 'javascript', label: 'JavaScript', builder: buildJavascriptRequest },
+                                { id: 'curl', label: 'cURL', builder: buildCurlCommand },
+                        ];
+
+                        const activityRequestTabEntries = computed(() => {
+                                const entry = selectedActivityEntry.value;
+                                if (!entry) return [];
+                                return activityRequestTabDefinitions
+                                        .map((tab) => {
+                                                const content = tab.builder(entry);
+                                                if (!content || String(content).trim() === '') {
+                                                        return null;
+                                                }
+                                                return { id: tab.id, label: tab.label, content };
+                                        })
+                                        .filter(Boolean);
+                        });
+
+                        const activeActivityRequestTabContent = computed(() => {
+                                const tabs = activityRequestTabEntries.value;
+                                if (!tabs.length) return '';
+                                const active = tabs.find((tab) => tab.id === selectedActivityRequestTab.value);
+                                return active ? active.content : tabs[0].content;
+                        });
+
+                        watch(activityRequestTabEntries, (tabs) => {
+                                if (!Array.isArray(tabs) || tabs.length === 0) {
+                                        selectedActivityRequestTab.value = '';
+                                        return;
+                                }
+                                if (!tabs.some((tab) => tab.id === selectedActivityRequestTab.value)) {
+                                        selectedActivityRequestTab.value = tabs[0].id;
+                                }
+                        });
 
                         const showActivityModal = () => {
                                 const modalEl = activityModal.value;
@@ -2016,6 +2162,7 @@
                                 }
 
                                 selectedActivityEntry.value = entry;
+                                selectedActivityRequestTab.value = 'http';
                                 activityDetailOpen.value = true;
                                 modalMode.value = 'activity';
                                 showActivityModal();
@@ -3650,10 +3797,13 @@
 				activityStatusLabel,
 				activityStatusBadgeClass,
 				clearActivityLog,
-				activityMarkerClass,
-				activityMarkerTitle,
+                                activityMarkerClass,
+                                activityMarkerTitle,
                                 activityRequestHeaders,
                                 activityRequestBody,
+                                activityRequestTabEntries,
+                                selectedActivityRequestTab,
+                                activeActivityRequestTabContent,
                                 buildCurlCommand,
                                 activityModal,
                                 modalMode,
