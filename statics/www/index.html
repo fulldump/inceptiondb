@@ -205,19 +205,6 @@
                   <p v-if="filterError" class="mt-2 text-sm text-rose-400">{{ filterError }}</p>
                 </div>
 
-                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <label class="block text-xs uppercase tracking-wide text-slate-400">
-                    Items per page
-                    <select
-                      v-model.number="pageSize"
-                      class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    >
-                      <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
-                    </select>
-                  </label>
-                  <p class="text-xs text-slate-400 md:text-right">{{ pageInfo }}</p>
-                </div>
-
                 <div>
                   <label class="block text-xs uppercase tracking-wide text-slate-400">Index</label>
                   <select
@@ -274,24 +261,6 @@
                   </label>
                 </div>
 
-                <div class="flex flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
-                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 transition"
-                    :disabled="disablePrev"
-                    @click="prevPage"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 transition"
-                    :disabled="disableNext"
-                    @click="nextPage"
-                  >
-                    Next
-                  </button>
-                </div>
               </div>
 
               <div class="rounded-xl border border-slate-800 bg-slate-900/60 shadow-inner">
@@ -357,7 +326,50 @@
                   <div v-if="queryLoading" class="text-sm text-slate-400">Running query…</div>
                   <div v-else-if="queryError" class="text-sm text-rose-400">{{ queryError }}</div>
                   <div v-else-if="queryRows.length === 0" class="text-sm text-slate-400">No documents found.</div>
-                  <div v-else>
+                  <div v-else class="space-y-5">
+                    <div class="flex flex-col items-center gap-2">
+                      <div class="inline-flex items-stretch overflow-hidden rounded-md border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-200">
+                        <button
+                          type="button"
+                          class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-r border-slate-700"
+                          :disabled="disablePrev"
+                          @click="prevPage"
+                        >
+                          Previous
+                        </button>
+                        <div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
+                          <span class="text-[10px] uppercase tracking-wide text-slate-400">skip</span>
+                          <input
+                            v-model.number="skip"
+                            type="number"
+                            min="0"
+                            class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            @change="commitSkip"
+                            @keyup.enter="commitSkip"
+                          >
+                        </div>
+                        <div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
+                          <span class="text-[10px] uppercase tracking-wide text-slate-400">limit</span>
+                          <input
+                            v-model.number="limit"
+                            type="number"
+                            min="0"
+                            class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            @change="commitLimit"
+                            @keyup.enter="commitLimit"
+                          >
+                        </div>
+                        <button
+                          type="button"
+                          class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-l border-slate-700"
+                          :disabled="disableNext"
+                          @click="nextPage"
+                        >
+                          Next
+                        </button>
+                      </div>
+                      <p class="text-[11px] text-slate-400">{{ pageInfo }}</p>
+                    </div>
                     <div v-if="resultsViewMode === 'cards'" class="space-y-4">
                       <div
                         v-for="(row, idx) in queryRows"
@@ -539,6 +551,49 @@
                           {{ editing.state.success }}
                         </p>
                       </div>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                      <div class="inline-flex items-stretch overflow-hidden rounded-md border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-200">
+                        <button
+                          type="button"
+                          class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-r border-slate-700"
+                          :disabled="disablePrev"
+                          @click="prevPage"
+                        >
+                          Previous
+                        </button>
+                        <div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
+                          <span class="text-[10px] uppercase tracking-wide text-slate-400">skip</span>
+                          <input
+                            v-model.number="skip"
+                            type="number"
+                            min="0"
+                            class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            @change="commitSkip"
+                            @keyup.enter="commitSkip"
+                          >
+                        </div>
+                        <div class="flex items-center gap-2 border-r border-slate-700 px-3 py-2 text-slate-300">
+                          <span class="text-[10px] uppercase tracking-wide text-slate-400">limit</span>
+                          <input
+                            v-model.number="limit"
+                            type="number"
+                            min="0"
+                            class="h-7 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            @change="commitLimit"
+                            @keyup.enter="commitLimit"
+                          >
+                        </div>
+                        <button
+                          type="button"
+                          class="bg-slate-900 px-3 py-2 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60 border-l border-slate-700"
+                          :disabled="disableNext"
+                          @click="nextPage"
+                        >
+                          Next
+                        </button>
+                      </div>
+                      <p class="text-[11px] text-slate-400">{{ pageInfo }}</p>
                     </div>
                   </div>
                 </div>
@@ -982,9 +1037,10 @@
           const indexesLoading = ref(false);
           const filterText = ref('{\n\n}');
           const filterError = ref('');
-          const page = ref(1);
-          const pageSize = ref(25);
-          const pageSizeOptions = [10, 25, 50, 100];
+          const skip = ref(0);
+          const limit = ref(25);
+          const appliedSkip = ref(0);
+          const appliedLimit = ref(25);
           const queryRows = ref([]);
           const queryLoading = ref(false);
           const queryError = ref('');
@@ -1063,6 +1119,13 @@
             hour12: true,
           });
           const numberFormatter = new Intl.NumberFormat('en-US');
+
+          const toNonNegativeInteger = (value, fallback = 0) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return fallback;
+            if (Number.isNaN(num)) return fallback;
+            return Math.max(0, Math.floor(num));
+          };
 
           const createActivityEntry = ({ label, method, url, target }) => {
             const entry = {
@@ -1656,12 +1719,12 @@
 
           const selectedCollection = computed(() => collections.value.find(c => c.name === selectedCollectionName.value) || null);
           const activeIndex = computed(() => indexes.value.find(idx => idx.name === selectedIndexName.value) || null);
-          const offset = computed(() => Math.max(0, (Number(page.value) - 1) * Number(pageSize.value || 0)));
-          const disablePrev = computed(() => page.value <= 1);
+          const offset = computed(() => toNonNegativeInteger(skip.value, 0));
+          const disablePrev = computed(() => offset.value <= 0);
           const disableNext = computed(() => {
-            const limit = Number(pageSize.value) || 0;
-            if (limit === 0) return true;
-            return queryRows.value.length < limit;
+            const limitValue = toNonNegativeInteger(limit.value, 0);
+            if (limitValue === 0) return true;
+            return queryRows.value.length < limitValue;
           });
           const pageInfo = computed(() => {
             const count = queryRows.value.length;
@@ -2243,7 +2306,9 @@
             resetRangeFields();
             filterText.value = '{\n\n}';
             filterError.value = '';
-            page.value = 1;
+            skip.value = 0;
+            appliedSkip.value = 0;
+            appliedLimit.value = toNonNegativeInteger(limit.value, 25);
             queryRows.value = [];
             queryError.value = '';
             queryStats.elapsed = '';
@@ -2400,7 +2465,7 @@
             }
             const payload = {
               filter: parsedFilter,
-              limit: overrides.limit !== undefined ? Number(overrides.limit) : Number(pageSize.value) || 0,
+              limit: overrides.limit !== undefined ? Number(overrides.limit) : toNonNegativeInteger(limit.value, 0),
               skip: overrides.skip !== undefined ? Number(overrides.skip) : offset.value,
             };
             const index = activeIndex.value;
@@ -2505,6 +2570,8 @@
               queryStats.returned = parsedRows.length;
               const elapsed = Math.round(performance.now() - started);
               queryStats.elapsed = `${elapsed} ms`;
+              appliedSkip.value = offset.value;
+              appliedLimit.value = toNonNegativeInteger(limit.value, 0);
               lastQueryParameters = {
                 collection: selectedCollection.value.name,
                 payload: JSON.parse(JSON.stringify(payload)),
@@ -2652,19 +2719,49 @@
 
           const nextPage = () => {
             if (disableNext.value) return;
-            page.value = Number(page.value) + 1;
+            const step = toNonNegativeInteger(limit.value, 0);
+            if (step === 0) return;
+            skip.value = offset.value + step;
             runQuery();
           };
 
           const prevPage = () => {
             if (disablePrev.value) return;
-            page.value = Math.max(1, Number(page.value) - 1);
+            const step = toNonNegativeInteger(limit.value, 0);
+            if (step === 0) return;
+            skip.value = Math.max(0, offset.value - step);
             runQuery();
+          };
+
+          const commitSkip = () => {
+            const normalized = toNonNegativeInteger(skip.value, 0);
+            const previous = appliedSkip.value;
+            if (normalized !== skip.value) {
+              skip.value = normalized;
+            }
+            if (normalized !== previous) {
+              runQuery();
+            }
+          };
+
+          const commitLimit = () => {
+            const normalized = toNonNegativeInteger(limit.value, 25);
+            const previous = appliedLimit.value;
+            if (normalized !== limit.value) {
+              limit.value = normalized;
+            }
+            if (normalized !== previous) {
+              if (skip.value !== 0) {
+                skip.value = 0;
+              }
+              runQuery();
+            }
           };
 
           watch(selectedCollectionName, () => {
             clearEditingDocuments();
             defaultsHelpOpen.value = false;
+            skip.value = 0;
             csvImportForm.error = '';
             csvImportForm.success = '';
             csvImportForm.progress = '';
@@ -2693,12 +2790,6 @@
                 delete editingDocuments[key];
               }
             });
-          });
-
-          watch(pageSize, (value, old) => {
-            if (value === old) return;
-            page.value = 1;
-            runQuery();
           });
 
           const canDeleteRow = (row) => documentId(row) !== null;
@@ -2991,9 +3082,8 @@
             connectionStatusChecking,
             disablePrev,
             disableNext,
-            page,
-            pageSize,
-            pageSizeOptions,
+            skip,
+            limit,
             offset,
             pageInfo,
             selectResultsView,
@@ -3007,6 +3097,8 @@
             exportResults,
             nextPage,
             prevPage,
+            commitSkip,
+            commitLimit,
             documentId,
             canEditDocument,
             isEditingRow,
