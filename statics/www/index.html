@@ -17,6 +17,7 @@
 	<meta name="twitter:image" content="https://inceptiondb.io/img/og-image.png">
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
 	<link rel="stylesheet" href="/lib/tailwind.min.css">
+	<link rel="stylesheet" href="/theme.css">
 	<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%230f172a'/><text x='50' y='58' font-size='52' text-anchor='middle' fill='white'>IDB</text></svg>">
 	<style>
 		@keyframes activity-marker-enter {
@@ -73,7 +74,7 @@
 	<script src="/lib/axios.min.js"></script>
 	<script src="/lib/vue.global.prod.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
+<body class="theme-dark bg-slate-950 text-slate-100 min-h-screen">
 <div id="app">
 	<dialog
 					id="activity-modal"
@@ -129,6 +130,7 @@
 					</div>
 					<pre
 									v-if="activeActivityRequestTabContent"
+									style="height: 300px;"
 									class="max-h-48 overflow-y-auto bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
 					>{{ activeActivityRequestTabContent }}</pre>
 				</div>
@@ -2061,11 +2063,209 @@
 				return lines.join(' \\\n');
 			};
 
-			const activityRequestTabDefinitions = [
-				{ id: 'http', label: 'HTTP', builder: buildHttpRequest },
-				{ id: 'javascript', label: 'JavaScript', builder: buildJavascriptRequest },
-				{ id: 'curl', label: 'cURL', builder: buildCurlCommand },
-			];
+                        const buildGoRequest = (entry) => {
+                                if (!entry?.request) return '';
+                                const method = (entry.request.method || '').toUpperCase() || 'GET';
+                                const rawUrl = entry.request.url || '';
+                                if (!rawUrl) return '';
+                                let absoluteUrl = rawUrl;
+                                try {
+                                        absoluteUrl = new URL(rawUrl, window.location.origin).toString();
+                                } catch (error) {
+                                        absoluteUrl = rawUrl;
+                                }
+
+                                const headers = activityRequestHeaders(entry);
+                                const body = entry.request.body;
+
+                                const goImports = new Set(['"fmt"', '"io"', '"log"', '"net/http"']);
+                                let bodyDeclaration = '';
+                                let bodyReference = 'nil';
+
+                                if (body !== undefined && body !== null && body !== '') {
+                                        goImports.add('"strings"');
+                                        let bodyString = '';
+                                        if (typeof body === 'string') {
+                                                bodyString = body;
+                                        } else {
+                                                try {
+                                                        bodyString = JSON.stringify(body, null, 2);
+                                                } catch (error) {
+                                                        bodyString = String(body);
+                                                }
+                                        }
+                                        bodyDeclaration = `\tpayload := strings.NewReader(${JSON.stringify(bodyString)})`;
+                                        bodyReference = 'payload';
+                                }
+
+                                const lines = ['package main', '', 'import ('];
+                                Array.from(goImports)
+                                        .sort()
+                                        .forEach((imp) => {
+                                                lines.push(`\t${imp}`);
+                                        });
+                                lines.push(')', '', 'func main() {', '\tclient := &http.Client{}');
+                                if (bodyDeclaration) {
+                                        lines.push(bodyDeclaration);
+                                }
+                                lines.push(
+                                        `\treq, err := http.NewRequest(${JSON.stringify(method)}, ${JSON.stringify(absoluteUrl)}, ${bodyReference})`
+                                );
+                                lines.push('\tif err != nil {', '\t\tlog.Fatal(err)', '\t}');
+                                if (headers.length > 0) {
+                                        lines.push('');
+                                        headers.forEach(({ key, value }) => {
+                                                lines.push(`\treq.Header.Set(${JSON.stringify(key)}, ${JSON.stringify(value)})`);
+                                        });
+                                }
+                                lines.push(
+                                        '',
+                                        '\tresp, err := client.Do(req)',
+                                        '\tif err != nil {',
+                                        '\t\tlog.Fatal(err)',
+                                        '\t}',
+                                        '\tdefer resp.Body.Close()',
+                                        '',
+                                        '\tbody, err := io.ReadAll(resp.Body)',
+                                        '\tif err != nil {',
+                                        '\t\tlog.Fatal(err)',
+                                        '\t}',
+                                        '\tfmt.Println(string(body))',
+                                        '}'
+                                );
+
+                                return lines.join('\n');
+                        };
+
+                        const buildPythonRequest = (entry) => {
+                                if (!entry?.request) return '';
+                                const method = (entry.request.method || '').toUpperCase() || 'GET';
+                                const rawUrl = entry.request.url || '';
+                                if (!rawUrl) return '';
+                                let absoluteUrl = rawUrl;
+                                try {
+                                        absoluteUrl = new URL(rawUrl, window.location.origin).toString();
+                                } catch (error) {
+                                        absoluteUrl = rawUrl;
+                                }
+
+                                const headers = activityRequestHeaders(entry);
+                                const body = entry.request.body;
+
+                                const lines = ['import requests'];
+                                let payloadArgument = '';
+                                if (body !== undefined && body !== null && body !== '') {
+                                        if (typeof body === 'string') {
+                                                lines.push('', `payload = ${JSON.stringify(body)}`);
+                                                payloadArgument = 'data=payload';
+                                        } else {
+                                                let serialized = '';
+                                                try {
+                                                        serialized = JSON.stringify(body, null, 2);
+                                                } catch (error) {
+                                                        serialized = JSON.stringify(String(body));
+                                                }
+                                                lines.unshift('import json');
+                                                lines.push('');
+                                                lines.push('payload = json.loads("""');
+                                                serialized.split('\n').forEach((line) => {
+                                                        lines.push(line);
+                                                });
+                                                lines.push('""")');
+                                                payloadArgument = 'json=payload';
+                                        }
+                                }
+
+                                lines.push('', `url = ${JSON.stringify(absoluteUrl)}`);
+
+                                if (headers.length > 0) {
+                                        lines.push('headers = {');
+                                        headers.forEach(({ key, value }) => {
+                                                lines.push(`    ${JSON.stringify(key)}: ${JSON.stringify(value)},`);
+                                        });
+                                        const lastIndex = lines.length - 1;
+                                        lines[lastIndex] = lines[lastIndex].replace(/,$/, '');
+                                        lines.push('}');
+                                }
+
+                                const requestArgs = [`${JSON.stringify(method)}`, 'url'];
+                                if (headers.length > 0) {
+                                        requestArgs.push('headers=headers');
+                                }
+                                if (payloadArgument) {
+                                        requestArgs.push(payloadArgument);
+                                }
+                                lines.push('', `response = requests.request(${requestArgs.join(', ')})`);
+                                lines.push('print(response.text)');
+
+                                return lines.join('\n');
+                        };
+
+                        const buildPhpRequest = (entry) => {
+                                if (!entry?.request) return '';
+                                const method = (entry.request.method || '').toUpperCase() || 'GET';
+                                const rawUrl = entry.request.url || '';
+                                if (!rawUrl) return '';
+                                let absoluteUrl = rawUrl;
+                                try {
+                                        absoluteUrl = new URL(rawUrl, window.location.origin).toString();
+                                } catch (error) {
+                                        absoluteUrl = rawUrl;
+                                }
+
+                                const headers = activityRequestHeaders(entry);
+                                const body = entry.request.body;
+
+                                const lines = ['<?php', '', '$curl = curl_init();', '', 'curl_setopt_array($curl, ['];
+                                lines.push(`    CURLOPT_URL => ${JSON.stringify(absoluteUrl)},`);
+                                lines.push('    CURLOPT_RETURNTRANSFER => true,');
+                                lines.push(`    CURLOPT_CUSTOMREQUEST => ${JSON.stringify(method)},`);
+
+                                if (headers.length > 0) {
+                                        lines.push('    CURLOPT_HTTPHEADER => [');
+                                        headers.forEach(({ key, value }) => {
+                                                lines.push(`        ${JSON.stringify(`${key}: ${value}`)},`);
+                                        });
+                                        const lastIndex = lines.length - 1;
+                                        lines[lastIndex] = lines[lastIndex].replace(/,$/, '');
+                                        lines.push('    ],');
+                                }
+
+                                if (body !== undefined && body !== null && body !== '') {
+                                        let bodyString = '';
+                                        if (typeof body === 'string') {
+                                                bodyString = body;
+                                        } else {
+                                                try {
+                                                        bodyString = JSON.stringify(body);
+                                                } catch (error) {
+                                                        bodyString = String(body);
+                                                }
+                                        }
+                                        lines.push(`    CURLOPT_POSTFIELDS => ${JSON.stringify(bodyString)},`);
+                                }
+
+                                lines.push(']);', '', '$response = curl_exec($curl);');
+                                lines.push('');
+                                lines.push('if ($response === false) {');
+                                lines.push('    throw new RuntimeException(curl_error($curl));');
+                                lines.push('}');
+                                lines.push('');
+                                lines.push('curl_close($curl);');
+                                lines.push('');
+                                lines.push('echo $response;');
+
+                                return lines.join('\n');
+                        };
+
+                        const activityRequestTabDefinitions = [
+                                { id: 'http', label: 'HTTP', builder: buildHttpRequest },
+                                { id: 'javascript', label: 'JavaScript', builder: buildJavascriptRequest },
+                                { id: 'golang', label: 'Golang', builder: buildGoRequest },
+                                { id: 'python', label: 'Python', builder: buildPythonRequest },
+                                { id: 'php', label: 'PHP', builder: buildPhpRequest },
+                                { id: 'curl', label: 'cURL', builder: buildCurlCommand },
+                        ];
 
 			const activityRequestTabEntries = computed(() => {
 				const entry = selectedActivityEntry.value;
@@ -3788,6 +3988,28 @@
 			};
 		},
 	}).mount('#app');
+</script>
+<script>
+	(function () {
+		var mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+		function applyTheme(isDark) {
+			document.body.classList.toggle('theme-dark', isDark);
+			document.body.classList.toggle('theme-light', !isDark);
+		}
+
+		applyTheme(mediaQuery.matches);
+
+		if (typeof mediaQuery.addEventListener === 'function') {
+			mediaQuery.addEventListener('change', function (event) {
+				applyTheme(event.matches);
+			});
+		} else if (typeof mediaQuery.addListener === 'function') {
+			mediaQuery.addListener(function (event) {
+				applyTheme(event.matches);
+			});
+		}
+	})();
 </script>
 </body>
 </html>
