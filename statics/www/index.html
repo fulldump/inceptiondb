@@ -17,6 +17,7 @@
 	<meta name="twitter:image" content="https://inceptiondb.io/img/og-image.png">
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
 	<link rel="stylesheet" href="/lib/tailwind.min.css">
+	<link rel="stylesheet" href="/theme.css">
 	<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%230f172a'/><text x='50' y='58' font-size='52' text-anchor='middle' fill='white'>IDB</text></svg>">
 	<style>
 		@keyframes activity-marker-enter {
@@ -73,7 +74,7 @@
 	<script src="/lib/axios.min.js"></script>
 	<script src="/lib/vue.global.prod.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
+<body class="theme-dark bg-slate-950 text-slate-100 min-h-screen">
 <div id="app">
 	<dialog
 					id="activity-modal"
@@ -129,6 +130,7 @@
 					</div>
 					<pre
 									v-if="activeActivityRequestTabContent"
+									style="height: 300px;"
 									class="max-h-48 overflow-y-auto bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words"
 					>{{ activeActivityRequestTabContent }}</pre>
 				</div>
@@ -3788,6 +3790,28 @@
 			};
 		},
 	}).mount('#app');
+</script>
+<script>
+	(function () {
+		var mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+		function applyTheme(isDark) {
+			document.body.classList.toggle('theme-dark', isDark);
+			document.body.classList.toggle('theme-light', !isDark);
+		}
+
+		applyTheme(mediaQuery.matches);
+
+		if (typeof mediaQuery.addEventListener === 'function') {
+			mediaQuery.addEventListener('change', function (event) {
+				applyTheme(event.matches);
+			});
+		} else if (typeof mediaQuery.addListener === 'function') {
+			mediaQuery.addListener(function (event) {
+				applyTheme(event.matches);
+			});
+		}
+	})();
 </script>
 </body>
 </html>
