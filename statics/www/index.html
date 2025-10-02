@@ -71,8 +71,7 @@
 			background-color: rgba(15, 23, 42, 0.75);
 		}
 	</style>
-	<script src="/lib/axios.min.js"></script>
-	<script src="/lib/vue.global.prod.js"></script>
+        <script src="/lib/vue.global.prod.js"></script>
 	<script defer src="https://umami.hola.cloud/script.js" data-website-id="c6f05611-d1d5-4f8d-9925-daa2f0d10160"></script>
 </head>
 <body class="theme-dark bg-slate-950 text-slate-100 min-h-screen">
@@ -1144,9 +1143,115 @@
 </div>
 
 <script>
-	const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } = Vue;
+        const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } = Vue;
 
-	createApp({
+        const applyResponseTransforms = (data, transform) => {
+                if (Array.isArray(transform)) {
+                        return transform.reduce((acc, fn) => {
+                                return typeof fn === 'function' ? fn(acc) : acc;
+                        }, data);
+                }
+                if (typeof transform === 'function') {
+                        return transform(data);
+                }
+                return data;
+        };
+
+        const isJsonLikePayload = (value) => {
+                if (value === null || value === undefined) return false;
+                if (typeof value === 'string') return false;
+                if (value instanceof Blob) return false;
+                if (value instanceof ArrayBuffer) return false;
+                if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView && ArrayBuffer.isView(value)) return false;
+                if (value instanceof FormData) return false;
+                if (value instanceof URLSearchParams) return false;
+                if (typeof ReadableStream !== 'undefined' && value instanceof ReadableStream) return false;
+                return typeof value === 'object';
+        };
+
+        const httpRequest = async (config) => {
+                const {
+                        url,
+                        method = 'GET',
+                        data,
+                        headers: inputHeaders = {},
+                        responseType,
+                        transformResponse,
+                } = config || {};
+
+                if (!url) {
+                        throw new Error('Request URL is required');
+                }
+
+                const headers = new Headers(inputHeaders);
+                let body = data;
+                if (body !== undefined && body !== null && isJsonLikePayload(body)) {
+                        body = JSON.stringify(body);
+                        if (!headers.has('Content-Type')) {
+                                headers.set('Content-Type', 'application/json');
+                        }
+                }
+
+                const fetchOptions = {
+                        method: String(method || 'GET').toUpperCase(),
+                        headers,
+                        body,
+                };
+
+                if (body === undefined || body === null) {
+                        delete fetchOptions.body;
+                }
+
+                let response;
+                try {
+                        response = await fetch(url, fetchOptions);
+                } catch (error) {
+                        throw error;
+                }
+
+                const rawText = await response.text();
+                const expectedType = responseType || 'json';
+                let parsedData;
+                if (expectedType === 'text') {
+                        parsedData = rawText;
+                } else if (!rawText) {
+                        parsedData = null;
+                } else {
+                        try {
+                                parsedData = JSON.parse(rawText);
+                        } catch (err) {
+                                parsedData = rawText;
+                        }
+                }
+
+                const finalData = applyResponseTransforms(parsedData, transformResponse);
+
+                if (!response.ok) {
+                        const error = new Error(`HTTP ${response.status}`);
+                        error.response = {
+                                status: response.status,
+                                statusText: response.statusText,
+                                data: finalData,
+                                headers: response.headers,
+                        };
+                        throw error;
+                }
+
+                return {
+                        status: response.status,
+                        statusText: response.statusText,
+                        data: finalData,
+                        headers: response.headers,
+                };
+        };
+
+        const http = {
+                request: (options) => httpRequest(options || {}),
+                get: (url, options = {}) => httpRequest({ ...options, url, method: 'GET' }),
+                post: (url, data, options = {}) => httpRequest({ ...options, url, data, method: 'POST' }),
+        };
+
+        createApp({
 		setup() {
 			const collections = ref([]);
 			const collectionsLoading = ref(false);
@@ -1792,7 +1897,7 @@
 					requestHeaders: { 'Content-Type': 'application/json' },
 				});
 				try {
-					const resp = await axios.post(url, ndjsonPayload, {
+					const resp = await http.post(url, ndjsonPayload, {
 						headers: { 'Content-Type': 'application/json' },
 						responseType: 'text',
 						transformResponse: [(data) => data],
@@ -2836,7 +2941,7 @@
 					requestBody: requestPayload,
 				});
 				try {
-					const resp = await axios.post(url, requestPayload);
+					const resp = await http.post(url, requestPayload);
 					markConnectionOnline();
 					completeActivityEntry(entry, {
 						detail: `Document ${id} updated successfully.`,
@@ -2903,7 +3008,7 @@
 					requestBody: payload,
 				});
 				try {
-					const resp = await axios.post(url, payload);
+					const resp = await http.post(url, payload);
 					markConnectionOnline();
 					indexMessages.success = `Index "${name}" created successfully.`;
 					indexForm.open = false;
@@ -2940,7 +3045,7 @@
 					requestBody: requestPayload,
 				});
 				try {
-					const resp = await axios.post(url, requestPayload);
+					const resp = await http.post(url, requestPayload);
 					markConnectionOnline();
 					if (selectedIndexName.value === index.name) {
 						selectedIndexName.value = '';
@@ -3010,8 +3115,8 @@
 			const checkBackendStatus = async () => {
 				if (statusPromise) return statusPromise;
 				beginConnectionCheck();
-				statusPromise = axios
-								.get('/v1/collections')
+                        statusPromise = http
+                                                                .get('/v1/collections')
 								.then(() => {
 									markConnectionOnline();
 								})
@@ -3137,7 +3242,7 @@
 					url: '/v1/collections',
 				});
 				try {
-					const resp = await axios.get('/v1/collections');
+					const resp = await http.get('/v1/collections');
 					markConnectionOnline();
 					const list = Array.isArray(resp.data) ? resp.data.slice() : [];
 					list.sort((a, b) => a.name.localeCompare(b.name));
@@ -3175,7 +3280,7 @@
 					target: collectionName,
 				});
 				try {
-					const resp = await axios.post(url);
+					const resp = await http.post(url);
 					markConnectionOnline();
 					const list = Array.isArray(resp.data) ? resp.data : [];
 					completeActivityEntry(entry, {
@@ -3220,7 +3325,7 @@
 					target: collectionName,
 				});
 				try {
-					const resp = await axios.post(url);
+					const resp = await http.post(url);
 					markConnectionOnline();
 					const payload = resp?.data;
 					const normalized = payload && typeof payload === 'object' && !Array.isArray(payload)
@@ -3357,7 +3462,7 @@
 					requestBody: payload,
 				});
 				try {
-					const resp = await axios({
+					const resp = await http.request({
 						method: 'post',
 						url,
 						data: payload,
@@ -3494,7 +3599,7 @@
 						const payload = JSON.parse(JSON.stringify(template));
 						payload.skip = totalExported;
 						payload.limit = EXPORT_BATCH_SIZE;
-						const resp = await axios({
+						const resp = await http.request({
 							method: 'post',
 							url,
 							data: payload,
@@ -3643,7 +3748,7 @@
 					requestBody: requestPayload,
 				});
 				try {
-					const resp = await axios.post(url, requestPayload);
+					const resp = await http.post(url, requestPayload);
 					markConnectionOnline();
 					completeActivityEntry(entry, {
 						detail: `Deleted document with id ${id}.`,
@@ -3691,7 +3796,7 @@
 					requestBody: parsed,
 				});
 				try {
-					const resp = await axios.post(url, parsed);
+					const resp = await http.post(url, parsed);
 					markConnectionOnline();
 					const savedDefaults = normalizeDefaults(resp?.data ?? parsed);
 					const formatted = formatDefaultsEditor(savedDefaults);
@@ -3738,7 +3843,7 @@
 					requestBody: payload,
 				});
 				try {
-					const resp = await axios.post(url, payload);
+					const resp = await http.post(url, payload);
 					insertForm.success = 'Document inserted successfully.';
 					insertForm.payload = emptyJsonObjectText;
 					markConnectionOnline();
@@ -3771,7 +3876,7 @@
 					requestBody: requestPayload,
 				});
 				try {
-					const resp = await axios.post('/v1/collections', requestPayload);
+					const resp = await http.post('/v1/collections', requestPayload);
 					markConnectionOnline();
 					const created = resp?.data?.name || name;
 					completeActivityEntry(entry, {
@@ -3802,7 +3907,7 @@
 					target: name,
 				});
 				try {
-					const resp = await axios.post(url);
+					const resp = await http.post(url);
 					markConnectionOnline();
 					completeActivityEntry(entry, {
 						detail: `Collection "${name}" deleted successfully.`,
