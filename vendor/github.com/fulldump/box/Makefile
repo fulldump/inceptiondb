@@ -16,7 +16,7 @@ info:
 	$(GOCMD) env
 
 test:
-	$(GOCMD) test -cover $(PROJECT)/...
+	$(GOCMD) test -count=1 -cover $(PROJECT)/...
 
 example:
 	$(GOCMD) install $(PROJECT)/example

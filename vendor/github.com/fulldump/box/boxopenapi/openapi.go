@@ -11,6 +11,19 @@ import (
 
 type JSON = map[string]any
 
+func isFalse(a any) bool {
+
+	if v, ok := a.(string); ok && v == "false" {
+		return true
+	}
+
+	if v, ok := a.(bool); ok && v == false {
+		return true
+	}
+
+	return false
+}
+
 // Spec returns a valid OpenAPI spec from a box router ready to be used.
 func Spec(api *box.B) OpenAPI {
 
@@ -18,6 +31,10 @@ func Spec(api *box.B) OpenAPI {
 	schemas := JSON{}
 
 	walk(api.R, func(r *box.R) {
+
+		if isFalse(r.GetAttribute("openapi")) {
+			return
+		}
 
 		if len(r.GetActions()) == 0 {
 			return
@@ -30,6 +47,11 @@ func Spec(api *box.B) OpenAPI {
 		parameters := getParams(r)
 
 		for _, action := range r.GetActions() {
+
+			if isFalse(action.GetAttribute("openapi")) {
+				return
+			}
+
 			method := strings.ToLower(action.HttpMethod)
 
 			inputs, outputs, _ := describeHandler(action.GetHandler())
@@ -75,7 +97,9 @@ func Spec(api *box.B) OpenAPI {
 			}
 		}
 
-		paths[path] = methods
+		if len(methods) > 0 {
+			paths[path] = methods
+		}
 	})
 
 	return OpenAPI{
@@ -96,6 +120,44 @@ func Spec(api *box.B) OpenAPI {
 	}
 }
 
+func schemaStructFields(schemas JSON, item reflect.Type) JSON {
+
+	properties := JSON{}
+
+	// follow pointers
+	for item.Kind() == reflect.Ptr {
+		item = item.Elem()
+	}
+
+	for i := 0; i < item.NumField(); i++ {
+		f := item.Field(i)
+
+		if f.Anonymous {
+			anonymousProperties := schemaStructFields(schemas, f.Type)
+			for k, v := range anonymousProperties {
+				properties[k] = v
+			}
+			continue
+		}
+
+		definition := schemaAny(schemas, f.Type)
+
+		if v, ok := f.Tag.Lookup("description"); ok {
+			definition["description"] = v
+		}
+
+		name := f.Tag.Get("json")
+		name = strings.Split(name, ",")[0]
+		if name == "" {
+			name = f.Name
+		}
+
+		properties[name] = definition
+	}
+
+	return properties
+}
+
 func schemaStruct(schemas JSON, item reflect.Type) JSON {
 
 	name := item.Name()
@@ -114,35 +176,16 @@ func schemaStruct(schemas JSON, item reflect.Type) JSON {
 		return result
 	}
 
-	properties := JSON{}
+	schemas[name] = JSON{} // Avoid infinite loop in recursive objects
+
+	properties := schemaStructFields(schemas, item)
+
 	definition := JSON{
 		"type":       "object",
 		"required":   []string{},
 		"properties": properties,
 	}
 	schemas[name] = definition
-
-	// follow pointers
-	for item.Kind() == reflect.Ptr {
-		item = item.Elem()
-	}
-
-	for i := 0; i < item.NumField(); i++ {
-		f := item.Field(i)
-
-		definition := schemaAny(schemas, f.Type)
-
-		if v, ok := f.Tag.Lookup("description"); ok {
-			definition["description"] = v
-		}
-
-		name := f.Tag.Get("json")
-		if name == "" {
-			name = f.Name
-		}
-
-		properties[name] = definition
-	}
 
 	return result
 }
