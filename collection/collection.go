@@ -173,21 +173,27 @@ func (c *Collection) Insert(item interface{}) (*Row, error) {
 
 	if c.Defaults != nil {
 		item := map[string]any{} // todo: item is shadowed, choose a better name
-		for k, v := range c.Defaults {
-			switch v {
-			case "uuid()":
-				item[k] = uuid.NewString()
-			case "unixnano()":
-				item[k] = time.Now().UnixNano()
-			case "auto()":
-				item[k] = auto
-			default:
-				item[k] = v
-			}
-		}
 		err := json.Unmarshal(payload, &item)
 		if err != nil {
 			return nil, fmt.Errorf("json encode defaults: %w", err)
+		}
+
+		for k, v := range c.Defaults {
+			if item[k] != nil {
+				continue
+			}
+			var value any
+			switch v {
+			case "uuid()":
+				value = uuid.NewString()
+			case "unixnano()":
+				value = time.Now().UnixNano()
+			case "auto()":
+				value = auto
+			default:
+				item[k] = v
+			}
+			item[k] = value
 		}
 
 		payload, err = json.Marshal(item)
