@@ -37,7 +37,13 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		return err // todo: handle/wrap this properly
 	}
 
+	// READER
+
+	// ALT 1
 	jsonReader := json.NewDecoder(r.Body)
+
+	// ALT 2
+	// jsonReader := jsontext.NewDecoder(r.Body, jsontext.AllowDuplicateNames(true))
 
 	// WRITER
 
@@ -50,9 +56,13 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	// ALT 3
 	// not needed
 
+	// item := map[string]any{} // Idea: same item and clean on each iteration
 	for i := 0; true; i++ {
 		item := map[string]any{}
+		// READER:ALT 1
 		err := jsonReader.Decode(&item)
+		// READER:ALT 2
+		// err := json2.UnmarshalDecode(jsonReader, &item)
 		if err == io.EOF {
 			if i == 0 {
 				w.WriteHeader(http.StatusNoContent)
@@ -95,6 +105,9 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		// ALT 4
 		// query param to optionally write nothing
 
+		// for k := range item {
+		// 	delete(item, k)
+		// }
 	}
 
 	return nil

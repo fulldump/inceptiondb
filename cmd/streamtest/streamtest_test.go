@@ -31,7 +31,7 @@ func Parallel(workers int, f func()) {
 
 func Test_Streamtest(t *testing.T) {
 
-	t.SkipNow()
+	// t.SkipNow()
 
 	counter := int64(0)
 	t0 := time.Now()
