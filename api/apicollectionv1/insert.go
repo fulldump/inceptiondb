@@ -38,7 +38,17 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}
 
 	jsonReader := json.NewDecoder(r.Body)
-	jsonWriter := json.NewEncoder(w)
+
+	// WRITER
+
+	// ALT 1
+	// jsonWriter := json.NewEncoder(w)
+
+	// ALT 2
+	// jsonWriter := jsontext.NewEncoder(w)
+
+	// ALT 3
+	// not needed
 
 	for i := 0; true; i++ {
 		item := map[string]any{}
@@ -69,7 +79,22 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		if i == 0 {
 			w.WriteHeader(http.StatusCreated)
 		}
-		jsonWriter.Encode(row.Payload)
+
+		// ALT 1
+		// jsonWriter.Encode(row.Payload)
+
+		// ALT 2
+		// json2.MarshalEncode(jsonWriter, row.Payload,
+		// jsontext.AllowDuplicateNames(true),
+		// jsontext.AllowInvalidUTF8(true),
+		// )
+
+		// ALT 3
+		fmt.Fprintln(w, string(row.Payload))
+
+		// ALT 4
+		// query param to optionally write nothing
+
 	}
 
 	return nil
