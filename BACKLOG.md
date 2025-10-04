@@ -44,4 +44,4 @@
 
 
 ## Optimizations
-* collection insert: calculating defaults only when needed: speedup 1.9%
+* collection insert: calculating defaults only when needed: speedup 10.16%
