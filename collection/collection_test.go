@@ -14,6 +14,8 @@ import (
 
 	. "github.com/fulldump/biff"
 	"github.com/google/uuid"
+
+	"github.com/fulldump/inceptiondb/utils"
 )
 
 func TestInsert(t *testing.T) {
@@ -100,8 +102,8 @@ func TestIndex(t *testing.T) {
 	Environment(func(filename string) {
 		// Setup
 		c, _ := OpenCollection(filename)
-		c.Insert(&User{"1", "Pablo"})
-		c.Insert(&User{"2", "Sara"})
+		c.Insert(utils.RemarshalMap(&User{"1", "Pablo"}))
+		c.Insert(utils.RemarshalMap(&User{"2", "Sara"}))
 
 		// Run
 		c.Index("my-index", &IndexMapOptions{
@@ -141,7 +143,7 @@ func TestInsertAfterIndex(t *testing.T) {
 		c.Index("my-index", &IndexMapOptions{
 			Field: "id",
 		})
-		c.Insert(&User{"1", "Pablo"})
+		c.Insert(utils.RemarshalMap(&User{"1", "Pablo"}))
 
 		// Check
 		user := &User{}
@@ -160,7 +162,7 @@ func TestIndexMultiValue(t *testing.T) {
 		// Setup
 		newUser := &User{"1", []string{"pablo@hotmail.com", "p18@yahoo.com"}}
 		c, _ := OpenCollection(filename)
-		c.Insert(newUser)
+		c.Insert(utils.RemarshalMap(newUser))
 
 		// Run
 		indexErr := c.Index("my-index", &IndexMapOptions{
@@ -238,8 +240,8 @@ func TestCollection_Index_Collision(t *testing.T) {
 
 		// Setup
 		c, _ := OpenCollection(filename)
-		c.Insert(&User{"1", "Pablo"})
-		c.Insert(&User{"1", "Sara"})
+		c.Insert(utils.RemarshalMap(&User{"1", "Pablo"}))
+		c.Insert(utils.RemarshalMap(&User{"1", "Sara"}))
 
 		// Run
 		errIndex := c.Index("my-index", &IndexMapOptions{

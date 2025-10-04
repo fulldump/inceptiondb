@@ -40,3 +40,8 @@
 
 * Disk sync indexes
 * Instantaneous consistency
+
+
+
+## Optimizations
+* collection insert: calculating defaults only when needed: speedup 10.16%

@@ -12,7 +12,7 @@ import (
 type Request struct {
 	http.Request
 	apitest *Apitest
-	client *http.Client
+	client  *http.Client
 }
 
 func NewRequest(method, urlStr string, a *Apitest) *Request {
@@ -79,6 +79,15 @@ func (r *Request) WithHeader(key, value string) *Request {
 	return r
 }
 
+func (r *Request) WithQuery(key, value string) *Request {
+
+	values := r.URL.Query()
+	values.Add(key, value)
+	r.URL.RawQuery = values.Encode()
+
+	return r
+}
+
 func (r *Request) WithBodyString(body string) *Request {
 	b := strings.NewReader(body)
 	r.set_body(b)
@@ -131,4 +140,3 @@ func (r *Request) DoAsync(f func(*Response)) {
 
 	r.apitest.clients <- c
 }
-

@@ -71,9 +71,15 @@ b.Handle("GET", "/hello", func(w http.ResponseWriter, r *http.Request) MyRespons
 b := box.NewBox()
 
 b.Handle("GET", "/articles/{article-id}", func(w http.ResponseWriter, r *http.Request) string {
-    articleID := box.Param(r, "article-id")
+    articleID := r.PathValue("article-id")
     return "ArticleID is " + articleID
 })
+```
+
+Or before go 1.22:
+
+```go
+    articleID := box.Param(r, "article-id")
 ```
 
 ## Receiving and sending JSON

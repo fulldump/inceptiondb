@@ -8,19 +8,26 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func FillEnvironments(c interface{}) (err error) {
 
 	traverse(c, func(i item) {
 		env := strings.ToUpper(strings.Join(i.Path, "_"))
-		value := os.Getenv(env)
+		value, ok := os.LookupEnv(env)
 
-		if "" == value {
+		if !ok {
 			return
 		}
 
-		if reflect.Bool == i.Kind {
+		if reflect.TypeOf(time.Duration(0)) == i.Value.Type() {
+			if d, err := unmarshalDurationString(value); err == nil {
+				v := int64(d)
+				set(i.Ptr, &v)
+			}
+
+		} else if reflect.Bool == i.Kind {
 			if v, err := strconv.ParseBool(value); nil == err {
 				set(i.Ptr, &v)
 			}

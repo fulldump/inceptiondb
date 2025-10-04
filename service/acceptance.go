@@ -70,7 +70,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				Do()
 			Save(resp, "Drop collection", ``)
 
-			biff.AssertEqual(resp.StatusCode, http.StatusOK)
+			biff.AssertEqual(resp.StatusCode, http.StatusNoContent)
 
 			a.Alternative("Get dropped collection", func(a *biff.A) {
 				resp := apiRequest("GET", "/collections/my-collection").

@@ -17,8 +17,30 @@ var (
 	ErrMethodNotAllowed = errors.New("method_not_allowed")
 )
 
-func handlerDoNothing(w http.ResponseWriter, r *http.Request) {
+func HandlerDoNothing(w http.ResponseWriter, r *http.Request) {
 	// do nothing
+}
+
+func DefaultHandlerResourceNotFound(ctx context.Context) {
+	SetError(ctx, ErrResourceNotFound)
+}
+
+func DefaultHandlerMethodNotAllowed(ctx context.Context) {
+	SetError(ctx, ErrMethodNotAllowed)
+}
+
+func DefaultDeserialize(ctx context.Context, r io.Reader, v interface{}) error {
+	return json.NewDecoder(r).Decode(v)
+}
+
+func DefaultSerialize(ctx context.Context, w io.Writer, v interface{}) error {
+	resp := GetBoxContext(ctx).Response
+	if v == nil {
+		resp.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	resp.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(v)
 }
 
 func Box2Http(b *B) http.Handler {
@@ -35,17 +57,25 @@ func Box2Http(b *B) http.Handler {
 		}
 		ctx = SetBoxContext(ctx, c)
 
-		var handler interface{} = handlerDoNothing
+		var handler any = HandlerDoNothing
 
 		// Split url action
 		urlResource, urlAction := splitAction(r.URL.EscapedPath())
 
 		// Match resource
 		c.Resource = b.Match(urlResource, c.Parameters)
-		if nil == c.Resource {
-			SetError(ctx, ErrResourceNotFound)
-			//return
+		if nil != c.Resource && urlAction != "" {
+			if _, exist := c.Resource.actionsByName[urlAction]; !exist {
+				c.Parameters = map[string]string{}
+				urlResource, urlAction = r.URL.EscapedPath(), ""
+				c.Resource = b.Match(urlResource, c.Parameters)
+			}
 		}
+		if nil == c.Resource {
+			handler = b.HandleResourceNotFound
+		}
+
+		fillPathValues(c.Parameters, r)
 
 		// Match action
 		if c.Resource != nil {
@@ -54,8 +84,7 @@ func Box2Http(b *B) http.Handler {
 				c.Action = c.Resource.actionsByHttp[HttpMethodAny+" "]
 			}
 			if nil == c.Action {
-				SetError(ctx, ErrMethodNotAllowed)
-				//return
+				handler = b.HandleMethodNotAllowed
 			} else {
 				handler = c.Action.handler
 			}
@@ -133,21 +162,21 @@ func Box2Http(b *B) http.Handler {
 				}
 
 				if len(bodies) == 1 {
-					err := unserialize(ctx, r.Body, bodies[0])
+					err := b.Deserializer(ctx, r.Body, bodies[0])
 					if nil != err {
 						SetError(ctx, err)
 						return
 					}
 				} else if len(bodies) > 1 {
 					// TODO: limit memory usage with io.LimitReader(r.Body, 1024*1024)
-					b, err := ioutil.ReadAll(r.Body)
+					body, err := ioutil.ReadAll(r.Body)
 					if nil != err {
 						SetError(ctx, err)
 						return
 					}
-					buf := bytes.NewBuffer(b)
+					buf := bytes.NewBuffer(body)
 					for _, body := range bodies {
-						unserialize(ctx, buf, body) // TODO: what if one item fails?
+						b.Deserializer(ctx, buf, body) // TODO: what if one item fails?
 					}
 				}
 
@@ -167,11 +196,10 @@ func Box2Http(b *B) http.Handler {
 				}
 
 				if isNil(genericResponse) {
-					// TODO: write empty response
-					return
+					genericResponse = nil
 				}
 
-				err := serialize(ctx, c.Response, genericResponse)
+				err := b.Serializer(ctx, c.Response, genericResponse)
 				if nil != err {
 					// TODO: log serializer error
 				}
@@ -186,16 +214,6 @@ func Box2Http(b *B) http.Handler {
 
 	})
 
-}
-
-// TODO: put this into box
-func unserialize(c context.Context, r io.Reader, v interface{}) error {
-	return json.NewDecoder(r).Decode(v)
-}
-
-// TODO: put this into box
-func serialize(c context.Context, w io.Writer, v interface{}) error {
-	return json.NewEncoder(w).Encode(v)
 }
 
 func isNil(a interface{}) bool {

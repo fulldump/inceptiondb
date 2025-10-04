@@ -159,41 +159,42 @@ func (c *Collection) addRow(payload json.RawMessage) (*Row, error) {
 }
 
 // TODO: test concurrency
-func (c *Collection) Insert(item interface{}) (*Row, error) {
+func (c *Collection) Insert(item map[string]any) (*Row, error) {
 	if c.file == nil {
 		return nil, fmt.Errorf("collection is closed")
-	}
-
-	payload, err := json.Marshal(item)
-	if err != nil {
-		return nil, fmt.Errorf("json encode payload: %w", err)
 	}
 
 	auto := atomic.AddInt64(&c.Count, 1)
 
 	if c.Defaults != nil {
-		item := map[string]any{} // todo: item is shadowed, choose a better name
+		// item := map[string]any{} // todo: item is shadowed, choose a better name
+		// err := json.Unmarshal(payload, &item)
+		// if err != nil {
+		// 	return nil, fmt.Errorf("json encode defaults: %w", err)
+		// }
+
 		for k, v := range c.Defaults {
+			if item[k] != nil {
+				continue
+			}
+			var value any
 			switch v {
 			case "uuid()":
-				item[k] = uuid.NewString()
+				value = uuid.NewString()
 			case "unixnano()":
-				item[k] = time.Now().UnixNano()
+				value = time.Now().UnixNano()
 			case "auto()":
-				item[k] = auto
+				value = auto
 			default:
-				item[k] = v
+				value = v
 			}
+			item[k] = value
 		}
-		err := json.Unmarshal(payload, &item)
-		if err != nil {
-			return nil, fmt.Errorf("json encode defaults: %w", err)
-		}
+	}
 
-		payload, err = json.Marshal(item)
-		if err != nil {
-			return nil, fmt.Errorf("json encode payload: %w", err)
-		}
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return nil, fmt.Errorf("json encode payload: %w", err)
 	}
 
 	// Add row
