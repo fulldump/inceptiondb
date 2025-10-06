@@ -100,7 +100,8 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		// )
 
 		// ALT 3
-		fmt.Fprintln(w, string(row.Payload))
+		w.Write(row.Payload)
+		w.Write([]byte("\n"))
 
 		// ALT 4
 		// query param to optionally write nothing
