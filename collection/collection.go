@@ -22,8 +22,9 @@ type Collection struct {
 	rowsMutex *sync.Mutex
 	Indexes   map[string]*collectionIndex // todo: protect access with mutex or use sync.Map
 	// buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
-	Defaults map[string]any
-	Count    int64
+	Defaults    map[string]any
+	Count       int64
+	jsonEncoder *json.Encoder
 }
 
 type collectionIndex struct {
@@ -136,6 +137,8 @@ func OpenCollection(filename string) (*Collection, error) {
 		return nil, fmt.Errorf("open file for write: %w", err)
 	}
 
+	collection.jsonEncoder = json.NewEncoder(collection.file)
+
 	return collection, nil
 }
 
@@ -212,9 +215,9 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 		Payload:   payload,
 	}
 
-	err = json.NewEncoder(c.file).Encode(command)
+	err = c.EncodeCommand(command)
 	if err != nil {
-		return nil, fmt.Errorf("json encode command: %w", err)
+		return nil, err
 	}
 
 	return row, nil
@@ -283,12 +286,7 @@ func (c *Collection) setDefaults(defaults map[string]any, persist bool) error {
 		Payload:   payload,
 	}
 
-	err = json.NewEncoder(c.file).Encode(command)
-	if err != nil {
-		return fmt.Errorf("json encode command: %w", err)
-	}
-
-	return nil
+	return c.EncodeCommand(command)
 }
 
 // IndexMap create a unique index with a name
@@ -350,12 +348,7 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 		Payload:   payload,
 	}
 
-	err = json.NewEncoder(c.file).Encode(command)
-	if err != nil {
-		return fmt.Errorf("json encode command: %w", err)
-	}
-
-	return nil
+	return c.EncodeCommand(command)
 }
 
 func indexInsert(indexes map[string]*collectionIndex, row *Row) (err error) {
@@ -454,13 +447,7 @@ func (c *Collection) removeByRow(row *Row, persist bool) error { // todo: rename
 		Payload:   payload,
 	}
 
-	err = json.NewEncoder(c.file).Encode(command)
-	if err != nil {
-		// TODO: panic?
-		return fmt.Errorf("json encode command: %w", err)
-	}
-
-	return nil
+	return c.EncodeCommand(command)
 }
 
 func (c *Collection) Patch(row *Row, patch interface{}) error {
@@ -521,12 +508,7 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 		Payload:   payload,
 	}
 
-	err = json.NewEncoder(c.file).Encode(command)
-	if err != nil {
-		return fmt.Errorf("json encode command: %w", err)
-	}
-
-	return nil
+	return c.EncodeCommand(command)
 }
 
 func (c *Collection) Close() error {
@@ -583,7 +565,11 @@ func (c *Collection) dropIndex(name string, persist bool) error {
 		Payload:   payload,
 	}
 
-	err = json.NewEncoder(c.file).Encode(command)
+	return c.EncodeCommand(command)
+}
+
+func (c *Collection) EncodeCommand(command *Command) error {
+	err := c.jsonEncoder.Encode(command)
 	if err != nil {
 		return fmt.Errorf("json encode command: %w", err)
 	}
