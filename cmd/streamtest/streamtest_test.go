@@ -40,7 +40,7 @@ func Test_Streamtest(t *testing.T) {
 	{
 		// Create collection
 		payload := strings.NewReader(`{"name": "streammm"}`)
-		req, _ := http.NewRequest("POST", "http://localhost:8080/v1/collections", payload)
+		req, _ := http.NewRequest("POST", base+"/v1/collections", payload)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Fatal(err)
@@ -60,6 +60,14 @@ func Test_Streamtest(t *testing.T) {
 
 	payload := strings.Repeat("fake ", 0)
 	_ = payload
+
+	c := &http.Client{
+		Transport: &http.Transport{
+			MaxConnsPerHost:     1024,
+			MaxIdleConnsPerHost: 1024,
+			MaxIdleConns:        1024,
+		},
+	}
 
 	Parallel(16, func() {
 
@@ -88,7 +96,7 @@ func Test_Streamtest(t *testing.T) {
 				os.Exit(3)
 			}
 
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := c.Do(req)
 			if err != nil {
 				fmt.Println("ERROR: do request:", err.Error())
 				os.Exit(4)

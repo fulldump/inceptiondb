@@ -5,6 +5,6 @@ func Default() *Configuration {
 		Dir:               "data",
 		HttpAddr:          "127.0.0.1:8080",
 		ShowBanner:        true,
-		EnableCompression: true,
+		EnableCompression: false,
 	}
 }
