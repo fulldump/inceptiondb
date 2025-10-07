@@ -3,6 +3,7 @@ package streamtest
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -33,6 +34,26 @@ func Test_Streamtest(t *testing.T) {
 
 	// t.SkipNow()
 
+	base := "https://inceptiondb.io"
+	base = "http://localhost:8080"
+
+	{
+		// Create collection
+		payload := strings.NewReader(`{"name": "streammm"}`)
+		req, _ := http.NewRequest("POST", "http://localhost:8080/v1/collections", payload)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(string(body))
+	}
+
 	counter := int64(0)
 	t0 := time.Now()
 	load_per_worker := 100_000
@@ -61,13 +82,7 @@ func Test_Streamtest(t *testing.T) {
 		}()
 
 		{
-
-			u := "http://localhost:8080/v1/collections/streammm:insertFullduplex"
-			u = "https://inceptiondb.io/v1/collections/streammm:insert"
-			u = "http://localhost:8080/v1/collections/streammm:insert"
-			// u = "http://inceptiondb.io:8080/v1/collections/streammm:insertFullduplex"
-
-			req, err := http.NewRequest("POST", u, r)
+			req, err := http.NewRequest("POST", base+"/v1/collections/streammm:insert", r)
 			if err != nil {
 				fmt.Println("ERROR: new request:", err.Error())
 				os.Exit(3)
