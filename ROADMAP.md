@@ -11,9 +11,12 @@
 * Implementar el botón de eliminar documentos por ID (sólo front)
 * Implementar vista tabular alterna para resultados (sólo front)
 * Implementar exportación de resultados a JSONL desde la consola (sólo front)
+* Implementar endpoint dedicado para buscar documentos por ID y exponerlo en la consola (front + back)
 
 ## Next features
 
+* Añadir endpoint de estado del servicio con métricas básicas para alimentar el indicador de conexión (front + back)
+* Exponer el total de documentos coincidentes en la API de find para mejorar la paginación (front + back)
 * Implementar buscador rápido por ID de documento en la vista principal (sólo front)
 * Añadir notificaciones emergentes para operaciones CRUD exitosas o fallidas (sólo front)
 * Añadir validación visual inmediata para filtros e inserciones JSON (sólo front)

@@ -33,5 +33,10 @@ func BuildV1Collection(v1 *box.R, s service.Servicer) *box.R {
 			box.ActionPost(setDefaults),
 		)
 
+	v1.Resource("/collections/{collectionName}/documents/{documentId}").
+		WithActions(
+			box.Get(getDocument),
+		)
+
 	return collections
 }
