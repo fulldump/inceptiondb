@@ -288,9 +288,58 @@
 							Delete collection
 						</button>
 					</div>
-				</header>
+                                </header>
 
-				<section class="grid gap-6 lg:grid-cols-[2fr_1fr]">
+                                <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-4">
+                                        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                                                <div class="space-y-1">
+                                                        <h3 class="text-sm font-semibold text-slate-100">Quick document lookup</h3>
+                                                        <p class="text-xs text-slate-400">Find a document by ID without changing your current filters.</p>
+                                                </div>
+                                                <form class="flex flex-wrap items-center gap-2" @submit.prevent="lookupDocument">
+                                                        <label for="quick-search-id" class="sr-only">Document ID</label>
+                                                        <input
+                                                                id="quick-search-id"
+                                                                v-model="quickSearch.id"
+                                                                type="text"
+                                                                autocomplete="off"
+                                                                placeholder="doc-123"
+                                                                class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500 md:w-48"
+                                                        >
+                                                        <button
+                                                                type="submit"
+                                                                class="inline-flex items-center justify-center rounded-md bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                                                :disabled="quickSearch.loading"
+                                                        >
+                                                                {{ quickSearch.loading ? 'Searching…' : 'Find' }}
+                                                        </button>
+                                                </form>
+                                        </div>
+                                        <p v-if="quickSearch.error" class="text-sm text-rose-400">{{ quickSearch.error }}</p>
+                                        <div v-else-if="quickSearch.result" class="space-y-3 rounded-lg border border-slate-800 bg-slate-950/60 p-4">
+                                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                                        <div>
+                                                                <p class="text-sm font-semibold text-slate-100">Document {{ quickSearch.result.id }}</p>
+                                                                <p v-if="quickSearchSourceLabel" class="text-xs text-slate-400">Source: {{ quickSearchSourceLabel }}</p>
+                                                        </div>
+                                                        <div class="flex flex-wrap gap-2">
+                                                                <button
+                                                                        type="button"
+                                                                        class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800"
+                                                                        @click="applyQuickSearchResult"
+                                                                >
+                                                                        Show in results
+                                                                </button>
+                                                        </div>
+                                                </div>
+                                                <pre class="max-h-48 overflow-y-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-200 font-mono whitespace-pre-wrap break-words">{{ quickSearchResultText }}</pre>
+                                        </div>
+                                        <p v-else-if="quickSearch.lastCheckedId && !quickSearch.loading" class="text-sm text-slate-400">
+                                                No document with ID "{{ quickSearch.lastCheckedId }}" was found.
+                                        </p>
+                                </section>
+
+                                <section class="grid gap-6 lg:grid-cols-[2fr_1fr]">
 					<div class="space-y-6">
 						<div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-inner space-y-5">
 							<div>
@@ -1341,12 +1390,19 @@
 				progress: '',
 				error: '',
 			});
-			const sizeMetrics = reactive({
-				loading: false,
-				error: '',
-				data: null,
-				updatedAt: null,
-			});
+                        const sizeMetrics = reactive({
+                                loading: false,
+                                error: '',
+                                data: null,
+                                updatedAt: null,
+                        });
+                        const quickSearch = reactive({
+                                id: '',
+                                loading: false,
+                                error: '',
+                                result: null,
+                                lastCheckedId: '',
+                        });
 
 			const timeFormatter = new Intl.DateTimeFormat('en-US', {
 				hour: 'numeric',
@@ -1354,7 +1410,17 @@
 				second: '2-digit',
 				hour12: true,
 			});
-			const numberFormatter = new Intl.NumberFormat('en-US');
+                        const numberFormatter = new Intl.NumberFormat('en-US');
+
+                        const resetQuickSearchState = (clearInput = false) => {
+                                quickSearch.loading = false;
+                                quickSearch.error = '';
+                                quickSearch.result = null;
+                                quickSearch.lastCheckedId = '';
+                                if (clearInput) {
+                                        quickSearch.id = '';
+                                }
+                        };
 
 			const toNonNegativeInteger = (value, fallback = 0) => {
 				const num = Number(value);
@@ -2770,20 +2836,39 @@
 				return !!(state && state.open);
 			};
 
-			const openEditingRows = computed(() => queryRows.value
-							.map((row, idx) => {
-								const id = documentId(row);
-								if (!id) return null;
-								const state = editingDocuments[id];
-								if (!state || !state.open) return null;
-								return {
-									id,
-									row,
-									state,
-									position: offset.value + idx + 1,
-								};
-							})
-							.filter(Boolean));
+                        const openEditingRows = computed(() => queryRows.value
+                                                        .map((row, idx) => {
+                                                                const id = documentId(row);
+                                                                if (!id) return null;
+                                                                const state = editingDocuments[id];
+                                                                if (!state || !state.open) return null;
+                                                                return {
+                                                                        id,
+                                                                        row,
+                                                                        state,
+                                                                        position: offset.value + idx + 1,
+                                                                };
+                                                        })
+                                                        .filter(Boolean));
+                        const quickSearchResultText = computed(() => {
+                                if (!quickSearch.result || !quickSearch.result.document) return '';
+                                try {
+                                        return JSON.stringify(quickSearch.result.document, null, 2);
+                                } catch (error) {
+                                        return '';
+                                }
+                        });
+                        const quickSearchSourceLabel = computed(() => {
+                                if (!quickSearch.result || !quickSearch.result.source) return '';
+                                const source = quickSearch.result.source;
+                                if (source.type === 'index') {
+                                        return source.name ? `Index ${source.name}` : 'Index';
+                                }
+                                if (source.type === 'fullscan') {
+                                        return 'Full scan';
+                                }
+                                return source.type || '';
+                        });
 
 			const openEditRow = (row) => {
 				const id = documentId(row);
@@ -3172,9 +3257,10 @@
 				resetRangeFields();
 			});
 
-			watch(selectedCollection, async (collection) => {
-				const routeSnapshot = restoringRoute ? pendingRouteState : null;
-				indexes.value = [];
+                        watch(selectedCollection, async (collection) => {
+                                resetQuickSearchState(!collection);
+                                const routeSnapshot = restoringRoute ? pendingRouteState : null;
+                                indexes.value = [];
 				selectedIndexName.value = '';
 				mapValue.value = '';
 				reverse.value = false;
@@ -3435,13 +3521,13 @@
 				return payload;
 			};
 
-			const runQuery = async () => {
-				if (!selectedCollection.value) return;
-				queryError.value = '';
-				let payload;
-				try {
-					payload = buildQueryPayload();
-				} catch (error) {
+                        const runQuery = async () => {
+                                if (!selectedCollection.value) return;
+                                queryError.value = '';
+                                let payload;
+                                try {
+                                        payload = buildQueryPayload();
+                                } catch (error) {
 					if (error.code === 'invalid-filter') {
 						queryError.value = 'The filter must be valid JSON.';
 					} else if (error.code === 'map-value-required') {
@@ -3511,13 +3597,87 @@
 					handleRequestError(error);
 				} finally {
 					queryLoading.value = false;
-				}
-			};
+                                }
+                        };
 
-			const exportResults = async () => {
-				if (!selectedCollection.value) {
-					exportState.error = 'Select a collection before exporting.';
-					exportState.progress = '';
+                        const lookupDocument = async () => {
+                                quickSearch.error = '';
+                                quickSearch.result = null;
+                                if (!selectedCollection.value) {
+                                        quickSearch.error = 'Select a collection before searching for a document.';
+                                        return;
+                                }
+                                const id = (quickSearch.id || '').trim();
+                                if (!id) {
+                                        quickSearch.error = 'Enter a document ID to search.';
+                                        return;
+                                }
+                                quickSearch.loading = true;
+                                quickSearch.lastCheckedId = id;
+                                const collectionName = selectedCollection.value.name;
+                                const url = `/v1/collections/${encodeURIComponent(collectionName)}/documents/${encodeURIComponent(id)}`;
+                                const entry = createActivityEntry({
+                                        label: 'Lookup document by ID',
+                                        method: 'GET',
+                                        url,
+                                        target: collectionName,
+                                });
+                                const started = performance.now();
+                                try {
+                                        const resp = await http.get(url);
+                                        const data = resp?.data || {};
+                                        const document = data.document && typeof data.document === 'object' ? data.document : {};
+                                        quickSearch.result = {
+                                                id: data.id || id,
+                                                document,
+                                                source: data.source || null,
+                                        };
+                                        quickSearch.error = '';
+                                        const elapsed = Math.round(performance.now() - started);
+                                        markConnectionOnline();
+                                        completeActivityEntry(entry, {
+                                                detail: `Retrieved document ${id} in ${elapsed} ms.`,
+                                                statusCode: resp.status,
+                                        });
+                                } catch (error) {
+                                        quickSearch.result = null;
+                                        const status = error?.response?.status;
+                                        if (status === 404) {
+                                                quickSearch.error = `No document with ID "${id}" was found.`;
+                                        } else if (status === 400) {
+                                                quickSearch.error = 'The provided document ID is not valid.';
+                                        } else {
+                                                quickSearch.error = error?.response?.data?.error || 'Failed to lookup the document.';
+                                        }
+                                        failActivityEntry(entry, error, { fallback: 'Failed to lookup the document.' });
+                                        handleRequestError(error);
+                                } finally {
+                                        quickSearch.loading = false;
+                                }
+                        };
+
+                        const applyQuickSearchResult = async () => {
+                                if (!quickSearch.result) return;
+                                const id = quickSearch.result.id || quickSearch.lastCheckedId;
+                                if (!id) return;
+                                filterError.value = '';
+                                filterText.value = JSON.stringify({ id }, null, 2);
+                                skip.value = 0;
+                                limit.value = 1;
+                                const source = quickSearch.result.source;
+                                if (source && source.type === 'index' && source.name) {
+                                        selectedIndexName.value = source.name;
+                                } else {
+                                        selectedIndexName.value = '';
+                                }
+                                await nextTick();
+                                await runQuery();
+                        };
+
+                        const exportResults = async () => {
+                                if (!selectedCollection.value) {
+                                        exportState.error = 'Select a collection before exporting.';
+                                        exportState.progress = '';
 					return;
 				}
 				if (!Array.isArray(queryRows.value) || queryRows.value.length === 0) {
@@ -3688,22 +3848,23 @@
 				}
 			};
 
-			watch(selectedCollectionName, () => {
-				clearEditingDocuments();
-				defaultsHelpOpen.value = false;
-				if (!restoringRoute) {
-					skip.value = 0;
-				}
-				csvImportForm.error = '';
-				csvImportForm.success = '';
-				csvImportForm.progress = '';
-			});
+                        watch(selectedCollectionName, (name) => {
+                                clearEditingDocuments();
+                                defaultsHelpOpen.value = false;
+                                if (!restoringRoute) {
+                                        skip.value = 0;
+                                }
+                                csvImportForm.error = '';
+                                csvImportForm.success = '';
+                                csvImportForm.progress = '';
+                                resetQuickSearchState(!name);
+                        });
 
-			watch(queryRows, (rows) => {
-				if (!Array.isArray(rows)) return;
-				const activeIds = new Set();
-				rows.forEach((row) => {
-					const id = documentId(row);
+                        watch(queryRows, (rows) => {
+                                if (!Array.isArray(rows)) return;
+                                const activeIds = new Set();
+                                rows.forEach((row) => {
+                                        const id = documentId(row);
 					if (!id) return;
 					activeIds.add(id);
 					const state = editingDocuments[id];
@@ -3717,12 +3878,21 @@
 						state.success = '';
 					}
 				});
-				Object.keys(editingDocuments).forEach((key) => {
-					if (!activeIds.has(key)) {
-						delete editingDocuments[key];
-					}
-				});
-			});
+                                Object.keys(editingDocuments).forEach((key) => {
+                                        if (!activeIds.has(key)) {
+                                                delete editingDocuments[key];
+                                        }
+                                });
+                        });
+
+                        watch(
+                                                        () => quickSearch.id,
+                                                        () => {
+                                                                if (quickSearch.error) {
+                                                                        quickSearch.error = '';
+                                                                }
+                                                        },
+                        );
 
 			const canDeleteRow = (row) => documentId(row) !== null;
 
@@ -4017,12 +4187,15 @@
 				collapsibleCards,
 				createForm,
 				connectionStatus,
-				activityLog,
-				activityDetailOpen,
-				selectedActivityEntry,
-				exportState,
-				sizeMetrics,
-				sizeMetricsEntries,
+                                activityLog,
+                                activityDetailOpen,
+                                selectedActivityEntry,
+                                exportState,
+                                sizeMetrics,
+                                quickSearch,
+                                quickSearchResultText,
+                                quickSearchSourceLabel,
+                                sizeMetricsEntries,
 				sizeMetricsUpdatedLabel,
 				connectionStatusLabel,
 				connectionStatusDescription,
@@ -4044,8 +4217,10 @@
 				toggleCard,
 				toggleIndexForm,
 				selectCollection,
-				runQuery,
-				exportResults,
+                                runQuery,
+                                lookupDocument,
+                                applyQuickSearchResult,
+                                exportResults,
 				nextPage,
 				prevPage,
 				commitSkip,
