@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,7 +34,7 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 		"",
 		"", // todo: put default index here (if any)
 	}
-	err = json.Unmarshal(requestBody, &input)
+	err = jsonv2.Unmarshal(requestBody, &input)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +67,7 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 		return nil, fmt.Errorf("unexpected type '%s' instead of [map|btree]", input.Type)
 	}
 
-	err = json.Unmarshal(requestBody, &options)
+	err = jsonv2.Unmarshal(requestBody, &options)
 	if err != nil {
 		return nil, err
 	}

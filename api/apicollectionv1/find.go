@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io"
 	"net/http"
 
@@ -21,7 +22,7 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	input := struct {
 		Index *string
 	}{}
-	err = json.Unmarshal(requestBody, &input)
+	err = jsonv2.Unmarshal(requestBody, &input)
 	if err != nil {
 		return err
 	}

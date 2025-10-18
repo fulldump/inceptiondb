@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io"
 	"net/http"
 
@@ -30,7 +31,7 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		Filter map[string]interface{}
 		Patch  interface{}
 	}{}
-	json.Unmarshal(requestBody, &patch) // TODO: handle err
+	jsonv2.Unmarshal(requestBody, &patch) // TODO: handle err
 
 	e := json.NewEncoder(w)
 
@@ -43,7 +44,7 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		if hasFilter {
 
 			rowData := map[string]interface{}{}
-			json.Unmarshal(row.Payload, &rowData) // todo: handle error here?
+			jsonv2.Unmarshal(row.Payload, &rowData) // todo: handle error here?
 
 			match, err := connor.Match(patch.Filter, rowData)
 			if err != nil {

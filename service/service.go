@@ -1,63 +1,61 @@
 package service
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
-	"path"
 
 	"github.com/fulldump/inceptiondb/collection"
 	"github.com/fulldump/inceptiondb/database"
 )
 
 type Service struct {
-	db          *database.Database
-	collections map[string]*collection.Collection
+	db *database.Database
 }
 
 func NewService(db *database.Database) *Service {
 	return &Service{
-		db:          db,
-		collections: db.Collections, // todo: remove from here
+		db: db,
 	}
 }
 
 var ErrorCollectionAlreadyExists = errors.New("collection already exists")
 
 func (s *Service) CreateCollection(name string) (*collection.Collection, error) {
-	_, exist := s.collections[name]
-	if exist {
-		return nil, ErrorCollectionAlreadyExists
-	}
-
-	filename := path.Join(s.db.Config.Dir, name)
-
-	collection, err := collection.OpenCollection(filename)
+	col, err := s.db.CreateCollection(name)
 	if err != nil {
+		if errors.Is(err, database.ErrCollectionAlreadyExists) {
+			return nil, ErrorCollectionAlreadyExists
+		}
 		return nil, err
 	}
 
-	s.collections[name] = collection
-
-	return collection, nil
+	return col, nil
 }
 
 func (s *Service) GetCollection(name string) (*collection.Collection, error) {
-	collection, exist := s.collections[name]
-	if !exist {
-		return nil, ErrorCollectionNotFound
+	col, err := s.db.GetCollection(name)
+	if err != nil {
+		if errors.Is(err, database.ErrCollectionNotFound) {
+			return nil, ErrorCollectionNotFound
+		}
+		return nil, err
 	}
 
-	return collection, nil
+	return col, nil
 }
 
 func (s *Service) ListCollections() map[string]*collection.Collection {
-	return s.collections
+	return s.db.ListCollections()
 }
 
 func (s *Service) DeleteCollection(name string) error {
-	return s.db.DropCollection(name)
+	err := s.db.DropCollection(name)
+	if errors.Is(err, database.ErrCollectionNotFound) {
+		return ErrorCollectionNotFound
+	}
+	return err
 }
 
 var ErrorInsertBadJson = errors.New("insert bad json")
@@ -65,17 +63,20 @@ var ErrorInsertConflict = errors.New("insert conflict")
 
 func (s *Service) Insert(name string, data io.Reader) error {
 
-	collection, exists := s.db.Collections[name]
-	if !exists {
+	collection, err := s.db.GetCollection(name)
+	if err != nil {
 		// TODO: here create collection :D
-		return ErrorCollectionNotFound
+		if errors.Is(err, database.ErrCollectionNotFound) {
+			return ErrorCollectionNotFound
+		}
+		return err
 	}
 
-	jsonReader := json.NewDecoder(data)
+	jsonReader := jsonv2.NewDecoder(data)
 
 	for {
-		item := map[string]interface{}{}
-		err := jsonReader.Decode(&item)
+		item := map[string]any{}
+		err := jsonv2.UnmarshalDecode(jsonReader, &item)
 		if err == io.EOF {
 			return nil
 		}
@@ -84,8 +85,7 @@ func (s *Service) Insert(name string, data io.Reader) error {
 			fmt.Println("ERROR:", err.Error())
 			return ErrorInsertBadJson
 		}
-		_, err = collection.Insert(item)
-		if err != nil {
+		if _, err = collection.Insert(item); err != nil {
 			// TODO: handle error properly
 			return ErrorInsertConflict
 		}

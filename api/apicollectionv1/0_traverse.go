@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
 	"github.com/SierraSoftworks/connor"
@@ -23,7 +24,7 @@ func traverse(requestBody []byte, col *collection.Collection, f func(row *collec
 		Skip:   0,
 		Limit:  1,
 	}
-	err := json.Unmarshal(requestBody, &options)
+	err := jsonv2.Unmarshal(requestBody, &options)
 	if err != nil {
 		return err
 	}
@@ -39,7 +40,7 @@ func traverse(requestBody []byte, col *collection.Collection, f func(row *collec
 
 		if hasFilter {
 			rowData := map[string]interface{}{}
-			json.Unmarshal(r.Payload, &rowData) // todo: handle error here?
+			jsonv2.Unmarshal(r.Payload, &rowData) // todo: handle error here?
 
 			match, err := connor.Match(options.Filter, rowData)
 			if err != nil {

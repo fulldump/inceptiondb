@@ -20,15 +20,17 @@ import (
 )
 
 type Collection struct {
-	Filename     string // Just informative...
-	file         *os.File
-	Rows         []*Row
-	rowsMutex    *sync.Mutex
-	Indexes      map[string]*collectionIndex // todo: protect access with mutex or use sync.Map
-	buffer       *bufio.Writer               // TODO: use write buffer to improve performance (x3 in tests)
-	Defaults     map[string]any
-	Count        int64
-	encoderMutex *sync.Mutex
+	Filename  string // Just informative...
+	file      *os.File
+	Rows      []*Row
+	rowsMutex *sync.Mutex
+	Indexes   map[string]*collectionIndex // todo: protect access with mutex or use sync.Map
+	buffer    *bufio.Writer               // TODO: use write buffer to improve performance (x3 in tests)
+	Defaults  map[string]any
+	Count     int64
+	writeCh   chan *writeBuffer
+	writerWG  sync.WaitGroup
+	writerErr atomic.Pointer[error]
 }
 
 type collectionIndex struct {
@@ -47,6 +49,10 @@ type EncoderMachine struct {
 	Buffer *bytes.Buffer
 	Enc    *json.Encoder
 	Enc2   *jsontext.Encoder
+}
+
+type writeBuffer struct {
+	data []byte
 }
 
 var encPool = sync.Pool{
@@ -70,6 +76,14 @@ var encPool = sync.Pool{
 	},
 }
 
+var writeBufferPool = sync.Pool{
+	New: func() any {
+		return &writeBuffer{
+			data: make([]byte, 0, 8*1024),
+		}
+	},
+}
+
 func OpenCollection(filename string) (*Collection, error) {
 
 	// TODO: initialize, read all file and apply its changes into memory
@@ -79,11 +93,10 @@ func OpenCollection(filename string) (*Collection, error) {
 	}
 
 	collection := &Collection{
-		Rows:         []*Row{},
-		rowsMutex:    &sync.Mutex{},
-		Filename:     filename,
-		Indexes:      map[string]*collectionIndex{},
-		encoderMutex: &sync.Mutex{},
+		Rows:      []*Row{},
+		rowsMutex: &sync.Mutex{},
+		Filename:  filename,
+		Indexes:   map[string]*collectionIndex{},
 	}
 
 	j := jsontext.NewDecoder(f,
@@ -113,7 +126,7 @@ func OpenCollection(filename string) (*Collection, error) {
 			}
 		case "drop_index":
 			dropIndexCommand := &DropIndexCommand{}
-			json.Unmarshal(command.Payload, dropIndexCommand) // Todo: handle error properly
+			json2.Unmarshal(command.Payload, dropIndexCommand) // Todo: handle error properly
 
 			err := collection.dropIndex(dropIndexCommand.Name, false)
 			if err != nil {
@@ -122,7 +135,7 @@ func OpenCollection(filename string) (*Collection, error) {
 			}
 		case "index": // todo: rename to create_index
 			indexCommand := &CreateIndexCommand{}
-			json.Unmarshal(command.Payload, indexCommand) // Todo: handle error properly
+			json2.Unmarshal(command.Payload, indexCommand) // Todo: handle error properly
 
 			var options interface{}
 
@@ -145,8 +158,8 @@ func OpenCollection(filename string) (*Collection, error) {
 			params := struct {
 				I int
 			}{}
-			json.Unmarshal(command.Payload, &params) // Todo: handle error properly
-			row := collection.Rows[params.I]         // this access is threadsafe, OpenCollection is a secuence
+			json2.Unmarshal(command.Payload, &params) // Todo: handle error properly
+			row := collection.Rows[params.I]          // this access is threadsafe, OpenCollection is a secuence
 			err := collection.removeByRow(row, false)
 			if err != nil {
 				fmt.Printf("WARNING: remove row %d: %s\n", params.I, err.Error())
@@ -156,7 +169,7 @@ func OpenCollection(filename string) (*Collection, error) {
 				I    int
 				Diff map[string]interface{}
 			}{}
-			json.Unmarshal(command.Payload, &params)
+			json2.Unmarshal(command.Payload, &params)
 			row := collection.Rows[params.I] // this access is threadsafe, OpenCollection is a secuence
 			err := collection.patchByRow(row, params.Diff, false)
 			if err != nil {
@@ -164,7 +177,7 @@ func OpenCollection(filename string) (*Collection, error) {
 			}
 		case "set_defaults":
 			defaults := map[string]any{}
-			json.Unmarshal(command.Payload, &defaults)
+			json2.Unmarshal(command.Payload, &defaults)
 			collection.setDefaults(defaults, false)
 		}
 	}
@@ -177,6 +190,9 @@ func OpenCollection(filename string) (*Collection, error) {
 	}
 
 	collection.buffer = bufio.NewWriterSize(collection.file, 16*1024*1024)
+	collection.writeCh = make(chan *writeBuffer, 1024)
+	collection.writerWG.Add(1)
+	go collection.writeLoop()
 
 	return collection, nil
 }
@@ -264,7 +280,7 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 
 func (c *Collection) FindOne(data interface{}) {
 	for _, row := range c.Rows {
-		json.Unmarshal(row.Payload, data)
+		json2.Unmarshal(row.Payload, data)
 		return
 	}
 	// TODO return with error not found? or nil?
@@ -551,11 +567,18 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 }
 
 func (c *Collection) Close() error {
-	{
-		err := c.buffer.Flush()
-		if err != nil {
-			return err
-		}
+	if c.writeCh != nil {
+		close(c.writeCh)
+		c.writerWG.Wait()
+		c.writeCh = nil
+	}
+
+	if err := c.buffer.Flush(); err != nil {
+		return err
+	}
+
+	if err := c.loadWriterErr(); err != nil {
+		return err
 	}
 
 	err := c.file.Close()
@@ -627,10 +650,35 @@ func (c *Collection) EncodeCommand(command *Command) error {
 		return err
 	}
 
-	b := em.Buffer.Bytes()
-	c.encoderMutex.Lock()
-	c.buffer.Write(b)
-	//	c.file.Write(b)
-	c.encoderMutex.Unlock()
+	if err := c.loadWriterErr(); err != nil {
+		return err
+	}
+
+	wb := writeBufferPool.Get().(*writeBuffer)
+	wb.data = append(wb.data[:0], em.Buffer.Bytes()...)
+
+	c.writeCh <- wb
+
+	return c.loadWriterErr()
+}
+
+func (c *Collection) writeLoop() {
+	defer c.writerWG.Done()
+	for wb := range c.writeCh {
+		if len(wb.data) > 0 {
+			if _, err := c.buffer.Write(wb.data); err != nil {
+				errCopy := err
+				c.writerErr.Store(&errCopy)
+			}
+		}
+		wb.data = wb.data[:0]
+		writeBufferPool.Put(wb)
+	}
+}
+
+func (c *Collection) loadWriterErr() error {
+	if errPtr := c.writerErr.Load(); errPtr != nil {
+		return *errPtr
+	}
 	return nil
 }

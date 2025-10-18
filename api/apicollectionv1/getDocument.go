@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strings"
@@ -55,7 +56,7 @@ func getDocument(ctx context.Context) (*documentLookupResponse, error) {
 	}
 
 	document := map[string]any{}
-	if err := json.Unmarshal(row.Payload, &document); err != nil {
+	if err := jsonv2.Unmarshal(row.Payload, &document); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
@@ -111,7 +112,7 @@ func findRowByID(col *collection.Collection, documentID string) (*collection.Row
 
 	for _, row := range col.Rows {
 		var item map[string]any
-		if err := json.Unmarshal(row.Payload, &item); err != nil {
+		if err := jsonv2.Unmarshal(row.Payload, &item); err != nil {
 			continue
 		}
 		value, exists := item["id"]
@@ -143,7 +144,7 @@ func normalizeMapOptions(options interface{}) (*collection.IndexMapOptions, erro
 			return nil, err
 		}
 		opts := &collection.IndexMapOptions{}
-		if err := json.Unmarshal(data, opts); err != nil {
+		if err := jsonv2.Unmarshal(data, opts); err != nil {
 			return nil, err
 		}
 		return opts, nil

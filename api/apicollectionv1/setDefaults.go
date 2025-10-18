@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -33,7 +34,7 @@ func setDefaults(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 
 	defaults := col.Defaults
 
-	err = json.NewDecoder(r.Body).Decode(&defaults)
+	err = jsonv2.UnmarshalDecode(jsonv2.NewDecoder(r.Body), &defaults)
 	if err != nil {
 		return err // todo: handle/wrap this properly
 	}
