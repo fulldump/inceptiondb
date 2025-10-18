@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"runtime/debug"
@@ -15,6 +16,7 @@ func RecoverFromPanic(next box.H) box.H {
 	return func(ctx context.Context) {
 		defer func() {
 			if err := recover(); err != nil {
+				fmt.Println("ERROR:", err)
 				debug.PrintStack()
 			}
 		}()

@@ -32,7 +32,7 @@ func Parallel(workers int, f func()) {
 
 func Test_Streamtest(t *testing.T) {
 
-	// t.SkipNow()
+	t.SkipNow()
 
 	base := "https://inceptiondb.io"
 	base = "http://localhost:8080"
