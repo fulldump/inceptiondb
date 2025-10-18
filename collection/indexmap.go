@@ -21,14 +21,7 @@ func NewIndexMap(options *IndexMapOptions) *IndexMap {
 	}
 }
 
-func (i *IndexMap) RemoveRow(row *Row) error {
-
-	item := map[string]interface{}{}
-
-	err := json.Unmarshal(row.Payload, &item)
-	if err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
-	}
+func (i *IndexMap) RemoveRow(row *Row, item map[string]any) error {
 
 	field := i.Options.Field
 	entries := i.Entries
@@ -55,13 +48,7 @@ func (i *IndexMap) RemoveRow(row *Row) error {
 	return nil
 }
 
-func (i *IndexMap) AddRow(row *Row) error {
-
-	item := map[string]interface{}{}
-	err := json.Unmarshal(row.Payload, &item)
-	if err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
-	}
+func (i *IndexMap) AddRow(row *Row, item map[string]any) error {
 
 	field := i.Options.Field
 
