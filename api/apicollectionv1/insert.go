@@ -2,7 +2,8 @@ package apicollectionv1
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json2 "encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,7 +41,11 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	// READER
 
 	// ALT 1
-	jsonReader := json.NewDecoder(r.Body)
+	jsonReader := jsontext.NewDecoder(r.Body,
+		jsontext.AllowDuplicateNames(true),
+		jsontext.AllowInvalidUTF8(true),
+	)
+	// jsonReader := json.NewDecoder(r.Body)
 
 	// ALT 2
 	// jsonReader := jsontext.NewDecoder(r.Body, jsontext.AllowDuplicateNames(true))
@@ -60,7 +65,8 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	for i := 0; true; i++ {
 		item := map[string]any{}
 		// READER:ALT 1
-		err := jsonReader.Decode(&item)
+		// err := jsonReader.Decode(&item)
+		err := json2.UnmarshalDecode(jsonReader, &item)
 		// READER:ALT 2
 		// err := json2.UnmarshalDecode(jsonReader, &item)
 		if err == io.EOF {
