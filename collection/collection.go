@@ -86,10 +86,17 @@ func OpenCollection(filename string) (*Collection, error) {
 		encoderMutex: &sync.Mutex{},
 	}
 
-	j := json.NewDecoder(f)
+	j := jsontext.NewDecoder(f,
+		jsontext.AllowDuplicateNames(true),
+		jsontext.AllowInvalidUTF8(true),
+	)
+
+	command := &Command{}
+
 	for {
-		command := &Command{}
-		err := j.Decode(&command)
+		command.Payload = nil
+
+		err := json2.UnmarshalDecode(j, &command)
 		if err == io.EOF {
 			break
 		}
