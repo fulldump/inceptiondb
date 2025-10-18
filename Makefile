@@ -1,14 +1,14 @@
 
 VERSION = $(shell git describe --tags --always)
 FLAGS = -ldflags "\
-  -X main.VERSION=$(VERSION) \
+  -X github.com/fulldump/inceptiondb/bootstrap.VERSION=$(VERSION) \
 "
 
 test:
 	go test -cover ./...
 
 run:
-	STATICS=statics/www/ go run $(FLAGS) ./cmd/inceptiondb/...
+	GOEXPERIMENT=jsonv2	STATICS=statics/www/ go run $(FLAGS) ./cmd/inceptiondb/...
 
 build:
 	CGO_ENABLED=0 go build $(FLAGS) -o bin/ ./cmd/inceptiondb/...
