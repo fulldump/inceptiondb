@@ -19,14 +19,7 @@ func NewIndexSyncMap(options *IndexMapOptions) *IndexSyncMap {
 	}
 }
 
-func (i *IndexSyncMap) RemoveRow(row *Row) error {
-
-	item := map[string]interface{}{}
-
-	err := json.Unmarshal(row.Payload, &item)
-	if err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
-	}
+func (i *IndexSyncMap) RemoveRow(row *Row, item map[string]any) error {
 
 	field := i.Options.Field
 	entries := i.Entries
@@ -53,13 +46,7 @@ func (i *IndexSyncMap) RemoveRow(row *Row) error {
 	return nil
 }
 
-func (i *IndexSyncMap) AddRow(row *Row) error {
-
-	item := map[string]interface{}{}
-	err := json.Unmarshal(row.Payload, &item)
-	if err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
-	}
+func (i *IndexSyncMap) AddRow(row *Row, item map[string]any) error {
 
 	field := i.Options.Field
 
@@ -81,6 +68,15 @@ func (i *IndexSyncMap) AddRow(row *Row) error {
 			return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
 		}
 		entries.Store(value, row)
+	case []string:
+		for _, s := range value {
+			if _, exists := entries.Load(s); exists {
+				return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
+			}
+		}
+		for _, s := range value {
+			entries.Store(s, row)
+		}
 	case []interface{}:
 		for _, v := range value {
 			s := v.(string) // TODO: handle this casting error

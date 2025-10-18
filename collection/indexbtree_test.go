@@ -22,12 +22,13 @@ func Test_IndexBTree_HappyPath(t *testing.T) {
 
 	n := 4
 	for i := 0; i < n; i++ {
-		data, _ := json.Marshal(JSON{
+		item := JSON{
 			"id": float64(i),
-		})
+		}
+		data, _ := json.Marshal(item)
 		index.AddRow(&Row{
 			Payload: data,
-		})
+		}, item)
 	}
 
 	{
@@ -70,10 +71,12 @@ func TestIndexBtree_AddRow_Sparse(t *testing.T) {
 	}
 
 	for i, document := range payloads {
+		item := JSON{}
+		json.Unmarshal([]byte(document), &item)
 		err := index.AddRow(&Row{
 			I:       i,
 			Payload: json.RawMessage(document),
-		})
+		}, item)
 		biff.AssertNil(err)
 	}
 
@@ -101,20 +104,22 @@ func TestIndexBtree_RemoveRow(t *testing.T) {
 	}
 
 	for _, document := range documents {
+		item := JSON{}
+		json.Unmarshal([]byte(document), &item)
 		err := index.AddRow(&Row{
 			Payload: json.RawMessage(document),
-		})
+		}, item)
 		biff.AssertNil(err)
 	}
 
 	errFirst := index.RemoveRow(&Row{
 		Payload: json.RawMessage(`{"name":"b"}`),
-	})
+	}, JSON{"name": "b"})
 	biff.AssertNil(errFirst)
 
 	errSecond := index.RemoveRow(&Row{
 		Payload: json.RawMessage(`{"name":"b"}`),
-	})
+	}, JSON{"name": "b"})
 	biff.AssertNil(errSecond)
 
 	expectedDocuments := []string{
@@ -139,13 +144,13 @@ func TestIndexBtree_AddRow_NonSparse(t *testing.T) {
 	// Insert defined field
 	errValid := index.AddRow(&Row{
 		Payload: json.RawMessage(`{"name":"Fulanez", "year":1986}`),
-	})
+	}, JSON{"name": "Fulanez", "year": 1986})
 	biff.AssertNil(errValid)
 
 	// Insert undefined field
 	errInvalid := index.AddRow(&Row{
 		Payload: json.RawMessage(`{"name":"Fulanez"}`),
-	})
+	}, JSON{"name": "Fulanez"})
 	biff.AssertEqual(errInvalid.Error(), "field 'year' not defined")
 }
 
@@ -159,13 +164,13 @@ func TestIndexBtree_AddRow_Conflict(t *testing.T) {
 	// Insert first
 	errValid := index.AddRow(&Row{
 		Payload: json.RawMessage(`{"product_code":1,"product_category":"cat1"}`),
-	})
+	}, JSON{"product_code": 1, "product_category": "cat1"})
 	biff.AssertNil(errValid)
 
 	// Insert same value
 	errConflict := index.AddRow(&Row{
 		Payload: json.RawMessage(`{"product_code":1,"product_category":"cat1"}`),
-	})
+	}, JSON{"product_code": 1, "product_category": "cat1"})
 	biff.AssertEqual(errConflict.Error(), "key (product_code:1,product_category:cat1) already exists")
 }
 

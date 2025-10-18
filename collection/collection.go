@@ -107,7 +107,7 @@ func OpenCollection(filename string) (*Collection, error) {
 
 		switch command.Name {
 		case "insert":
-			_, err := collection.addRow(command.Payload)
+			_, err := collection.addRow(command.Payload, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -181,13 +181,13 @@ func OpenCollection(filename string) (*Collection, error) {
 	return collection, nil
 }
 
-func (c *Collection) addRow(payload json.RawMessage) (*Row, error) {
+func (c *Collection) addRow(payload json.RawMessage, item map[string]any) (*Row, error) {
 
 	row := &Row{
 		Payload: payload,
 	}
 
-	err := indexInsert(c.Indexes, row)
+	err := indexInsert(c.Indexes, row, item)
 	if err != nil {
 		return nil, err
 	}
@@ -209,12 +209,6 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 	auto := atomic.AddInt64(&c.Count, 1)
 
 	if c.Defaults != nil {
-		// item := map[string]any{} // todo: item is shadowed, choose a better name
-		// err := json.Unmarshal(payload, &item)
-		// if err != nil {
-		// 	return nil, fmt.Errorf("json encode defaults: %w", err)
-		// }
-
 		for k, v := range c.Defaults {
 			if item[k] != nil {
 				continue
@@ -234,13 +228,13 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 		}
 	}
 
-	payload, err := json.Marshal(item)
+	payload, err := json2.Marshal(item)
 	if err != nil {
 		return nil, fmt.Errorf("json encode payload: %w", err)
 	}
 
 	// Add row
-	row, err := c.addRow(payload)
+	row, err := c.addRow(payload, item)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +353,9 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 
 	// Add all rows to the index
 	for _, row := range c.Rows {
-		err := index.AddRow(row)
+		item := map[string]any{}
+		json2.Unmarshal(row.Payload, &item)
+		err := index.AddRow(row, item)
 		if err != nil {
 			delete(c.Indexes, name)
 			return fmt.Errorf("index row: %s, data: %s", err.Error(), string(row.Payload))
@@ -390,7 +386,12 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 	return c.EncodeCommand(command)
 }
 
-func indexInsert(indexes map[string]*collectionIndex, row *Row) (err error) {
+func indexInsert(indexes map[string]*collectionIndex, row *Row, item map[string]any) (err error) {
+
+	if item == nil {
+		item = make(map[string]any)
+		json2.Unmarshal(row.Payload, &item)
+	}
 
 	// Note: rollbacks array should be kept in stack if it is smaller than 65536 bytes, so
 	// our recommended maximum number of indexes should NOT exceed 8192 indexes
@@ -403,12 +404,12 @@ func indexInsert(indexes map[string]*collectionIndex, row *Row) (err error) {
 			return
 		}
 		for i := 0; i < c; i++ {
-			rollbacks[i].RemoveRow(row)
+			rollbacks[i].RemoveRow(row, item)
 		}
 	}()
 
 	for key, index := range indexes {
-		err = index.AddRow(row)
+		err = index.AddRow(row, item)
 		if err != nil {
 			return fmt.Errorf("index add '%s': %s", key, err.Error())
 		}
@@ -420,9 +421,10 @@ func indexInsert(indexes map[string]*collectionIndex, row *Row) (err error) {
 	return
 }
 
-func indexRemove(indexes map[string]*collectionIndex, row *Row) (err error) {
+func indexRemove(indexes map[string]*collectionIndex, row *Row, item map[string]any) (err error) {
+
 	for key, index := range indexes {
-		err = index.RemoveRow(row)
+		err = index.RemoveRow(row, item)
 		if err != nil {
 			// TODO: does this make any sense?
 			return fmt.Errorf("index remove '%s': %s", key, err.Error())
@@ -445,6 +447,9 @@ func lockBlock(m *sync.Mutex, f func() error) error {
 
 func (c *Collection) removeByRow(row *Row, persist bool) error { // todo: rename to 'removeRow'
 
+	item := map[string]any{}
+	json2.Unmarshal(row.Payload, &item)
+
 	var i int
 	err := lockBlock(c.rowsMutex, func() error {
 		i = row.I
@@ -452,7 +457,7 @@ func (c *Collection) removeByRow(row *Row, persist bool) error { // todo: rename
 			return fmt.Errorf("row %d does not exist", i)
 		}
 
-		err := indexRemove(c.Indexes, row)
+		err := indexRemove(c.Indexes, row, item)
 		if err != nil {
 			return fmt.Errorf("could not free index")
 		}
@@ -514,15 +519,18 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 		return nil
 	}
 
+	item := map[string]any{}
+	json2.Unmarshal(row.Payload, &item)
+
 	// index update
-	err = indexRemove(c.Indexes, row)
+	err = indexRemove(c.Indexes, row, item)
 	if err != nil {
 		return fmt.Errorf("indexRemove: %w", err)
 	}
 
 	row.Payload = newPayload
 
-	err = indexInsert(c.Indexes, row)
+	err = indexInsert(c.Indexes, row, item)
 	if err != nil {
 		return fmt.Errorf("indexInsert: %w", err)
 	}

@@ -401,16 +401,16 @@ func TestPersistenceUpdate_TwiceOptimization(t *testing.T) {
 }
 
 type MockIndex struct {
-	AddRowCallback    func(row *Row) error
-	RemoveRowCallback func(row *Row) error
+	AddRowCallback    func(row *Row, item map[string]any) error
+	RemoveRowCallback func(row *Row, item map[string]any) error
 }
 
-func (m *MockIndex) AddRow(row *Row) error {
-	return m.AddRowCallback(row)
+func (m *MockIndex) AddRow(row *Row, item map[string]any) error {
+	return m.AddRowCallback(row, item)
 }
 
-func (m *MockIndex) RemoveRow(row *Row) error {
-	return m.RemoveRowCallback(row)
+func (m *MockIndex) RemoveRow(row *Row, item map[string]any) error {
+	return m.RemoveRowCallback(row, item)
 }
 
 func (m *MockIndex) Traverse(options []byte, f func(row *Row) bool) {
@@ -425,14 +425,14 @@ func TestIndexInsert_Rollback(t *testing.T) {
 
 	newMock := func(name string) Index {
 		return &MockIndex{
-			AddRowCallback: func(row *Row) error {
+			AddRowCallback: func(row *Row, item map[string]any) error {
 				if len(adds) == 2 {
 					return errors.New("mock error")
 				}
 				adds = append(adds, name)
 				return nil
 			},
-			RemoveRowCallback: func(row *Row) error {
+			RemoveRowCallback: func(row *Row, item map[string]any) error {
 				removes = append(removes, name)
 				return nil
 			},
@@ -453,7 +453,7 @@ func TestIndexInsert_Rollback(t *testing.T) {
 
 	row := &Row{}
 
-	indexInsert(indexes, row)
+	indexInsert(indexes, row, nil)
 
 	AssertEqual(removes, adds)
 	AssertEqual(len(removes), 2)
@@ -473,13 +473,13 @@ func TestIndexInsert_Rollback_BlackBox(t *testing.T) {
 		Payload: []byte(`{"id":"my-id"}`),
 	}
 
-	err1 := indexInsert(indexes, row)
+	err1 := indexInsert(indexes, row, nil)
 	AssertNil(err1)
 
-	err2 := indexInsert(indexes, row)
+	err2 := indexInsert(indexes, row, nil)
 	AssertNotNil(err2)
 
-	err3 := indexInsert(indexes, row)
+	err3 := indexInsert(indexes, row, nil)
 	AssertNotNil(err3)
 
 }

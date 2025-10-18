@@ -38,7 +38,7 @@ func Test_Streamtest(t *testing.T) {
 
 	t.SkipNow()
 
-	if false {
+	if true {
 		conf := configuration.Default()
 		conf.Dir = t.TempDir()
 
@@ -53,8 +53,12 @@ func Test_Streamtest(t *testing.T) {
 
 	{
 		// Create collection
-		payload := strings.NewReader(`{"name": "streammm"}`)
-		req, _ := http.NewRequest("POST", base+"/v1/collections", payload)
+		payload := strings.NewReader(`{
+			"field": "n",
+			"name": "my-index",
+			"type": "map"
+		}`)
+		req, _ := http.NewRequest("POST", base+"/v1/collections/streammm:createIndex", payload)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Fatal(err)

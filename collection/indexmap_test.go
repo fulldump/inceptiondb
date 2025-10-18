@@ -1,6 +1,7 @@
 package collection
 
 import (
+	json2 "encoding/json/v2"
 	"fmt"
 	"testing"
 )
@@ -28,7 +29,7 @@ func BenchmarkIndexMap_AddRow(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		row := &Row{Payload: payloads[i]}
-		if err := index.AddRow(row); err != nil {
+		if err := index.AddRow(row, nil); err != nil {
 			b.Fatalf("AddRow error: %v", err)
 		}
 	}
@@ -47,7 +48,9 @@ func BenchmarkIndexSyncMap_AddRow(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		row := &Row{Payload: payloads[i]}
-		if err := index.AddRow(row); err != nil {
+		item := map[string]any{}
+		json2.Unmarshal(row.Payload, &item)
+		if err := index.AddRow(row, item); err != nil {
 			b.Fatalf("AddRow error: %v", err)
 		}
 	}
@@ -65,7 +68,7 @@ func BenchmarkIndexMap_RemoveRow(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		row := &Row{Payload: createPayload(key, options.Field)}
-		if err := index.AddRow(row); err != nil {
+		if err := index.AddRow(row, nil); err != nil {
 			b.Fatalf("AddRow error: %v", err)
 		}
 	}
@@ -80,7 +83,7 @@ func BenchmarkIndexMap_RemoveRow(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		row := &Row{Payload: payloads[i]}
-		if err := index.RemoveRow(row); err != nil {
+		if err := index.RemoveRow(row, nil); err != nil {
 			b.Fatalf("RemoveRow error: %v", err)
 		}
 	}
@@ -93,7 +96,9 @@ func BenchmarkIndexSyncMap_RemoveRow(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		row := &Row{Payload: createPayload(key, options.Field)}
-		if err := index.AddRow(row); err != nil {
+		item := map[string]any{}
+		json2.Unmarshal(row.Payload, &item)
+		if err := index.AddRow(row, item); err != nil {
 			b.Fatalf("AddRow error: %v", err)
 		}
 	}
@@ -107,7 +112,7 @@ func BenchmarkIndexSyncMap_RemoveRow(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		row := &Row{Payload: payloads[i]}
-		if err := index.RemoveRow(row); err != nil {
+		if err := index.RemoveRow(row, nil); err != nil {
 			b.Fatalf("RemoveRow error: %v", err)
 		}
 	}
@@ -126,7 +131,7 @@ func BenchmarkIndexMap_Traverse(b *testing.B) {
 	for i := 0; i < numRows; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		row := &Row{Payload: createPayload(key, options.Field)}
-		if err := index.AddRow(row); err != nil {
+		if err := index.AddRow(row, nil); err != nil {
 			b.Fatalf("AddRow error: %v", err)
 		}
 	}
@@ -149,7 +154,9 @@ func BenchmarkIndexSyncMap_Traverse(b *testing.B) {
 	for i := 0; i < numRows; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		row := &Row{Payload: createPayload(key, options.Field)}
-		if err := index.AddRow(row); err != nil {
+		item := map[string]any{}
+		json2.Unmarshal(row.Payload, &item)
+		if err := index.AddRow(row, item); err != nil {
 			b.Fatalf("AddRow error: %v", err)
 		}
 	}

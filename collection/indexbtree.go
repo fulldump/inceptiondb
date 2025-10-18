@@ -14,19 +14,17 @@ type IndexBtree struct {
 	Options *IndexBTreeOptions
 }
 
-func (b *IndexBtree) RemoveRow(r *Row) error {
+func (b *IndexBtree) RemoveRow(row *Row, item map[string]any) error {
 
 	// TODO: duplicated code:
 	values := []interface{}{}
-	data := map[string]interface{}{}
-	json.Unmarshal(r.Payload, &data)
 
 	for _, field := range b.Options.Fields {
-		values = append(values, data[field])
+		values = append(values, item[field])
 	}
 
 	b.Btree.Delete(&RowOrdered{
-		Row:    r, // probably r is not needed
+		Row:    row, // probably r is not needed
 		Values: values,
 	})
 
@@ -102,14 +100,12 @@ func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 	}
 }
 
-func (b *IndexBtree) AddRow(r *Row) error {
+func (b *IndexBtree) AddRow(row *Row, item map[string]any) error {
 	var values []interface{}
-	data := map[string]interface{}{}
-	json.Unmarshal(r.Payload, &data)
 
 	for _, field := range b.Options.Fields {
 		field = strings.TrimPrefix(field, "-")
-		value, exists := data[field]
+		value, exists := item[field]
 		if exists {
 			values = append(values, value)
 			continue
@@ -134,7 +130,7 @@ func (b *IndexBtree) AddRow(r *Row) error {
 	}
 
 	b.Btree.ReplaceOrInsert(&RowOrdered{
-		Row:    r,
+		Row:    row,
 		Values: values,
 	})
 
