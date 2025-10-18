@@ -1,7 +1,11 @@
 package collection
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
+	json2 "encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -16,15 +20,15 @@ import (
 )
 
 type Collection struct {
-	Filename  string // Just informative...
-	file      *os.File
-	Rows      []*Row
-	rowsMutex *sync.Mutex
-	Indexes   map[string]*collectionIndex // todo: protect access with mutex or use sync.Map
-	// buffer   *bufio.Writer // TODO: use write buffer to improve performance (x3 in tests)
-	Defaults    map[string]any
-	Count       int64
-	jsonEncoder *json.Encoder
+	Filename     string // Just informative...
+	file         *os.File
+	Rows         []*Row
+	rowsMutex    *sync.Mutex
+	Indexes      map[string]*collectionIndex // todo: protect access with mutex or use sync.Map
+	buffer       *bufio.Writer               // TODO: use write buffer to improve performance (x3 in tests)
+	Defaults     map[string]any
+	Count        int64
+	encoderMutex *sync.Mutex
 }
 
 type collectionIndex struct {
@@ -39,6 +43,33 @@ type Row struct {
 	PatchMutex sync.Mutex
 }
 
+type EncoderMachine struct {
+	Buffer *bytes.Buffer
+	Enc    *json.Encoder
+	Enc2   *jsontext.Encoder
+}
+
+var encPool = sync.Pool{
+	New: func() any {
+		buffer := bytes.NewBuffer(make([]byte, 0, 8*1024))
+		enc := json.NewEncoder(buffer)
+		enc.SetEscapeHTML(false)
+		return &EncoderMachine{
+			Buffer: buffer,
+			Enc:    enc,
+			Enc2: jsontext.NewEncoder(
+				buffer,
+				jsontext.AllowDuplicateNames(true),
+				jsontext.AllowDuplicateNames(true),
+				jsontext.EscapeForHTML(false),
+				jsontext.Multiline(false),
+				jsontext.EscapeForJS(false),
+				jsontext.ReorderRawObjects(false),
+			),
+		}
+	},
+}
+
 func OpenCollection(filename string) (*Collection, error) {
 
 	// TODO: initialize, read all file and apply its changes into memory
@@ -48,10 +79,11 @@ func OpenCollection(filename string) (*Collection, error) {
 	}
 
 	collection := &Collection{
-		Rows:      []*Row{},
-		rowsMutex: &sync.Mutex{},
-		Filename:  filename,
-		Indexes:   map[string]*collectionIndex{},
+		Rows:         []*Row{},
+		rowsMutex:    &sync.Mutex{},
+		Filename:     filename,
+		Indexes:      map[string]*collectionIndex{},
+		encoderMutex: &sync.Mutex{},
 	}
 
 	j := json.NewDecoder(f)
@@ -137,7 +169,7 @@ func OpenCollection(filename string) (*Collection, error) {
 		return nil, fmt.Errorf("open file for write: %w", err)
 	}
 
-	collection.jsonEncoder = json.NewEncoder(collection.file)
+	collection.buffer = bufio.NewWriterSize(collection.file, 16*1024*1024)
 
 	return collection, nil
 }
@@ -512,6 +544,13 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 }
 
 func (c *Collection) Close() error {
+	{
+		err := c.buffer.Flush()
+		if err != nil {
+			return err
+		}
+	}
+
 	err := c.file.Close()
 	c.file = nil
 	return err
@@ -569,10 +608,22 @@ func (c *Collection) dropIndex(name string, persist bool) error {
 }
 
 func (c *Collection) EncodeCommand(command *Command) error {
-	err := c.jsonEncoder.Encode(command)
+
+	em := encPool.Get().(*EncoderMachine)
+	defer encPool.Put(em)
+	em.Buffer.Reset()
+
+	// err := em.Enc.Encode(command)
+	err := json2.MarshalEncode(em.Enc2, command)
+	// err := json2.MarshalWrite(em.Buffer, command)
 	if err != nil {
-		return fmt.Errorf("json encode command: %w", err)
+		return err
 	}
 
+	b := em.Buffer.Bytes()
+	c.encoderMutex.Lock()
+	c.buffer.Write(b)
+	//	c.file.Write(b)
+	c.encoderMutex.Unlock()
 	return nil
 }

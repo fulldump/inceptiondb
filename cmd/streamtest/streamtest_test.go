@@ -1,6 +1,7 @@
 package streamtest
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -11,6 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/fulldump/inceptiondb/bootstrap"
+	"github.com/fulldump/inceptiondb/configuration"
 )
 
 type Item struct {
@@ -33,6 +37,16 @@ func Parallel(workers int, f func()) {
 func Test_Streamtest(t *testing.T) {
 
 	t.SkipNow()
+
+	if false {
+		conf := configuration.Default()
+		conf.Dir = t.TempDir()
+
+		start, stop := bootstrap.Bootstrap(conf)
+		defer stop()
+
+		go start()
+	}
 
 	base := "https://inceptiondb.io"
 	base = "http://localhost:8080"
@@ -73,7 +87,7 @@ func Test_Streamtest(t *testing.T) {
 
 		r, w := io.Pipe()
 
-		// wb := bufio.NewWriterSize(w, 1*1024*1024)
+		wb := bufio.NewWriterSize(w, 1*1024*1024)
 
 		go func() {
 			// e := json.NewEncoder(w)
@@ -83,9 +97,9 @@ func Test_Streamtest(t *testing.T) {
 				// 	Payload: payload,
 				// })
 				n := atomic.AddInt64(&counter, 1)
-				fmt.Fprintf(w, "{\"id\":%d,\"n\":\"%d\"}\n", n, n)
+				fmt.Fprintf(wb, "{\"id\":%d,\"n\":\"%d\"}\n", n, n)
 			}
-			// wb.Flush()
+			wb.Flush()
 			w.Close()
 		}()
 
@@ -105,7 +119,9 @@ func Test_Streamtest(t *testing.T) {
 		}
 	})
 
+	took := time.Since(t0)
 	fmt.Println("received:", counter)
-	fmt.Println("took:", time.Since(t0))
+	fmt.Println("took:", took)
+	fmt.Printf("Throughput: %.2f rows/sec\n", float64(counter)/took.Seconds())
 
 }

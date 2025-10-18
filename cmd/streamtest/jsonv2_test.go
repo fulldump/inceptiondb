@@ -2,11 +2,11 @@ package streamtest
 
 import (
 	"bytes"
+	"encoding/json/jsontext"
+	json2 "encoding/json/v2"
 	"testing"
 
 	"github.com/fulldump/biff"
-	json2 "github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 )
 
 func Test_Jsonv2(t *testing.T) {

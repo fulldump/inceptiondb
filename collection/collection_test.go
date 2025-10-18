@@ -30,6 +30,8 @@ func TestInsert(t *testing.T) {
 			"hello": "world",
 		})
 
+		c.Close()
+
 		// Check
 		fileContent, _ := ioutil.ReadFile(filename)
 		command := &Command{}

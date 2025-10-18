@@ -4,11 +4,13 @@ FLAGS = -ldflags "\
   -X github.com/fulldump/inceptiondb/bootstrap.VERSION=$(VERSION) \
 "
 
+export GOEXPERIMENT=jsonv2
+
 test:
 	go test -cover ./...
 
 run:
-	GOEXPERIMENT=jsonv2	STATICS=statics/www/ go run $(FLAGS) ./cmd/inceptiondb/...
+	STATICS=statics/www/ go run $(FLAGS) ./cmd/inceptiondb/...
 
 build:
 	CGO_ENABLED=0 go build $(FLAGS) -o bin/ ./cmd/inceptiondb/...
