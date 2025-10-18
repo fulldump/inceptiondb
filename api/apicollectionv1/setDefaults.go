@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"net/http"
 
@@ -33,8 +34,11 @@ func setDefaults(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	}
 
 	defaults := col.Defaults
-
-	err = jsonv2.UnmarshalDecode(jsonv2.NewDecoder(r.Body), &defaults)
+	bodyDecoder := jsontext.NewDecoder(r.Body,
+		jsontext.AllowDuplicateNames(true),
+		jsontext.AllowInvalidUTF8(true),
+	)
+	err = jsonv2.UnmarshalDecode(bodyDecoder, &defaults)
 	if err != nil {
 		return err // todo: handle/wrap this properly
 	}

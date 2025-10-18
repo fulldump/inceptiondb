@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -72,7 +73,10 @@ func (s *Service) Insert(name string, data io.Reader) error {
 		return err
 	}
 
-	jsonReader := jsonv2.NewDecoder(data)
+	jsonReader := jsontext.NewDecoder(data,
+		jsontext.AllowDuplicateNames(true),
+		jsontext.AllowInvalidUTF8(true),
+	)
 
 	for {
 		item := map[string]any{}

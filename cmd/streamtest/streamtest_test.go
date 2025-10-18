@@ -36,9 +36,9 @@ func Parallel(workers int, f func()) {
 
 func Test_Streamtest(t *testing.T) {
 
-	t.SkipNow()
+	// t.SkipNow()
 
-	if false {
+	if true {
 		conf := configuration.Default()
 		conf.Dir = t.TempDir()
 

@@ -2,7 +2,6 @@ package apicollectionv1
 
 import (
 	"context"
-	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io"
