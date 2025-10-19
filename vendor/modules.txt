@@ -16,6 +16,14 @@ github.com/fulldump/box/boxopenapi
 # github.com/fulldump/goconfig v1.7.1
 ## explicit; go 1.5
 github.com/fulldump/goconfig
+# github.com/go-json-experiment/json v0.0.0-20250910080747-cc2cfa0554c3
+## explicit; go 1.25
+github.com/go-json-experiment/json
+github.com/go-json-experiment/json/internal
+github.com/go-json-experiment/json/internal/jsonflags
+github.com/go-json-experiment/json/internal/jsonopts
+github.com/go-json-experiment/json/internal/jsonwire
+github.com/go-json-experiment/json/jsontext
 # github.com/google/btree v1.1.3
 ## explicit; go 1.18
 github.com/google/btree

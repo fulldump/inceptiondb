@@ -4,8 +4,6 @@ FLAGS = -ldflags "\
   -X github.com/fulldump/inceptiondb/bootstrap.VERSION=$(VERSION) \
 "
 
-export GOEXPERIMENT=jsonv2
-
 test:
 	go test -cover ./...
 
