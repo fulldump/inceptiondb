@@ -3,9 +3,6 @@
 github.com/SierraSoftworks/connor
 github.com/SierraSoftworks/connor/internal/fields
 github.com/SierraSoftworks/connor/internal/numbers
-# github.com/evanphx/json-patch v0.5.2
-## explicit; go 1.14
-github.com/evanphx/json-patch
 # github.com/fulldump/apitest v1.3.0
 ## explicit; go 1.17
 github.com/fulldump/apitest
@@ -25,6 +22,3 @@ github.com/google/btree
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
-# github.com/pkg/errors v0.9.1
-## explicit
-github.com/pkg/errors
