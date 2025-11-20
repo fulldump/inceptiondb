@@ -52,3 +52,7 @@ book:
 .PHONY: version
 version:
 	@echo $(VERSION)
+
+.PHONY: bench
+bench:
+	go test -bench=BenchmarkIndexMap_RemoveRow_Concurrent ./collection/...
