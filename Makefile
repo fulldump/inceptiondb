@@ -5,6 +5,9 @@ FLAGS = -ldflags "\
 "
 
 test:
+	go test ./...
+
+cover:
 	GOTOOLCHAIN=go1.25.0+auto go test -cover ./...
 
 run:
