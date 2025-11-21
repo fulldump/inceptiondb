@@ -181,10 +181,18 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 							myDocuments[1],
 							{"id": "3", "name": "Pedro"},
 						}
+						actualDocuments := map[string]JSON{}
+						for {
+							var bodyRow JSON
+							if err := dec.Decode(&bodyRow); err == io.EOF {
+								break
+							}
+							actualDocuments[bodyRow["id"].(string)] = bodyRow
+						}
+
 						for _, expectedDocument := range expectedDocuments {
-							var bodyRow interface{}
-							dec.Decode(&bodyRow)
-							biff.AssertEqualJson(bodyRow, expectedDocument)
+							id := expectedDocument["id"].(string)
+							biff.AssertEqualJson(actualDocuments[id], expectedDocument)
 						}
 						biff.AssertEqual(resp.StatusCode, http.StatusOK)
 					}
@@ -218,10 +226,18 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 						myDocuments[0],
 						myDocuments[2],
 					}
+					actualDocuments := map[string]JSON{}
+					for {
+						var bodyRow JSON
+						if err := dec.Decode(&bodyRow); err == io.EOF {
+							break
+						}
+						actualDocuments[bodyRow["id"].(string)] = bodyRow
+					}
+
 					for _, expectedDocument := range expectedDocuments {
-						var bodyRow interface{}
-						dec.Decode(&bodyRow)
-						biff.AssertEqualJson(bodyRow, expectedDocument)
+						id := expectedDocument["id"].(string)
+						biff.AssertEqualJson(actualDocuments[id], expectedDocument)
 					}
 					biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				}
@@ -273,10 +289,19 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 						myDocuments[1],
 						{"id": "3", "name": "Alfonso", "country": "es"},
 					}
+
+					actualDocuments := map[string]JSON{}
+					for {
+						var bodyRow JSON
+						if err := dec.Decode(&bodyRow); err == io.EOF {
+							break
+						}
+						actualDocuments[bodyRow["id"].(string)] = bodyRow
+					}
+
 					for _, expectedDocument := range expectedDocuments {
-						var bodyRow interface{}
-						dec.Decode(&bodyRow)
-						biff.AssertEqualJson(bodyRow, expectedDocument)
+						id := expectedDocument["id"].(string)
+						biff.AssertEqualJson(actualDocuments[id], expectedDocument)
 					}
 					biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				}

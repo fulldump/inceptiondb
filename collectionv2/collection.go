@@ -10,14 +10,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/btree"
 	"github.com/google/uuid"
 )
 
 type Collection struct {
 	Filename     string
 	file         *os.File
-	Rows         *btree.BTreeG[*Row]
+	Rows         RowContainer
 	mutex        *sync.RWMutex
 	Indexes      map[string]Index
 	buffer       *bufio.Writer
@@ -51,7 +50,7 @@ type DropIndexCommand struct {
 func OpenCollection(filename string) (*Collection, error) {
 	c := &Collection{
 		Filename:     filename,
-		Rows:         btree.NewG(32, func(a, b *Row) bool { return a.Less(b) }),
+		Rows:         NewSyncMapContainer(),
 		mutex:        &sync.RWMutex{},
 		Indexes:      map[string]Index{},
 		commandQueue: make(chan *Command, 1000), // Buffer for async writes
@@ -348,7 +347,7 @@ func (c *Collection) FindOne(data interface{}) {
 	defer c.mutex.RUnlock()
 
 	// Just get the first one
-	c.Rows.Ascend(func(row *Row) bool {
+	c.Rows.Traverse(func(row *Row) bool {
 		json.Unmarshal(row.Payload, data)
 		return false // Stop after first
 	})
@@ -358,7 +357,7 @@ func (c *Collection) Traverse(f func(data []byte)) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	c.Rows.Ascend(func(row *Row) bool {
+	c.Rows.Traverse(func(row *Row) bool {
 		f(row.Payload)
 		return true
 	})
@@ -391,7 +390,7 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 
 	// Add all rows to the index
 	var err error
-	c.Rows.Ascend(func(row *Row) bool {
+	c.Rows.Traverse(func(row *Row) bool {
 		err = index.AddRow(row)
 		if err != nil {
 			return false // Stop

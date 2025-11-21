@@ -110,7 +110,7 @@ func findRowByID(col *collectionv2.Collection, documentID string) (*collectionv2
 	// }
 	// }
 
-	col.Rows.Ascend(func(row *collectionv2.Row) bool {
+	col.Rows.Traverse(func(row *collectionv2.Row) bool {
 		var item map[string]any
 		if err := json.Unmarshal(row.Payload, &item); err != nil {
 			return true
