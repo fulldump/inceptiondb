@@ -160,6 +160,7 @@ func (s *SliceContainer) Delete(row *Row) {
 	last := len(s.rows) - 1
 	s.rows[i] = s.rows[last]
 	s.rows[i].I = i // Update I of the moved row
+	row.I = -1      // Invalidate deleted row
 	s.rows = s.rows[:last]
 }
 
@@ -174,7 +175,7 @@ func (s *SliceContainer) Has(row *Row) bool {
 	if row.I < 0 || row.I >= len(s.rows) {
 		return false
 	}
-	return s.rows[row.I] == row // Check pointer equality? Or just existence?
+	return true
 }
 
 func (s *SliceContainer) Len() int {

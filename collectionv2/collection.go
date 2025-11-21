@@ -35,6 +35,8 @@ type Command struct {
 	Timestamp int64           `json:"timestamp"`
 	StartByte int64           `json:"start_byte"`
 	Payload   json.RawMessage `json:"payload"`
+
+	serialized chan *bytes.Buffer `json:"-"`
 }
 
 type CreateIndexCommand struct {
@@ -50,7 +52,7 @@ type DropIndexCommand struct {
 func OpenCollection(filename string) (*Collection, error) {
 	c := &Collection{
 		Filename:     filename,
-		Rows:         NewSliceContainer(),
+		Rows:         NewBTreeContainer(),
 		mutex:        &sync.RWMutex{},
 		Indexes:      map[string]Index{},
 		commandQueue: make(chan *Command, 1000), // Buffer for async writes
@@ -86,13 +88,18 @@ func (c *Collection) writerLoop() {
 			if !ok {
 				return
 			}
-			c.writeCommand(cmd)
+			buf := <-cmd.serialized
+			c.buffer.Write(buf.Bytes())
+			bufferPool.Put(buf)
+
 		case <-c.closed:
 			// Drain queue
 			for {
 				select {
 				case cmd := <-c.commandQueue:
-					c.writeCommand(cmd)
+					buf := <-cmd.serialized
+					c.buffer.Write(buf.Bytes())
+					bufferPool.Put(buf)
 				default:
 					return
 				}
@@ -107,18 +114,6 @@ var bufferPool = sync.Pool{
 	},
 }
 
-func (c *Collection) writeCommand(cmd *Command) {
-	buf := bufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer bufferPool.Put(buf)
-
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-	enc.Encode(cmd)
-
-	c.buffer.Write(buf.Bytes())
-}
-
 func (c *Collection) Close() error {
 	c.closeOnce.Do(func() {
 		close(c.closed)
@@ -129,6 +124,18 @@ func (c *Collection) Close() error {
 }
 
 func (c *Collection) EncodeCommand(command *Command) error {
+	command.serialized = make(chan *bytes.Buffer, 1)
+	go func() {
+		buf := bufferPool.Get().(*bytes.Buffer)
+		buf.Reset()
+
+		enc := json.NewEncoder(buf)
+		enc.SetEscapeHTML(false)
+		enc.Encode(command)
+
+		command.serialized <- buf
+	}()
+
 	select {
 	case c.commandQueue <- command:
 		return nil
@@ -231,6 +238,9 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 		return fmt.Errorf("could not free index: %w", err)
 	}
 
+	// Capture ID before delete (SliceContainer might invalidate it)
+	id := row.I
+
 	c.Rows.Delete(row)
 
 	if !persist {
@@ -239,7 +249,7 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 
 	// Persist
 	payload, err := json.Marshal(map[string]interface{}{
-		"i": row.I,
+		"i": id,
 	})
 	if err != nil {
 		return err
