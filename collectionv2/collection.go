@@ -241,6 +241,7 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 	id := row.I
 
 	c.Rows.Delete(row)
+	atomic.AddInt64(&c.Count, -1)
 
 	if !persist {
 		return nil
@@ -269,6 +270,9 @@ func (c *Collection) Patch(row *Row, patch interface{}) error {
 }
 
 func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	originalValue, err := decodeJSONValue(row.Payload)
 	if err != nil {
 		return fmt.Errorf("decode row payload: %w", err)
@@ -292,10 +296,6 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-
-	// Critical section for index update
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
 
 	// Check if row still exists
 	if !c.Rows.Has(row) {

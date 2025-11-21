@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/fulldump/inceptiondb/utils"
 )
@@ -178,6 +179,7 @@ func LoadCollection(filename string, c *Collection) error {
 			if err != nil {
 				return err
 			}
+			atomic.AddInt64(&c.Count, 1)
 		case "remove":
 			params := cmd.decodedPayload.(struct{ I int })
 			// Find row by I
