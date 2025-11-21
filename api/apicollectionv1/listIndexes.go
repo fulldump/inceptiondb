@@ -39,9 +39,9 @@ func listIndexes(ctx context.Context) ([]*listIndexesItem, error) {
 	for name, index := range collection.Indexes {
 		_ = index
 		result = append(result, &listIndexesItem{
-			Name:    name,
-			Type:    index.Type,
-			Options: index.Options,
+			Name: name,
+			// Type:    index.Type,
+			// Options: index.Options,
 		})
 	}
 

@@ -8,7 +8,7 @@ import (
 
 	"github.com/fulldump/box"
 
-	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collectionv2"
 )
 
 func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -37,7 +37,7 @@ func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	var result error
 
-	traverse(requestBody, col, func(row *collection.Row) bool {
+	traverse(requestBody, col, func(row *collectionv2.Row) bool {
 		err := col.Remove(row)
 		if err != nil {
 			result = err

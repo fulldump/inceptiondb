@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -32,11 +33,13 @@ func dropIndex(ctx context.Context, w http.ResponseWriter, input *dropIndexReque
 		return err // todo: handle/wrap this properly
 	}
 
-	err = col.DropIndex(input.Name)
-	if err != nil {
+	_, exists := col.Indexes[input.Name]
+	if !exists {
 		w.WriteHeader(http.StatusBadRequest)
-		return err
+		return fmt.Errorf("index '%s' not found", input.Name)
 	}
+
+	delete(col.Indexes, input.Name)
 
 	w.WriteHeader(http.StatusNoContent)
 

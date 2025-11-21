@@ -6,11 +6,11 @@ import (
 
 	"github.com/SierraSoftworks/connor"
 
-	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collectionv2"
 	"github.com/fulldump/inceptiondb/utils"
 )
 
-func traverse(requestBody []byte, col *collection.Collection, f func(row *collection.Row) bool) error {
+func traverse(requestBody []byte, col *collectionv2.Collection, f func(row *collectionv2.Row) bool) error {
 
 	options := &struct {
 		Index  *string
@@ -32,7 +32,7 @@ func traverse(requestBody []byte, col *collection.Collection, f func(row *collec
 
 	skip := options.Skip
 	limit := options.Limit
-	iterator := func(r *collection.Row) bool {
+	iterator := func(r *collectionv2.Row) bool {
 		if limit == 0 {
 			return false
 		}
@@ -76,14 +76,15 @@ func traverse(requestBody []byte, col *collection.Collection, f func(row *collec
 	return nil
 }
 
-func traverseFullscan(col *collection.Collection, f func(row *collection.Row) bool) error {
+func traverseFullscan(col *collectionv2.Collection, f func(row *collectionv2.Row) bool) error {
 
-	for _, row := range col.Rows {
+	col.Rows.Ascend(func(row *collectionv2.Row) bool {
 		next := f(row)
 		if !next {
-			break
+			return false
 		}
-	}
+		return true
+	})
 
 	return nil
 }

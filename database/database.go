@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collectionv2"
 )
 
 const (
@@ -25,7 +25,7 @@ type Config struct {
 type Database struct {
 	Config      *Config
 	status      string
-	Collections map[string]*collection.Collection
+	Collections map[string]*collectionv2.Collection
 	exit        chan struct{}
 }
 
@@ -33,7 +33,7 @@ func NewDatabase(config *Config) *Database { // todo: return error?
 	s := &Database{
 		Config:      config,
 		status:      StatusOpening,
-		Collections: map[string]*collection.Collection{},
+		Collections: map[string]*collectionv2.Collection{},
 		exit:        make(chan struct{}),
 	}
 
@@ -44,7 +44,7 @@ func (db *Database) GetStatus() string {
 	return db.status
 }
 
-func (db *Database) CreateCollection(name string) (*collection.Collection, error) {
+func (db *Database) CreateCollection(name string) (*collectionv2.Collection, error) {
 
 	_, exists := db.Collections[name]
 	if exists {
@@ -52,7 +52,7 @@ func (db *Database) CreateCollection(name string) (*collection.Collection, error
 	}
 
 	filename := path.Join(db.Config.Dir, name)
-	col, err := collection.OpenCollection(filename)
+	col, err := collectionv2.OpenCollection(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -102,12 +102,12 @@ func (db *Database) Load() error {
 		name = strings.TrimPrefix(name, "/")
 
 		t0 := time.Now()
-		col, err := collection.OpenCollection(filename)
+		col, err := collectionv2.OpenCollection(filename)
 		if err != nil {
 			fmt.Printf("ERROR: open collection '%s': %s\n", filename, err.Error()) // todo: move to logger
 			return err
 		}
-		fmt.Println(name, len(col.Rows), time.Since(t0)) // todo: move to logger
+		fmt.Println(name, col.Rows.Len(), time.Since(t0)) // todo: move to logger
 
 		db.Collections[name] = col
 

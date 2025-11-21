@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/fulldump/inceptiondb/bootstrap"
-	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collectionv2"
 	"github.com/fulldump/inceptiondb/configuration"
 )
 
@@ -118,7 +118,7 @@ func TestPatch(c Config) {
 	stop() // Stop the server
 
 	t1 := time.Now()
-	collection.OpenCollection(path.Join(dataDir, collectionName))
+	collectionv2.OpenCollection(path.Join(dataDir, collectionName))
 	tookOpen := time.Since(t1)
 	fmt.Println("open took:", tookOpen)
 	fmt.Printf("Throughput Open: %.2f rows/sec\n", float64(c.N)/tookOpen.Seconds())

@@ -9,7 +9,7 @@ import (
 
 	"github.com/fulldump/box"
 
-	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collectionv2"
 	"github.com/fulldump/inceptiondb/service"
 )
 
@@ -59,9 +59,9 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 
 	switch input.Type {
 	case "map":
-		options = &collection.IndexMapOptions{}
+		options = &collectionv2.IndexMapOptions{}
 	case "btree":
-		options = &collection.IndexBTreeOptions{}
+		options = &collectionv2.IndexBTreeOptions{}
 	default:
 		return nil, fmt.Errorf("unexpected type '%s' instead of [map|btree]", input.Type)
 	}
