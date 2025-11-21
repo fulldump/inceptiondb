@@ -39,6 +39,9 @@ func (i *IndexMap) RemoveRow(row *Row) error {
 		return nil
 	}
 
+	i.RWmutex.Lock()
+	defer i.RWmutex.Unlock()
+
 	switch value := itemValue.(type) {
 	case string:
 		delete(entries, value)

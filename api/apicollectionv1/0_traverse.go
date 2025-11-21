@@ -28,7 +28,7 @@ func traverse(requestBody []byte, col *collection.Collection, f func(row *collec
 		return err
 	}
 
-	hasFilter := options.Filter != nil && len(options.Filter) > 0
+	hasFilter := len(options.Filter) > 0
 
 	skip := options.Skip
 	limit := options.Limit

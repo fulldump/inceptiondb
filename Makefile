@@ -5,7 +5,10 @@ FLAGS = -ldflags "\
 "
 
 test:
-	go test -cover ./...
+	go test ./...
+
+cover:
+	GOTOOLCHAIN=go1.25.0+auto go test -cover ./...
 
 run:
 	STATICS=statics/www/ go run $(FLAGS) ./cmd/inceptiondb/...
@@ -52,3 +55,7 @@ book:
 .PHONY: version
 version:
 	@echo $(VERSION)
+
+.PHONY: bench
+bench:
+	go test -bench=BenchmarkIndexMap_RemoveRow_Concurrent ./collection/...
