@@ -101,3 +101,90 @@ func (s *SyncMapContainer) Traverse(iterator func(i *Row) bool) {
 		return iterator(value.(*Row))
 	})
 }
+
+// --- Slice Implementation ---
+
+type SliceContainer struct {
+	rows []*Row
+}
+
+func NewSliceContainer() *SliceContainer {
+	return &SliceContainer{
+		rows: []*Row{},
+	}
+}
+
+func (s *SliceContainer) ReplaceOrInsert(row *Row) {
+	// Check if row already exists (by I) to update it?
+	// But SliceContainer relies on I being the index.
+	// If row.I is within bounds, we update?
+	// Or do we always append?
+	// The original collection appends and sets I.
+	// But here we might receive a row that is already in the container (e.g. patch).
+
+	if row.I >= 0 && row.I < len(s.rows) && s.rows[row.I] == row {
+		// Already exists at the correct position, nothing to do?
+		// Or maybe payload changed.
+		return
+	}
+
+	// If it's a new row or we are forcing it in:
+	// For now, let's assume append behavior for new rows.
+	// But wait, ReplaceOrInsert implies "replace if exists".
+	// How do we know if it exists? By pointer? By ID?
+	// In BTree it uses Less.
+	// In SyncMap it uses I.
+	// Here, I is the index.
+
+	// If we assume I is the index:
+	if row.I >= 0 && row.I < len(s.rows) {
+		s.rows[row.I] = row
+		return
+	}
+
+	// Append
+	row.I = len(s.rows)
+	s.rows = append(s.rows, row)
+}
+
+func (s *SliceContainer) Delete(row *Row) {
+	i := row.I
+	if i < 0 || i >= len(s.rows) {
+		return
+	}
+	if s.rows[i] != row {
+		// Row mismatch, maybe already moved or deleted?
+		return
+	}
+
+	last := len(s.rows) - 1
+	s.rows[i] = s.rows[last]
+	s.rows[i].I = i // Update I of the moved row
+	s.rows = s.rows[:last]
+}
+
+func (s *SliceContainer) Get(row *Row) (*Row, bool) {
+	if row.I < 0 || row.I >= len(s.rows) {
+		return nil, false
+	}
+	return s.rows[row.I], true
+}
+
+func (s *SliceContainer) Has(row *Row) bool {
+	if row.I < 0 || row.I >= len(s.rows) {
+		return false
+	}
+	return s.rows[row.I] == row // Check pointer equality? Or just existence?
+}
+
+func (s *SliceContainer) Len() int {
+	return len(s.rows)
+}
+
+func (s *SliceContainer) Traverse(iterator func(i *Row) bool) {
+	for _, row := range s.rows {
+		if !iterator(row) {
+			break
+		}
+	}
+}

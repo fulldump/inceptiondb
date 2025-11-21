@@ -50,7 +50,7 @@ type DropIndexCommand struct {
 func OpenCollection(filename string) (*Collection, error) {
 	c := &Collection{
 		Filename:     filename,
-		Rows:         NewSyncMapContainer(),
+		Rows:         NewSliceContainer(),
 		mutex:        &sync.RWMutex{},
 		Indexes:      map[string]Index{},
 		commandQueue: make(chan *Command, 1000), // Buffer for async writes
