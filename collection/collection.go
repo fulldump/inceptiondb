@@ -30,6 +30,9 @@ type Collection struct {
 	Defaults     map[string]any
 	Count        int64
 	encoderMutex *sync.Mutex
+	commandQueue chan *Command
+	wg           sync.WaitGroup
+	closeOnce    sync.Once
 }
 
 type collectionIndex struct {
@@ -85,6 +88,7 @@ func OpenCollection(filename string) (*Collection, error) {
 		Filename:     filename,
 		Indexes:      map[string]*collectionIndex{},
 		encoderMutex: &sync.Mutex{},
+		commandQueue: make(chan *Command, 10000),
 	}
 
 	j := jsontext.NewDecoder(f,
@@ -179,10 +183,43 @@ func OpenCollection(filename string) (*Collection, error) {
 
 	collection.buffer = bufio.NewWriterSize(collection.file, 16*1024*1024)
 
+	collection.wg.Add(1)
+	go collection.runCommandWriter()
+
 	return collection, nil
 }
 
+func (c *Collection) runCommandWriter() {
+	defer c.wg.Done()
+
+	for command := range c.commandQueue {
+		em := encPool.Get().(*EncoderMachine)
+		em.Buffer.Reset()
+
+		err := json2.MarshalEncode(em.Enc2, command)
+		if err != nil {
+			fmt.Printf("ERROR: encode command: %s\n", err.Error())
+			encPool.Put(em)
+			continue
+		}
+
+		b := em.Buffer.Bytes()
+		c.encoderMutex.Lock()
+		c.buffer.Write(b)
+		c.encoderMutex.Unlock()
+
+		encPool.Put(em)
+	}
+}
+
 func (c *Collection) addRow(payload json.RawMessage) (*Row, error) {
+	c.rowsMutex.Lock()
+	defer c.rowsMutex.Unlock()
+
+	return c.addRowLocked(payload)
+}
+
+func (c *Collection) addRowLocked(payload json.RawMessage) (*Row, error) {
 
 	row := &Row{
 		Payload: payload,
@@ -193,10 +230,8 @@ func (c *Collection) addRow(payload json.RawMessage) (*Row, error) {
 		return nil, err
 	}
 
-	c.rowsMutex.Lock()
 	row.I = len(c.Rows)
 	c.Rows = append(c.Rows, row)
-	c.rowsMutex.Unlock()
 
 	return row, nil
 }
@@ -240,12 +275,6 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 		return nil, fmt.Errorf("json encode payload: %w", err)
 	}
 
-	// Add row
-	row, err := c.addRow(payload)
-	if err != nil {
-		return nil, err
-	}
-
 	// Persist
 	command := &Command{
 		Name:      "insert",
@@ -253,6 +282,15 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
 		Payload:   payload,
+	}
+
+	c.rowsMutex.Lock()
+	defer c.rowsMutex.Unlock()
+
+	// Add row
+	row, err := c.addRowLocked(payload)
+	if err != nil {
+		return nil, err
 	}
 
 	err = c.EncodeCommand(command)
@@ -446,27 +484,23 @@ func lockBlock(m *sync.Mutex, f func() error) error {
 
 func (c *Collection) removeByRow(row *Row, persist bool) error { // todo: rename to 'removeRow'
 
-	var i int
-	err := lockBlock(c.rowsMutex, func() error {
-		i = row.I
-		if len(c.Rows) <= i {
-			return fmt.Errorf("row %d does not exist", i)
-		}
+	c.rowsMutex.Lock()
+	defer c.rowsMutex.Unlock()
 
-		err := indexRemove(c.Indexes, row)
-		if err != nil {
-			return fmt.Errorf("could not free index")
-		}
-
-		last := len(c.Rows) - 1
-		c.Rows[i] = c.Rows[last]
-		c.Rows[i].I = i
-		c.Rows = c.Rows[:last]
-		return nil
-	})
-	if err != nil {
-		return err
+	i := row.I
+	if len(c.Rows) <= i {
+		return fmt.Errorf("row %d does not exist", i)
 	}
+
+	err := indexRemove(c.Indexes, row)
+	if err != nil {
+		return fmt.Errorf("could not free index")
+	}
+
+	last := len(c.Rows) - 1
+	c.Rows[i] = c.Rows[last]
+	c.Rows[i].I = i
+	c.Rows = c.Rows[:last]
 
 	if !persist {
 		return nil
@@ -496,7 +530,12 @@ func (c *Collection) Patch(row *Row, patch interface{}) error {
 
 func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error { // todo: rename to 'patchRow'
 
-	originalValue, err := decodeJSONValue(row.Payload)
+	// 1. Calculate new state (expensive, no lock)
+	row.PatchMutex.Lock()
+	originalPayload := row.Payload
+	row.PatchMutex.Unlock()
+
+	originalValue, err := decodeJSONValue(originalPayload)
 	if err != nil {
 		return fmt.Errorf("decode row payload: %w", err)
 	}
@@ -520,13 +559,33 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
+	var diffValue interface{}
+	var hasDiff bool
+	if persist {
+		diffValue, hasDiff = createMergeDiff(originalValue, newValue)
+		if !hasDiff {
+			return nil
+		}
+	}
+
+	// 2. Update state (cheap, lock)
+	c.rowsMutex.Lock()
+	defer c.rowsMutex.Unlock()
+
+	// Validate row is still valid
+	if row.I >= len(c.Rows) || c.Rows[row.I] != row {
+		return fmt.Errorf("row modified or removed during patch")
+	}
+
 	// index update
 	err = indexRemove(c.Indexes, row)
 	if err != nil {
 		return fmt.Errorf("indexRemove: %w", err)
 	}
 
+	row.PatchMutex.Lock()
 	row.Payload = newPayload
+	row.PatchMutex.Unlock()
 
 	err = indexInsert(c.Indexes, row)
 	if err != nil {
@@ -534,11 +593,6 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 	}
 
 	if !persist {
-		return nil
-	}
-
-	diffValue, hasDiff := createMergeDiff(originalValue, newValue)
-	if !hasDiff {
 		return nil
 	}
 
@@ -786,17 +840,31 @@ func cloneJSONArray(values []interface{}) []interface{} {
 	return cloned
 }
 
+func (c *Collection) EncodeCommand(command *Command) error {
+	c.commandQueue <- command
+	return nil
+}
+
 func (c *Collection) Close() error {
-	{
+	c.closeOnce.Do(func() {
+		close(c.commandQueue)
+		c.wg.Wait()
+	})
+
+	if c.buffer != nil {
 		err := c.buffer.Flush()
 		if err != nil {
 			return err
 		}
 	}
 
-	err := c.file.Close()
-	c.file = nil
-	return err
+	if c.file != nil {
+		err := c.file.Close()
+		c.file = nil
+		return err
+	}
+
+	return nil
 }
 
 func (c *Collection) Drop() error {
@@ -848,25 +916,4 @@ func (c *Collection) dropIndex(name string, persist bool) error {
 	}
 
 	return c.EncodeCommand(command)
-}
-
-func (c *Collection) EncodeCommand(command *Command) error {
-
-	em := encPool.Get().(*EncoderMachine)
-	defer encPool.Put(em)
-	em.Buffer.Reset()
-
-	// err := em.Enc.Encode(command)
-	err := json2.MarshalEncode(em.Enc2, command)
-	// err := json2.MarshalWrite(em.Buffer, command)
-	if err != nil {
-		return err
-	}
-
-	b := em.Buffer.Bytes()
-	c.encoderMutex.Lock()
-	c.buffer.Write(b)
-	//	c.file.Write(b)
-	c.encoderMutex.Unlock()
-	return nil
 }

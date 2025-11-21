@@ -27,7 +27,7 @@ func main() {
 	}()
 
 	c := Config{
-		Test:    "patch",
+		Test:    "remove",
 		Base:    "",
 		N:       1_000_000,
 		Workers: 16,
@@ -40,6 +40,8 @@ func main() {
 		TestInsert(c)
 	case "PATCH":
 		TestPatch(c)
+	case "REMOVE":
+		TestRemove(c)
 	default:
 		log.Fatalf("Unknown test %s", c.Test)
 	}
