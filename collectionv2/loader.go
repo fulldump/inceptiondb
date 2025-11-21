@@ -1,12 +1,6 @@
 package collectionv2
 
 import (
-	"bufio"
-	"encoding/json"
-	"io"
-	"os"
-	"runtime"
-	"sync"
 	"sync/atomic"
 
 	"github.com/fulldump/inceptiondb/utils"
@@ -19,161 +13,16 @@ type loadedCommand struct {
 	err            error
 }
 
-func loadCommands(r io.Reader, concurrency int) (<-chan loadedCommand, <-chan error) {
-	out := make(chan loadedCommand, 100)
-	errChan := make(chan error, 1)
-
-	go func() {
-		defer close(out)
-		defer close(errChan)
-
-		scanner := bufio.NewScanner(r)
-		// Increase buffer size for large lines
-		const maxCapacity = 16 * 1024 * 1024
-		buf := make([]byte, maxCapacity)
-		scanner.Buffer(buf, maxCapacity)
-
-		lines := make(chan struct {
-			seq  int
-			data []byte
-		}, 100)
-
-		results := make(chan loadedCommand, 100)
-
-		// Start workers
-		var wg sync.WaitGroup
-		for i := 0; i < concurrency; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for item := range lines {
-					cmd := &Command{}
-					err := json.Unmarshal(item.data, cmd)
-					var decodedPayload interface{}
-					if err == nil {
-						switch cmd.Name {
-						case "insert":
-							// For insert, we decode into map[string]interface{}
-							// This will be used to populate Row.Decoded
-							m := map[string]interface{}{}
-							err = json.Unmarshal(cmd.Payload, &m)
-							decodedPayload = m
-						case "remove":
-							params := struct {
-								I int
-							}{}
-							err = json.Unmarshal(cmd.Payload, &params)
-							decodedPayload = params
-						case "patch":
-							params := struct {
-								I    int
-								Diff map[string]interface{}
-							}{}
-							err = json.Unmarshal(cmd.Payload, &params)
-							decodedPayload = params
-						case "index":
-							indexCommand := &CreateIndexCommand{}
-							err = json.Unmarshal(cmd.Payload, indexCommand)
-							decodedPayload = indexCommand
-						case "drop_index":
-							dropIndexCommand := &DropIndexCommand{}
-							err = json.Unmarshal(cmd.Payload, dropIndexCommand)
-							decodedPayload = dropIndexCommand
-						case "set_defaults":
-							defaults := map[string]any{}
-							err = json.Unmarshal(cmd.Payload, &defaults)
-							decodedPayload = defaults
-						}
-					}
-					results <- loadedCommand{
-						seq:            item.seq,
-						cmd:            cmd,
-						decodedPayload: decodedPayload,
-						err:            err,
-					}
-				}
-			}()
-		}
-
-		// Feeder
-		go func() {
-			seq := 0
-			for scanner.Scan() {
-				// Copy data because scanner reuses buffer
-				data := make([]byte, len(scanner.Bytes()))
-				copy(data, scanner.Bytes())
-				lines <- struct {
-					seq  int
-					data []byte
-				}{seq, data}
-				seq++
-			}
-			close(lines)
-			if err := scanner.Err(); err != nil {
-				results <- loadedCommand{seq: -1, err: err}
-			}
-			wg.Wait()
-			close(results)
-		}()
-
-		// Re-assembler
-		buffer := map[int]loadedCommand{}
-		nextSeq := 0
-
-		for res := range results {
-			if res.err != nil {
-				errChan <- res.err
-				return
-			}
-
-			if res.seq == nextSeq {
-				out <- res
-				nextSeq++
-
-				// Check buffer
-				for {
-					if cmd, ok := buffer[nextSeq]; ok {
-						delete(buffer, nextSeq)
-						out <- cmd
-						nextSeq++
-					} else {
-						break
-					}
-				}
-			} else {
-				buffer[res.seq] = res
-			}
-		}
-
-		// Check if buffer is empty?
-		// If results is closed, we are done.
-		// If buffer has items left, it means we missed a sequence number?
-		// But we assume reliable delivery from workers.
-	}()
-
-	return out, errChan
-}
-
-func LoadCollection(filename string, c *Collection) error {
-	f, err := os.Open(filename)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	concurrency := runtime.NumCPU()
-	cmds, errs := loadCommands(f, concurrency)
+func LoadCollection(c *Collection) error {
+	cmds, errs := c.storage.Load()
 
 	for cmd := range cmds {
-		switch cmd.cmd.Name {
+		switch cmd.Cmd.Name {
 		case "insert":
 			// Use decoded payload if available
 			row := &Row{
-				Payload: cmd.cmd.Payload,
-				Decoded: cmd.decodedPayload,
+				Payload: cmd.Cmd.Payload,
+				Decoded: cmd.DecodedPayload,
 			}
 			err := c.addRow(row)
 			if err != nil {
@@ -181,7 +30,7 @@ func LoadCollection(filename string, c *Collection) error {
 			}
 			atomic.AddInt64(&c.Count, 1)
 		case "remove":
-			params := cmd.decodedPayload.(struct{ I int })
+			params := cmd.DecodedPayload.(struct{ I int })
 			// Find row by I
 			dummy := &Row{I: params.I}
 			if c.Rows.Has(dummy) {
@@ -197,7 +46,7 @@ func LoadCollection(filename string, c *Collection) error {
 			}
 
 		case "patch":
-			params := cmd.decodedPayload.(struct {
+			params := cmd.DecodedPayload.(struct {
 				I    int
 				Diff map[string]interface{}
 			})
@@ -212,7 +61,7 @@ func LoadCollection(filename string, c *Collection) error {
 			}
 
 		case "index":
-			indexCommand := cmd.decodedPayload.(*CreateIndexCommand)
+			indexCommand := cmd.DecodedPayload.(*CreateIndexCommand)
 
 			var options interface{}
 			switch indexCommand.Type {
@@ -229,14 +78,14 @@ func LoadCollection(filename string, c *Collection) error {
 			}
 
 		case "drop_index":
-			dropIndexCommand := cmd.decodedPayload.(*DropIndexCommand)
+			dropIndexCommand := cmd.DecodedPayload.(*DropIndexCommand)
 			err := c.dropIndex(dropIndexCommand.Name, false)
 			if err != nil {
 				return err
 			}
 
 		case "set_defaults":
-			defaults := cmd.decodedPayload.(map[string]any)
+			defaults := cmd.DecodedPayload.(map[string]any)
 			err := c.setDefaults(defaults, false)
 			if err != nil {
 				return err

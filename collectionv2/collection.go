@@ -1,11 +1,9 @@
 package collectionv2
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,19 +12,14 @@ import (
 )
 
 type Collection struct {
-	Filename     string
-	file         *os.File
-	Rows         RowContainer
-	mutex        *sync.RWMutex
-	Indexes      map[string]Index
-	buffer       *bufio.Writer
-	Defaults     map[string]any
-	Count        int64
-	MaxID        int64 // Monotonic ID counter
-	commandQueue chan *Command
-	closed       chan struct{}
-	closeOnce    sync.Once
-	wg           sync.WaitGroup
+	Filename string
+	storage  Storage
+	Rows     RowContainer
+	mutex    *sync.RWMutex
+	Indexes  map[string]Index
+	Defaults map[string]any
+	Count    int64
+	MaxID    int64 // Monotonic ID counter
 }
 
 type Command struct {
@@ -50,62 +43,30 @@ type DropIndexCommand struct {
 }
 
 func OpenCollection(filename string) (*Collection, error) {
-	c := &Collection{
-		Filename:     filename,
-		Rows:         NewSliceContainer(),
-		mutex:        &sync.RWMutex{},
-		Indexes:      map[string]Index{},
-		commandQueue: make(chan *Command, 1000), // Buffer for async writes
-		closed:       make(chan struct{}),
+	storage, err := NewSnapshotStorage(filename)
+	// storage, err := NewJSONStorage(filename)
+	// storage, err := NewGobStorage(filename)
+
+	if err != nil {
+		return nil, fmt.Errorf("open storage: %w", err)
 	}
 
-	// Load from file (parallel deserialization)
-	err := LoadCollection(filename, c)
+	c := &Collection{
+		Filename: filename,
+		storage:  storage,
+		Rows:     NewSliceContainer(),
+		mutex:    &sync.RWMutex{},
+		Indexes:  map[string]Index{},
+	}
+
+	// Load from storage
+	err = LoadCollection(c)
 	if err != nil {
+		storage.Close()
 		return nil, fmt.Errorf("load collection: %w", err)
 	}
 
-	// Open file for append
-	c.file, err = os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-	if err != nil {
-		return nil, fmt.Errorf("open file for write: %w", err)
-	}
-
-	c.buffer = bufio.NewWriterSize(c.file, 16*1024*1024)
-
-	// Start background writer
-	c.wg.Add(1)
-	go c.writerLoop()
-
 	return c, nil
-}
-
-func (c *Collection) writerLoop() {
-	defer c.wg.Done()
-	for {
-		select {
-		case cmd, ok := <-c.commandQueue:
-			if !ok {
-				return
-			}
-			buf := <-cmd.serialized
-			c.buffer.Write(buf.Bytes())
-			bufferPool.Put(buf)
-
-		case <-c.closed:
-			// Drain queue
-			for {
-				select {
-				case cmd := <-c.commandQueue:
-					buf := <-cmd.serialized
-					c.buffer.Write(buf.Bytes())
-					bufferPool.Put(buf)
-				default:
-					return
-				}
-			}
-		}
-	}
 }
 
 var bufferPool = sync.Pool{
@@ -115,40 +76,14 @@ var bufferPool = sync.Pool{
 }
 
 func (c *Collection) Close() error {
-	c.closeOnce.Do(func() {
-		close(c.closed)
-	})
-	c.wg.Wait()
-	c.buffer.Flush()
-	return c.file.Close()
+	return c.storage.Close()
 }
 
-func (c *Collection) EncodeCommand(command *Command) error {
-	command.serialized = make(chan *bytes.Buffer, 1)
-	go func() {
-		buf := bufferPool.Get().(*bytes.Buffer)
-		buf.Reset()
-
-		enc := json.NewEncoder(buf)
-		enc.SetEscapeHTML(false)
-		enc.Encode(command)
-
-		command.serialized <- buf
-	}()
-
-	select {
-	case c.commandQueue <- command:
-		return nil
-	case <-c.closed:
-		return fmt.Errorf("collection closed")
-	}
+func (c *Collection) EncodeCommand(command *Command, id string, payload interface{}) error {
+	return c.storage.Persist(command, id, payload)
 }
 
 func (c *Collection) Insert(item map[string]any) (*Row, error) {
-	if c.file == nil {
-		return nil, fmt.Errorf("collection is closed")
-	}
-
 	auto := atomic.AddInt64(&c.Count, 1)
 
 	if c.Defaults != nil {
@@ -194,7 +129,7 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 		Payload:   payload,
 	}
 
-	err = c.EncodeCommand(command)
+	err = c.EncodeCommand(command, "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +197,7 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 		Payload:   payload,
 	}
 
-	return c.EncodeCommand(command)
+	return c.EncodeCommand(command, fmt.Sprintf("%d", id), nil)
 }
 
 func (c *Collection) Patch(row *Row, patch interface{}) error {
@@ -348,7 +283,7 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 		Payload:   payload,
 	}
 
-	return c.EncodeCommand(command)
+	return c.EncodeCommand(command, fmt.Sprintf("%d", row.I), newValue)
 }
 
 func (c *Collection) FindOne(data interface{}) {
@@ -439,7 +374,7 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 		Payload:   payload,
 	}
 
-	return c.EncodeCommand(command)
+	return c.EncodeCommand(command, "", nil)
 }
 
 func (c *Collection) DropIndex(name string) error {
@@ -475,7 +410,7 @@ func (c *Collection) dropIndex(name string, persist bool) error {
 		Payload:   payload,
 	}
 
-	return c.EncodeCommand(command)
+	return c.EncodeCommand(command, "", nil)
 }
 
 func (c *Collection) SetDefaults(defaults map[string]any) error {
@@ -502,7 +437,7 @@ func (c *Collection) setDefaults(defaults map[string]any, persist bool) error {
 		Payload:   payload,
 	}
 
-	return c.EncodeCommand(command)
+	return c.EncodeCommand(command, "", nil)
 }
 
 func indexInsert(indexes map[string]Index, row *Row) (err error) {
