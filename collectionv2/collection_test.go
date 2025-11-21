@@ -253,14 +253,18 @@ func TestPersistenceInsertAndIndex(t *testing.T) {
 		// Setup
 		c, _ := OpenCollection(filename)
 		c.Insert(map[string]interface{}{"id": "1", "name": "Pablo", "email": []string{"pablo@email.com", "pablo2018@yahoo.com"}})
-		c.Index("my-index", &IndexMapOptions{
+		err := c.Index("my-index", &IndexMapOptions{
 			Field: "email",
 		})
+		AssertNil(err)
 		c.Insert(map[string]interface{}{"id": "2", "name": "Sara", "email": []string{"sara@email.com", "sara.jimenez8@yahoo.com"}})
 		c.Close()
 
 		// Run
-		c, _ = OpenCollection(filename)
+		c, err = OpenCollection(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
 		user := struct {
 			Id    string
 			Name  string

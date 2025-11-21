@@ -8,6 +8,7 @@ import (
 type Row struct {
 	I          int // position in Rows, used as ID
 	Payload    json.RawMessage
+	Decoded    interface{}
 	PatchMutex sync.Mutex
 }
 

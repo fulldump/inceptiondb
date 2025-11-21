@@ -12,13 +12,14 @@ import (
 )
 
 type loadedCommand struct {
-	seq int
-	cmd *Command
-	err error
+	seq            int
+	cmd            *Command
+	decodedPayload interface{}
+	err            error
 }
 
-func loadCommands(r io.Reader, concurrency int) (<-chan *Command, <-chan error) {
-	out := make(chan *Command, 100)
+func loadCommands(r io.Reader, concurrency int) (<-chan loadedCommand, <-chan error) {
+	out := make(chan loadedCommand, 100)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -47,10 +48,47 @@ func loadCommands(r io.Reader, concurrency int) (<-chan *Command, <-chan error) 
 				for item := range lines {
 					cmd := &Command{}
 					err := json.Unmarshal(item.data, cmd)
+					var decodedPayload interface{}
+					if err == nil {
+						switch cmd.Name {
+						case "insert":
+							// For insert, we decode into map[string]interface{}
+							// This will be used to populate Row.Decoded
+							m := map[string]interface{}{}
+							err = json.Unmarshal(cmd.Payload, &m)
+							decodedPayload = m
+						case "remove":
+							params := struct {
+								I int
+							}{}
+							err = json.Unmarshal(cmd.Payload, &params)
+							decodedPayload = params
+						case "patch":
+							params := struct {
+								I    int
+								Diff map[string]interface{}
+							}{}
+							err = json.Unmarshal(cmd.Payload, &params)
+							decodedPayload = params
+						case "index":
+							indexCommand := &CreateIndexCommand{}
+							err = json.Unmarshal(cmd.Payload, indexCommand)
+							decodedPayload = indexCommand
+						case "drop_index":
+							dropIndexCommand := &DropIndexCommand{}
+							err = json.Unmarshal(cmd.Payload, dropIndexCommand)
+							decodedPayload = dropIndexCommand
+						case "set_defaults":
+							defaults := map[string]any{}
+							err = json.Unmarshal(cmd.Payload, &defaults)
+							decodedPayload = defaults
+						}
+					}
 					results <- loadedCommand{
-						seq: item.seq,
-						cmd: cmd,
-						err: err,
+						seq:            item.seq,
+						cmd:            cmd,
+						decodedPayload: decodedPayload,
+						err:            err,
 					}
 				}
 			}()
@@ -78,7 +116,7 @@ func loadCommands(r io.Reader, concurrency int) (<-chan *Command, <-chan error) 
 		}()
 
 		// Re-assembler
-		buffer := map[int]*Command{}
+		buffer := map[int]loadedCommand{}
 		nextSeq := 0
 
 		for res := range results {
@@ -88,7 +126,7 @@ func loadCommands(r io.Reader, concurrency int) (<-chan *Command, <-chan error) 
 			}
 
 			if res.seq == nextSeq {
-				out <- res.cmd
+				out <- res
 				nextSeq++
 
 				// Check buffer
@@ -102,7 +140,7 @@ func loadCommands(r io.Reader, concurrency int) (<-chan *Command, <-chan error) 
 					}
 				}
 			} else {
-				buffer[res.seq] = res.cmd
+				buffer[res.seq] = res
 			}
 		}
 
@@ -129,64 +167,50 @@ func LoadCollection(filename string, c *Collection) error {
 	cmds, errs := loadCommands(f, concurrency)
 
 	for cmd := range cmds {
-		switch cmd.Name {
+		switch cmd.cmd.Name {
 		case "insert":
-			_, err := c.addRow(cmd.Payload)
+			// Use decoded payload if available
+			row := &Row{
+				Payload: cmd.cmd.Payload,
+				Decoded: cmd.decodedPayload,
+			}
+			err := c.addRow(row)
 			if err != nil {
 				return err
 			}
 		case "remove":
-			params := struct {
-				I int
-			}{}
-			json.Unmarshal(cmd.Payload, &params)
+			params := cmd.decodedPayload.(struct{ I int })
 			// Find row by I
-			// Since we are loading, and I is stable, we can find it.
-			// But wait, addRow assigns new I.
-			// If we are loading, we should probably respect the I in the log?
-			// Or does the log NOT contain I for insert?
-			// Original code: addRow assigns I = len(Rows).
-			// Log for insert: Payload.
-			// Log for remove: I.
-			// If we replay, we must ensure I matches.
-			// If we use monotonic ID, we must ensure it matches what was logged?
-			// But insert log does NOT contain I.
-			// So we must deterministically generate I.
-			// If we use atomic counter starting at 0, and replay in order, we get same Is.
-			// So it should work.
-
-			// However, remove uses I.
-			// We need to find the row with that I.
-			// BTree is ordered by I. We can search.
-			// But Row.I is the key.
-			// We can construct a dummy row with that I and search.
-
 			dummy := &Row{I: params.I}
 			if c.Rows.Has(dummy) {
 				// We need the actual row to remove it properly (index removal)
 				// BTree Get?
 				actual, ok := c.Rows.Get(dummy)
 				if ok {
-					c.removeByRow(actual, false)
+					err := c.removeByRow(actual, false)
+					if err != nil {
+						return err
+					}
 				}
 			}
 
 		case "patch":
-			params := struct {
+			params := cmd.decodedPayload.(struct {
 				I    int
 				Diff map[string]interface{}
-			}{}
-			json.Unmarshal(cmd.Payload, &params)
+			})
 
 			dummy := &Row{I: params.I}
 			actual, ok := c.Rows.Get(dummy)
 			if ok {
-				c.patchByRow(actual, params.Diff, false)
+				err := c.patchByRow(actual, params.Diff, false)
+				if err != nil {
+					return err
+				}
 			}
 
 		case "index":
-			indexCommand := &CreateIndexCommand{}
-			json.Unmarshal(cmd.Payload, indexCommand)
+			indexCommand := cmd.decodedPayload.(*CreateIndexCommand)
 
 			var options interface{}
 			switch indexCommand.Type {
@@ -197,17 +221,24 @@ func LoadCollection(filename string, c *Collection) error {
 				options = &IndexBTreeOptions{}
 				utils.Remarshal(indexCommand.Options, options)
 			}
-			c.createIndex(indexCommand.Name, options, false)
+			err := c.createIndex(indexCommand.Name, options, false)
+			if err != nil {
+				return err
+			}
 
 		case "drop_index":
-			dropIndexCommand := &DropIndexCommand{}
-			json.Unmarshal(cmd.Payload, dropIndexCommand)
-			c.dropIndex(dropIndexCommand.Name, false)
+			dropIndexCommand := cmd.decodedPayload.(*DropIndexCommand)
+			err := c.dropIndex(dropIndexCommand.Name, false)
+			if err != nil {
+				return err
+			}
 
 		case "set_defaults":
-			defaults := map[string]any{}
-			json.Unmarshal(cmd.Payload, &defaults)
-			c.setDefaults(defaults, false)
+			defaults := cmd.decodedPayload.(map[string]any)
+			err := c.setDefaults(defaults, false)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

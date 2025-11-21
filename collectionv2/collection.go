@@ -52,7 +52,7 @@ type DropIndexCommand struct {
 func OpenCollection(filename string) (*Collection, error) {
 	c := &Collection{
 		Filename:     filename,
-		Rows:         NewBTreeContainer(),
+		Rows:         NewSliceContainer(),
 		mutex:        &sync.RWMutex{},
 		Indexes:      map[string]Index{},
 		commandQueue: make(chan *Command, 1000), // Buffer for async writes
@@ -177,7 +177,10 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 	}
 
 	// Add row
-	row, err := c.addRow(payload)
+	row := &Row{
+		Payload: payload,
+	}
+	err = c.addRow(row)
 	if err != nil {
 		return nil, err
 	}
@@ -199,11 +202,7 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 	return row, nil
 }
 
-func (c *Collection) addRow(payload json.RawMessage) (*Row, error) {
-	row := &Row{
-		Payload: payload,
-	}
-
+func (c *Collection) addRow(row *Row) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -213,12 +212,12 @@ func (c *Collection) addRow(payload json.RawMessage) (*Row, error) {
 
 	err := indexInsert(c.Indexes, row)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	c.Rows.ReplaceOrInsert(row)
 
-	return row, nil
+	return nil
 }
 
 func (c *Collection) Remove(r *Row) error {

@@ -33,9 +33,13 @@ func NewIndexMap(options *IndexMapOptions) *IndexMap {
 
 func (i *IndexMap) RemoveRow(row *Row) error {
 	item := map[string]interface{}{}
-	err := json.Unmarshal(row.Payload, &item)
-	if err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
+	if row.Decoded != nil {
+		item = row.Decoded.(map[string]interface{})
+	} else {
+		err := json.Unmarshal(row.Payload, &item)
+		if err != nil {
+			return fmt.Errorf("unmarshal: %w", err)
+		}
 	}
 
 	field := i.Options.Field
@@ -63,9 +67,13 @@ func (i *IndexMap) RemoveRow(row *Row) error {
 
 func (i *IndexMap) AddRow(row *Row) error {
 	item := map[string]interface{}{}
-	err := json.Unmarshal(row.Payload, &item)
-	if err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
+	if row.Decoded != nil {
+		item = row.Decoded.(map[string]interface{})
+	} else {
+		err := json.Unmarshal(row.Payload, &item)
+		if err != nil {
+			return fmt.Errorf("unmarshal: %w", err)
+		}
 	}
 
 	field := i.Options.Field
@@ -215,7 +223,11 @@ func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 func (b *IndexBtree) RemoveRow(r *Row) error {
 	values := []interface{}{}
 	data := map[string]interface{}{}
-	json.Unmarshal(r.Payload, &data)
+	if r.Decoded != nil {
+		data = r.Decoded.(map[string]interface{})
+	} else {
+		json.Unmarshal(r.Payload, &data)
+	}
 
 	for _, field := range b.Options.Fields {
 		field = strings.TrimPrefix(field, "-")
@@ -233,7 +245,11 @@ func (b *IndexBtree) RemoveRow(r *Row) error {
 func (b *IndexBtree) AddRow(r *Row) error {
 	var values []interface{}
 	data := map[string]interface{}{}
-	json.Unmarshal(r.Payload, &data)
+	if r.Decoded != nil {
+		data = r.Decoded.(map[string]interface{})
+	} else {
+		json.Unmarshal(r.Payload, &data)
+	}
 
 	for _, field := range b.Options.Fields {
 		field = strings.TrimPrefix(field, "-")

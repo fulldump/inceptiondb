@@ -34,13 +34,8 @@ func TestInsert(c Config) {
 		start, stop = bootstrap.Bootstrap(conf)
 		go start()
 	}
-	// if c.Base == "" {
-	// 		start, stop = CreateServer(&c)
-	// 		defer stop()
-	// 		go start()
-	// 	}
 
-	collection := CreateCollection(c.Base)
+	collectionName := CreateCollection(c.Base)
 
 	payload := strings.Repeat("fake ", 0)
 	_ = payload
@@ -81,7 +76,7 @@ func TestInsert(c Config) {
 			w.Close()
 		}()
 
-		req, err := http.NewRequest("POST", c.Base+"/v1/collections/"+collection+":insert", r)
+		req, err := http.NewRequest("POST", c.Base+"/v1/collections/"+collectionName+":insert", r)
 		if err != nil {
 			fmt.Println("ERROR: new request:", err.Error())
 			os.Exit(3)
@@ -104,7 +99,7 @@ func TestInsert(c Config) {
 		stop() // Stop the server
 
 		t1 := time.Now()
-		collectionv2.OpenCollection(path.Join(dataDir, collection))
+		collectionv2.OpenCollection(path.Join(dataDir, collectionName))
 		tookOpen := time.Since(t1)
 		fmt.Println("open took:", tookOpen)
 		fmt.Printf("Throughput Open: %.2f rows/sec\n", float64(c.N)/tookOpen.Seconds())
