@@ -199,6 +199,11 @@ func LoadCollection(filename string, c *Collection) error {
 			}
 			c.createIndex(indexCommand.Name, options, false)
 
+		case "drop_index":
+			dropIndexCommand := &DropIndexCommand{}
+			json.Unmarshal(cmd.Payload, dropIndexCommand)
+			c.dropIndex(dropIndexCommand.Name, false)
+
 		case "set_defaults":
 			defaults := map[string]any{}
 			json.Unmarshal(cmd.Payload, &defaults)

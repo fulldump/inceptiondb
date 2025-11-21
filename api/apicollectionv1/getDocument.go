@@ -126,6 +126,12 @@ func findRowByID(col *collectionv2.Collection, documentID string) (*collectionv2
 		return true
 	})
 
+	fmt.Println("FOUND", found)
+
+	if found == nil {
+		return nil, nil, nil
+	}
+
 	return found, &documentLookupSource{Type: "fullscan"}, nil
 }
 

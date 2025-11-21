@@ -129,6 +129,14 @@ func (i *IndexMap) Traverse(optionsData []byte, f func(row *Row) bool) {
 	f(row)
 }
 
+func (i *IndexMap) GetType() string {
+	return "map"
+}
+
+func (i *IndexMap) GetOptions() interface{} {
+	return i.Options
+}
+
 // --- IndexBTree ---
 
 type IndexBtree struct {
@@ -320,4 +328,12 @@ func (b *IndexBtree) Traverse(optionsData []byte, f func(*Row) bool) {
 			b.Btree.AscendRange(pivotFrom, pivotTo, iterator)
 		}
 	}
+}
+
+func (b *IndexBtree) GetType() string {
+	return "btree"
+}
+
+func (b *IndexBtree) GetOptions() interface{} {
+	return b.Options
 }

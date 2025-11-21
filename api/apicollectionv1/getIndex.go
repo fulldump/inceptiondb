@@ -31,8 +31,8 @@ func getIndex(ctx context.Context, input getIndexInput) (*listIndexesItem, error
 
 	_ = index
 	return &listIndexesItem{
-		Name: name,
-		// Type:    index.Type,
-		// Options: index.Options,
+		Name:    name,
+		Type:    index.GetType(),
+		Options: index.GetOptions(),
 	}, nil
 }

@@ -2,6 +2,7 @@ package collectionv2
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -41,6 +42,10 @@ type CreateIndexCommand struct {
 	Name    string      `json:"name"`
 	Type    string      `json:"type"`
 	Options interface{} `json:"options"`
+}
+
+type DropIndexCommand struct {
+	Name string `json:"name"`
 }
 
 func OpenCollection(filename string) (*Collection, error) {
@@ -97,10 +102,22 @@ func (c *Collection) writerLoop() {
 	}
 }
 
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
 func (c *Collection) writeCommand(cmd *Command) {
-	bytes, _ := json.Marshal(cmd)
-	c.buffer.Write(bytes)
-	c.buffer.WriteByte('\n')
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufferPool.Put(buf)
+
+	enc := json.NewEncoder(buf)
+	enc.SetEscapeHTML(false)
+	enc.Encode(cmd)
+
+	c.buffer.Write(buf.Bytes())
 }
 
 func (c *Collection) Close() error {
@@ -408,6 +425,42 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 
 	command := &Command{
 		Name:      "index",
+		Uuid:      uuid.New().String(),
+		Timestamp: time.Now().UnixNano(),
+		StartByte: 0,
+		Payload:   payload,
+	}
+
+	return c.EncodeCommand(command)
+}
+
+func (c *Collection) DropIndex(name string) error {
+	return c.dropIndex(name, true)
+}
+
+func (c *Collection) dropIndex(name string, persist bool) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	_, exists := c.Indexes[name]
+	if !exists {
+		return fmt.Errorf("dropIndex: index '%s' not found", name)
+	}
+	delete(c.Indexes, name)
+
+	if !persist {
+		return nil
+	}
+
+	payload, err := json.Marshal(&DropIndexCommand{
+		Name: name,
+	})
+	if err != nil {
+		return fmt.Errorf("json encode payload: %w", err)
+	}
+
+	command := &Command{
+		Name:      "drop_index",
 		Uuid:      uuid.New().String(),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
