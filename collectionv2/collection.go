@@ -43,8 +43,8 @@ type DropIndexCommand struct {
 }
 
 func OpenCollection(filename string) (*Collection, error) {
-	storage, err := NewSnapshotStorage(filename)
-	// storage, err := NewJSONStorage(filename)
+	// storage, err := NewSnapshotStorage(filename)
+	storage, err := NewJSONStorage(filename)
 	// storage, err := NewGobStorage(filename)
 
 	if err != nil {
