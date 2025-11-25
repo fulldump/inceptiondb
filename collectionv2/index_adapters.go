@@ -353,3 +353,172 @@ func (b *IndexBtree) GetType() string {
 func (b *IndexBtree) GetOptions() interface{} {
 	return b.Options
 }
+
+// --- IndexFTS ---
+
+type IndexFTS struct {
+	// Inverted index: token -> set of rows
+	Index   map[string]map[*Row]struct{}
+	RWmutex *sync.RWMutex
+	Options *IndexFTSOptions
+}
+
+type IndexFTSOptions struct {
+	Field string `json:"field"`
+}
+
+func NewIndexFTS(options *IndexFTSOptions) *IndexFTS {
+	return &IndexFTS{
+		Index:   map[string]map[*Row]struct{}{},
+		RWmutex: &sync.RWMutex{},
+		Options: options,
+	}
+}
+
+func (i *IndexFTS) tokenize(text string) []string {
+	// Simple tokenizer: lowercase and split by space
+	// TODO: Improve tokenizer (remove punctuation, stop words, etc.)
+	text = strings.ToLower(text)
+	return strings.Fields(text)
+}
+
+func (i *IndexFTS) AddRow(row *Row) error {
+	item := map[string]interface{}{}
+	if row.Decoded != nil {
+		item = row.Decoded.(map[string]interface{})
+	} else {
+		err := json.Unmarshal(row.Payload, &item)
+		if err != nil {
+			return fmt.Errorf("unmarshal: %w", err)
+		}
+	}
+
+	field := i.Options.Field
+	value, exists := item[field]
+	if !exists {
+		return nil // Field missing, skip
+	}
+
+	strValue, ok := value.(string)
+	if !ok {
+		return nil // Not a string, skip
+	}
+
+	tokens := i.tokenize(strValue)
+
+	i.RWmutex.Lock()
+	defer i.RWmutex.Unlock()
+
+	for _, token := range tokens {
+		if _, ok := i.Index[token]; !ok {
+			i.Index[token] = map[*Row]struct{}{}
+		}
+		i.Index[token][row] = struct{}{}
+	}
+
+	return nil
+}
+
+func (i *IndexFTS) RemoveRow(row *Row) error {
+	item := map[string]interface{}{}
+	if row.Decoded != nil {
+		item = row.Decoded.(map[string]interface{})
+	} else {
+		err := json.Unmarshal(row.Payload, &item)
+		if err != nil {
+			return fmt.Errorf("unmarshal: %w", err)
+		}
+	}
+
+	field := i.Options.Field
+	value, exists := item[field]
+	if !exists {
+		return nil
+	}
+
+	strValue, ok := value.(string)
+	if !ok {
+		return nil
+	}
+
+	tokens := i.tokenize(strValue)
+
+	i.RWmutex.Lock()
+	defer i.RWmutex.Unlock()
+
+	for _, token := range tokens {
+		if rows, ok := i.Index[token]; ok {
+			delete(rows, row)
+			if len(rows) == 0 {
+				delete(i.Index, token)
+			}
+		}
+	}
+
+	return nil
+}
+
+type IndexFTSTraverse struct {
+	Match string `json:"match"`
+}
+
+func (i *IndexFTS) Traverse(optionsData []byte, f func(row *Row) bool) {
+	options := &IndexFTSTraverse{}
+	json.Unmarshal(optionsData, options)
+
+	tokens := i.tokenize(options.Match)
+	if len(tokens) == 0 {
+		return
+	}
+
+	// For now, just match the first token (OR logic? AND logic?)
+	// Let's implement simple single-token match or intersection of all tokens?
+	// "Match" usually implies the query string.
+	// Let's do intersection (AND) of all tokens in the query.
+
+	i.RWmutex.RLock()
+	defer i.RWmutex.RUnlock()
+
+	// Start with the set of rows for the first token
+	firstToken := tokens[0]
+	rows, ok := i.Index[firstToken]
+	if !ok {
+		return
+	}
+
+	// Copy to a candidate set to avoid locking issues or modifying the index?
+	// Actually, we just need to iterate.
+	// But we need to intersect with other tokens.
+
+	// Optimization: start with the smallest set?
+	// For now, just iterate the first set and check others.
+
+	for row := range rows {
+		matchAll := true
+		for _, token := range tokens[1:] {
+			if otherRows, ok := i.Index[token]; !ok {
+				matchAll = false
+				break
+			} else {
+				if _, exists := otherRows[row]; !exists {
+					matchAll = false
+					break
+				}
+			}
+		}
+
+		if matchAll {
+			if !f(row) {
+				return
+			}
+		}
+	}
+}
+
+func (i *IndexFTS) GetType() string {
+	return "fts"
+}
+
+func (i *IndexFTS) GetOptions() interface{} {
+	return i.Options
+}

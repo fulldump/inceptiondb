@@ -236,3 +236,115 @@ func TestIndexBTree(t *testing.T) {
 		t.Errorf("expected Charlie, got %v", data["name"])
 	}
 }
+
+func TestIndexFTS(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "collection_index_fts_*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+
+	// 1. Create collection with index
+	c, err := OpenCollection(tmpFile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Index("by_content", &IndexFTSOptions{
+		Field: "content",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Insert documents
+	_, err = c.Insert(map[string]any{"id": 1, "content": "hello world"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Insert(map[string]any{"id": 2, "content": "hello there"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Insert(map[string]any{"id": 3, "content": "world of go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Insert(map[string]any{"id": 4, "content": "nothing here"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Check index works
+	queryIndexFTS := func(c *Collection, indexName string, match string) []*Row {
+		var results []*Row
+		index := c.Indexes[indexName]
+		if index == nil {
+			return nil
+		}
+
+		opts, _ := json.Marshal(IndexFTSTraverse{Match: match})
+		index.Traverse(opts, func(r *Row) bool {
+			results = append(results, r)
+			return true
+		})
+		return results
+	}
+
+	// Query "hello"
+	rows := queryIndexFTS(c, "by_content", "hello")
+	// Expected: 1, 2
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows for 'hello', got %d", len(rows))
+	}
+
+	// Query "world"
+	rows = queryIndexFTS(c, "by_content", "world")
+	// Expected: 1, 3
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows for 'world', got %d", len(rows))
+	}
+
+	// Query "hello world" (AND)
+	rows = queryIndexFTS(c, "by_content", "hello world")
+	// Expected: 1
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row for 'hello world', got %d", len(rows))
+	}
+	var data map[string]any
+	json.Unmarshal(rows[0].Payload, &data)
+	if data["id"].(float64) != 1 {
+		t.Errorf("expected id 1, got %v", data["id"])
+	}
+
+	// 4. Close and reopen
+	err = c.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c2, err := OpenCollection(tmpFile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c2.Close()
+
+	// 5. Check index still works
+	if _, ok := c2.Indexes["by_content"]; !ok {
+		t.Fatal("index by_content missing after reload")
+	}
+	if c2.Indexes["by_content"].GetType() != "fts" {
+		t.Fatal("index type mismatch")
+	}
+
+	rows = queryIndexFTS(c2, "by_content", "go")
+	// Expected: 3
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row for 'go' after reload, got %d", len(rows))
+	}
+	json.Unmarshal(rows[0].Payload, &data)
+	if data["id"].(float64) != 3 {
+		t.Errorf("expected id 3, got %v", data["id"])
+	}
+}

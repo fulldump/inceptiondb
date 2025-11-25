@@ -71,6 +71,9 @@ func LoadCollection(c *Collection) error {
 			case "btree":
 				options = &IndexBTreeOptions{}
 				utils.Remarshal(indexCommand.Options, options)
+			case "fts":
+				options = &IndexFTSOptions{}
+				utils.Remarshal(indexCommand.Options, options)
 			}
 			err := c.createIndex(indexCommand.Name, options, false)
 			if err != nil {

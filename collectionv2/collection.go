@@ -326,8 +326,10 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 		index = NewIndexMap(value)
 	case *IndexBTreeOptions:
 		index = NewIndexBTree(value)
+	case *IndexFTSOptions:
+		index = NewIndexFTS(value)
 	default:
-		return fmt.Errorf("unexpected options parameters, it should be [map|btree]")
+		return fmt.Errorf("unexpected options parameters, it should be [map|btree|fts]")
 	}
 
 	c.Indexes[name] = index
@@ -355,6 +357,9 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 	typeStr := "map"
 	if _, ok := options.(*IndexBTreeOptions); ok {
 		typeStr = "btree"
+	}
+	if _, ok := options.(*IndexFTSOptions); ok {
+		typeStr = "fts"
 	}
 
 	payload, err := json.Marshal(&CreateIndexCommand{
