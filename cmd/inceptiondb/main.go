@@ -42,6 +42,11 @@ func main() {
 		e.Encode(c)
 	}
 
+	if c.ApiKey == "" || c.ApiSecret == "" {
+		fmt.Println("WARNING: ApiKey and ApiSecret are not set, authentication will be disabled")
+		fmt.Println("                                           -------------------------------")
+	}
+
 	start, _ := bootstrap.Bootstrap(c)
 	start()
 }
