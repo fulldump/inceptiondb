@@ -12,4 +12,5 @@ type Configuration struct {
 	EnableCompression bool   `usage:"enable http compression (gzip)"`
 	ApiKey            string `usage:"API Key for v2 authentication"`
 	ApiSecret         string `usage:"API Secret for v2 authentication"`
+	HideUI            bool   `usage:"do not serve UI"`
 }

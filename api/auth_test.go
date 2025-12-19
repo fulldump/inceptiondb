@@ -24,7 +24,7 @@ func TestAuthentication(t *testing.T) {
 		apiKey := "my-key"
 		apiSecret := "my-secret"
 
-		b := BuildV2(s, "", "test", apiKey, apiSecret)
+		b := Build(s, "", "test", apiKey, apiSecret, false)
 		b.WithInterceptors(
 			PrettyErrorInterceptor,
 		)
@@ -32,7 +32,7 @@ func TestAuthentication(t *testing.T) {
 		api := apitest.NewWithHandler(b)
 
 		a.Alternative("Missing headers", func(a *biff.A) {
-			resp := api.Request("GET", "/v2/collections").Do()
+			resp := api.Request("GET", "/v1/collections").Do()
 			biff.AssertEqual(resp.StatusCode, http.StatusUnauthorized)
 			biff.AssertEqualJson(resp.BodyJson(), map[string]any{
 				"error": map[string]any{
@@ -43,7 +43,7 @@ func TestAuthentication(t *testing.T) {
 		})
 
 		a.Alternative("Wrong Key", func(a *biff.A) {
-			resp := api.Request("GET", "/v2/collections").
+			resp := api.Request("GET", "/v1/collections").
 				WithHeader("X-Api-Key", "wrong-key").
 				WithHeader("X-Api-Secret", apiSecret).
 				Do()
@@ -51,7 +51,7 @@ func TestAuthentication(t *testing.T) {
 		})
 
 		a.Alternative("Wrong Secret", func(a *biff.A) {
-			resp := api.Request("GET", "/v2/collections").
+			resp := api.Request("GET", "/v1/collections").
 				WithHeader("X-Api-Key", apiKey).
 				WithHeader("X-Api-Secret", "wrong-secret").
 				Do()
@@ -59,7 +59,7 @@ func TestAuthentication(t *testing.T) {
 		})
 
 		a.Alternative("Correct credentials", func(a *biff.A) {
-			resp := api.Request("GET", "/v2/collections").
+			resp := api.Request("GET", "/v1/collections").
 				WithHeader("X-Api-Key", apiKey).
 				WithHeader("X-Api-Secret", apiSecret).
 				Do()
