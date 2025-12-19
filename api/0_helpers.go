@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -48,6 +49,10 @@ func (p PrettyError) MarshalJSON() ([]byte, error) {
 			p.Description,
 		},
 	})
+}
+
+func (p PrettyError) MarshalTo(w io.Writer) error {
+	return json.NewEncoder(w).Encode(p)
 }
 
 func InterceptorUnavailable(db *database.Database) box.I {

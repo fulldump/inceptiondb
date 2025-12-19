@@ -12,6 +12,33 @@ import (
 	"github.com/fulldump/box"
 )
 
+func Authenticate(apiKey, apiSecret string) box.I {
+	return func(next box.H) box.H {
+		return func(ctx context.Context) {
+
+			if apiKey == "" && apiSecret == "" {
+				next(ctx)
+				return
+			}
+
+			r := box.GetRequest(ctx)
+			key := r.Header.Get("X-Api-Key")
+			secret := r.Header.Get("X-Api-Secret")
+
+			if key != apiKey || secret != apiSecret {
+				w := box.GetResponse(ctx)
+				w.WriteHeader(http.StatusUnauthorized)
+				PrettyError{
+					Message:     "Unauthorized",
+					Description: "Invalid X-Api-Key or X-Api-Secret",
+				}.MarshalTo(w)
+				return
+			}
+			next(ctx)
+		}
+	}
+}
+
 func RecoverFromPanic(next box.H) box.H {
 	return func(ctx context.Context) {
 		defer func() {

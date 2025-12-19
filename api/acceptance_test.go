@@ -23,7 +23,7 @@ func TestAcceptance(t *testing.T) {
 
 		s := service.NewService(db)
 
-		b := Build(s, "", "test")
+		b := BuildV2(s, "", "test", "", "")
 		b.WithInterceptors(
 			InterceptorUnavailable(db),
 			RecoverFromPanic,
@@ -33,7 +33,7 @@ func TestAcceptance(t *testing.T) {
 		api := apitest.NewWithHandler(b)
 
 		service.Acceptance(a, func(method, path string) *apitest.Request {
-			return api.Request(method, "/v1"+path)
+			return api.Request(method, "/v2"+path)
 		})
 
 	})
