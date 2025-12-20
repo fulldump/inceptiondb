@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/fulldump/goconfig"
@@ -43,8 +44,7 @@ func main() {
 	}
 
 	if c.ApiKey == "" || c.ApiSecret == "" {
-		fmt.Println("WARNING: ApiKey and ApiSecret are not set, authentication will be disabled")
-		fmt.Println("                                           -------------------------------")
+		log.Println("ApiKey and ApiSecret are not set, authentication will be disabled")
 	}
 
 	start, _ := bootstrap.Bootstrap(c)
