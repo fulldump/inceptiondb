@@ -26,12 +26,7 @@ func Authenticate(apiKey, apiSecret string) box.I {
 			secret := r.Header.Get("X-Api-Secret")
 
 			if key != apiKey || secret != apiSecret {
-				w := box.GetResponse(ctx)
-				w.WriteHeader(http.StatusUnauthorized)
-				PrettyError{
-					Message:     "Unauthorized",
-					Description: "Invalid X-Api-Key or X-Api-Secret",
-				}.MarshalTo(w)
+				box.SetError(ctx, ErrUnauthorized)
 				return
 			}
 			next(ctx)

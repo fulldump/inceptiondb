@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -12,14 +13,14 @@ import (
 	"github.com/fulldump/inceptiondb/statics"
 )
 
+var ErrUnauthorized = errors.New("unauthorized")
+
 func Build(s service.Servicer, staticsDir, version, apiKey, apiSecret string, hideUI bool) *box.B { // TODO: remove datadir
 
 	b := box.NewBox()
 
 	v1 := b.Resource("/v1")
-	v1.WithInterceptors(
-		box.SetResponseHeader("Content-Type", "application/json"),
-	)
+	v1.WithInterceptors(box.SetResponseHeader("Content-Type", "application/json"))
 
 	if apiKey != "" && apiSecret != "" {
 		v1.WithInterceptors(
