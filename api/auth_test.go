@@ -36,8 +36,8 @@ func TestAuthentication(t *testing.T) {
 			biff.AssertEqual(resp.StatusCode, http.StatusUnauthorized)
 			biff.AssertEqualJson(resp.BodyJson(), map[string]any{
 				"error": map[string]any{
-					"message":     "Unauthorized",
-					"description": "Invalid X-Api-Key or X-Api-Secret",
+					"message":     "unauthorized",
+					"description": "user is not authenticated",
 				},
 			})
 		})

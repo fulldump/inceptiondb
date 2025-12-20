@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -12,8 +11,6 @@ import (
 	"github.com/fulldump/inceptiondb/service"
 	"github.com/fulldump/inceptiondb/statics"
 )
-
-var ErrUnauthorized = errors.New("unauthorized")
 
 func Build(s service.Servicer, staticsDir, version, apiKey, apiSecret string, hideUI bool) *box.B { // TODO: remove datadir
 

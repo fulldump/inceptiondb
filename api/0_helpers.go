@@ -84,6 +84,17 @@ func PrettyErrorInterceptor(next box.H) box.H {
 		}
 		w := box.GetResponse(ctx)
 
+		if err == ErrUnauthorized {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message":     err.Error(),
+					"description": fmt.Sprintf("user is not authenticated"),
+				},
+			})
+			return
+		}
+
 		if err == box.ErrResourceNotFound {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/fulldump/box"
 )
+
+var ErrUnauthorized = errors.New("unauthorized")
 
 func Authenticate(apiKey, apiSecret string) box.I {
 	return func(next box.H) box.H {
