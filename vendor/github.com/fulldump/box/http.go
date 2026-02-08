@@ -36,7 +36,6 @@ func DefaultDeserialize(ctx context.Context, r io.Reader, v interface{}) error {
 func DefaultSerialize(ctx context.Context, w io.Writer, v interface{}) error {
 	resp := GetBoxContext(ctx).Response
 	if v == nil {
-		resp.WriteHeader(http.StatusNoContent)
 		return nil
 	}
 	resp.Header().Set("Content-Type", "application/json")

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"reflect"
 	"sync"
@@ -30,6 +31,9 @@ type Collection struct {
 	Defaults     map[string]any
 	Count        int64
 	encoderMutex *sync.Mutex
+
+	lastWritesCounter int64
+	lastFlushCounter  int64
 }
 
 type collectionIndex struct {
@@ -177,7 +181,22 @@ func OpenCollection(filename string) (*Collection, error) {
 		return nil, fmt.Errorf("open file for write: %w", err)
 	}
 
-	collection.buffer = bufio.NewWriterSize(collection.file, 16*1024*1024)
+	collection.buffer = bufio.NewWriterSize(collection.file, 512*1024)
+
+	go func() {
+		for range time.Tick(10 * time.Second) {
+			n := collection.lastWritesCounter - collection.lastFlushCounter
+			if n == 0 {
+				continue
+			}
+			collection.lastFlushCounter = collection.lastWritesCounter
+			log.Println("FLUSH:", collection.Filename, n)
+			err := collection.buffer.Flush()
+			if err != nil {
+				log.Println("ERROR: flush buffer:", err.Error())
+			}
+		}
+	}()
 
 	return collection, nil
 }
@@ -851,6 +870,8 @@ func (c *Collection) dropIndex(name string, persist bool) error {
 }
 
 func (c *Collection) EncodeCommand(command *Command) error {
+
+	atomic.AddInt64(&c.lastWritesCounter, 1)
 
 	em := encPool.Get().(*EncoderMachine)
 	defer encPool.Put(em)
