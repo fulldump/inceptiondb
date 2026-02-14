@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -50,6 +51,10 @@ func (p PrettyError) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (p PrettyError) MarshalTo(w io.Writer) error {
+	return json.NewEncoder(w).Encode(p)
+}
+
 func InterceptorUnavailable(db *database.Database) box.I {
 	return func(next box.H) box.H {
 		return func(ctx context.Context) {
@@ -78,6 +83,17 @@ func PrettyErrorInterceptor(next box.H) box.H {
 			return
 		}
 		w := box.GetResponse(ctx)
+
+		if err == ErrUnauthorized {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message":     err.Error(),
+					"description": fmt.Sprintf("user is not authenticated"),
+				},
+			})
+			return
+		}
 
 		if err == box.ErrResourceNotFound {
 			w.WriteHeader(http.StatusNotFound)

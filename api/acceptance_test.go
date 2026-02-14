@@ -23,7 +23,7 @@ func TestAcceptance(t *testing.T) {
 
 		s := service.NewService(db)
 
-		b := Build(s, "", "test")
+		b := Build(s, "", "test", "", "", false)
 		b.WithInterceptors(
 			InterceptorUnavailable(db),
 			RecoverFromPanic,

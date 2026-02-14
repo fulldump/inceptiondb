@@ -28,7 +28,8 @@ func Bootstrap(c *configuration.Configuration) (start, stop func()) {
 		Dir: c.Dir,
 	})
 
-	b := api.Build(service.NewService(db), c.Statics, VERSION)
+	// b := api.Build(service.NewService(db), c.Statics, VERSION)
+	b := api.Build(service.NewService(db), c.Statics, VERSION, c.ApiKey, c.ApiSecret, c.HideUI)
 	if c.EnableCompression {
 		b.WithInterceptors(api.Compression)
 	}

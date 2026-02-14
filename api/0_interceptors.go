@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,30 @@ import (
 
 	"github.com/fulldump/box"
 )
+
+var ErrUnauthorized = errors.New("unauthorized")
+
+func Authenticate(apiKey, apiSecret string) box.I {
+	return func(next box.H) box.H {
+		return func(ctx context.Context) {
+
+			if apiKey == "" && apiSecret == "" {
+				next(ctx)
+				return
+			}
+
+			r := box.GetRequest(ctx)
+			key := r.Header.Get("X-Api-Key")
+			secret := r.Header.Get("X-Api-Secret")
+
+			if key != apiKey || secret != apiSecret {
+				box.SetError(ctx, ErrUnauthorized)
+				return
+			}
+			next(ctx)
+		}
+	}
+}
 
 func RecoverFromPanic(next box.H) box.H {
 	return func(ctx context.Context) {

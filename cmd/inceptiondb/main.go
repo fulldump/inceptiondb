@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/fulldump/goconfig"
@@ -40,6 +41,10 @@ func main() {
 		e := json.NewEncoder(os.Stdout)
 		e.SetIndent("", "    ")
 		e.Encode(c)
+	}
+
+	if c.ApiKey == "" || c.ApiSecret == "" {
+		log.Println("ApiKey and ApiSecret are not set, authentication will be disabled")
 	}
 
 	start, _ := bootstrap.Bootstrap(c)

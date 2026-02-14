@@ -12,12 +12,18 @@ import (
 	"github.com/fulldump/inceptiondb/statics"
 )
 
-func Build(s service.Servicer, staticsDir, version string) *box.B { // TODO: remove datadir
+func Build(s service.Servicer, staticsDir, version, apiKey, apiSecret string, hideUI bool) *box.B { // TODO: remove datadir
 
 	b := box.NewBox()
 
 	v1 := b.Resource("/v1")
 	v1.WithInterceptors(box.SetResponseHeader("Content-Type", "application/json"))
+
+	if apiKey != "" && apiSecret != "" {
+		v1.WithInterceptors(
+			Authenticate(apiKey, apiSecret),
+		)
+	}
 
 	apicollectionv1.BuildV1Collection(v1, s).
 		WithInterceptors(
@@ -58,11 +64,13 @@ func Build(s service.Servicer, staticsDir, version string) *box.B { // TODO: rem
 		return spec
 	})
 
-	// Mount statics
-	b.Resource("/*").
-		WithActions(
-			box.Get(statics.ServeStatics(staticsDir)).WithName("serveStatics"),
-		)
+	if !hideUI {
+		// Mount statics
+		b.Resource("/*").
+			WithActions(
+				box.Get(statics.ServeStatics(staticsDir)).WithName("serveStatics"),
+			)
+	}
 
 	return b
 }
