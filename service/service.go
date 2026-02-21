@@ -7,13 +7,13 @@ import (
 	"io"
 	"path"
 
-	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collectionv2"
 	"github.com/fulldump/inceptiondb/database"
 )
 
 type Service struct {
 	db          *database.Database
-	collections map[string]*collection.Collection
+	collections map[string]*collectionv2.Collection
 }
 
 func NewService(db *database.Database) *Service {
@@ -25,7 +25,7 @@ func NewService(db *database.Database) *Service {
 
 var ErrorCollectionAlreadyExists = errors.New("collection already exists")
 
-func (s *Service) CreateCollection(name string) (*collection.Collection, error) {
+func (s *Service) CreateCollection(name string) (*collectionv2.Collection, error) {
 	_, exist := s.collections[name]
 	if exist {
 		return nil, ErrorCollectionAlreadyExists
@@ -33,7 +33,7 @@ func (s *Service) CreateCollection(name string) (*collection.Collection, error) 
 
 	filename := path.Join(s.db.Config.Dir, name)
 
-	collection, err := collection.OpenCollection(filename)
+	collection, err := collectionv2.OpenCollection(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (s *Service) CreateCollection(name string) (*collection.Collection, error) 
 	return collection, nil
 }
 
-func (s *Service) GetCollection(name string) (*collection.Collection, error) {
+func (s *Service) GetCollection(name string) (*collectionv2.Collection, error) {
 	collection, exist := s.collections[name]
 	if !exist {
 		return nil, ErrorCollectionNotFound
@@ -52,7 +52,7 @@ func (s *Service) GetCollection(name string) (*collection.Collection, error) {
 	return collection, nil
 }
 
-func (s *Service) ListCollections() map[string]*collection.Collection {
+func (s *Service) ListCollections() map[string]*collectionv2.Collection {
 	return s.collections
 }
 

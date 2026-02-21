@@ -17,7 +17,7 @@ import (
 	"github.com/fulldump/inceptiondb/configuration"
 )
 
-func TestPatch(c Config) {
+func TestRemove(c Config) {
 
 	createServer := c.Base == ""
 
@@ -80,15 +80,16 @@ func TestPatch(c Config) {
 		io.Copy(io.Discard, resp.Body)
 	}
 
-	patchURL := fmt.Sprintf("%s/v1/collections/%s:patch", c.Base, collectionName)
+	removeURL := fmt.Sprintf("%s/v1/collections/%s:remove", c.Base, collectionName)
 
 	t0 := time.Now()
 	worker := int64(-1)
 	Parallel(c.Workers, func() {
 		w := atomic.AddInt64(&worker, 1)
 
-		body := fmt.Sprintf(`{"filter":{"worker":%d},"patch":{"value":%d},"limit":-1}`, w, 1000+worker)
-		req, err := http.NewRequest(http.MethodPost, patchURL, strings.NewReader(body))
+		// Remove all documents belonging to this worker
+		body := fmt.Sprintf(`{"filter":{"worker":%d},"limit":-1}`, w)
+		req, err := http.NewRequest(http.MethodPost, removeURL, strings.NewReader(body))
 		if err != nil {
 			fmt.Println("ERROR: new request:", err.Error())
 		}
@@ -107,7 +108,7 @@ func TestPatch(c Config) {
 	})
 
 	took := time.Since(t0)
-	fmt.Println("sent:", c.N)
+	fmt.Println("removed:", c.N)
 	fmt.Println("took:", took)
 	fmt.Printf("Throughput: %.2f rows/sec\n", float64(c.N)/took.Seconds())
 

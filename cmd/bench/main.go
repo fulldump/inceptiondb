@@ -9,7 +9,7 @@ import (
 )
 
 type Config struct {
-	Test    string `usage:"name of the test: ALL | INSERT | PATCH"`
+	Test    string `usage:"name of the test: ALL | INSERT | PATCH | REMOVE"`
 	Base    string `usage:"base URL"`
 	N       int64  `usage:"number of documents"`
 	Workers int    `usage:"number of workers"`
@@ -40,6 +40,8 @@ func main() {
 		TestInsert(c)
 	case "PATCH":
 		TestPatch(c)
+	case "REMOVE":
+		TestRemove(c)
 	default:
 		log.Fatalf("Unknown test %s", c.Test)
 	}

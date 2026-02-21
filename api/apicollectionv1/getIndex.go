@@ -29,9 +29,10 @@ func getIndex(ctx context.Context, input getIndexInput) (*listIndexesItem, error
 		return nil, fmt.Errorf("index '%s' not found in collection '%s'", input.Name, collectionName)
 	}
 
+	_ = index
 	return &listIndexesItem{
 		Name:    name,
-		Type:    index.Type,
-		Options: index.Options,
+		Type:    index.GetType(),
+		Options: index.GetOptions(),
 	}, nil
 }

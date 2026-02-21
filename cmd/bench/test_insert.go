@@ -6,20 +6,36 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/fulldump/inceptiondb/bootstrap"
+	"github.com/fulldump/inceptiondb/collectionv2"
+	"github.com/fulldump/inceptiondb/configuration"
 )
 
 func TestInsert(c Config) {
 
-	if c.Base == "" {
-		start, stop := CreateServer(&c)
-		defer stop()
+	createServer := c.Base == ""
+
+	var start, stop func()
+	var dataDir string
+	if createServer {
+		dir, cleanup := TempDir()
+		dataDir = dir
+		cleanups = append(cleanups, cleanup)
+
+		conf := configuration.Default()
+		conf.Dir = dir
+		c.Base = "http://" + conf.HttpAddr
+
+		start, stop = bootstrap.Bootstrap(conf)
 		go start()
 	}
 
-	collection := CreateCollection(c.Base)
+	collectionName := CreateCollection(c.Base)
 
 	payload := strings.Repeat("fake ", 0)
 	_ = payload
@@ -60,7 +76,7 @@ func TestInsert(c Config) {
 			w.Close()
 		}()
 
-		req, err := http.NewRequest("POST", c.Base+"/v1/collections/"+collection+":insert", r)
+		req, err := http.NewRequest("POST", c.Base+"/v1/collections/"+collectionName+":insert", r)
 		if err != nil {
 			fmt.Println("ERROR: new request:", err.Error())
 			os.Exit(3)
@@ -78,5 +94,15 @@ func TestInsert(c Config) {
 	fmt.Println("sent:", c.N)
 	fmt.Println("took:", took)
 	fmt.Printf("Throughput: %.2f rows/sec\n", float64(c.N)/took.Seconds())
+
+	if createServer {
+		stop() // Stop the server
+
+		t1 := time.Now()
+		collectionv2.OpenCollection(path.Join(dataDir, collectionName))
+		tookOpen := time.Since(t1)
+		fmt.Println("open took:", tookOpen)
+		fmt.Printf("Throughput Open: %.2f rows/sec\n", float64(c.N)/tookOpen.Seconds())
+	}
 
 }

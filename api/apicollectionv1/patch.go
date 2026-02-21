@@ -9,7 +9,7 @@ import (
 	"github.com/SierraSoftworks/connor"
 	"github.com/fulldump/box"
 
-	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collectionv2"
 )
 
 func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -34,7 +34,7 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	e := json.NewEncoder(w)
 
-	traverse(requestBody, col, func(row *collection.Row) bool {
+	traverse(requestBody, col, func(row *collectionv2.Row) bool {
 
 		row.PatchMutex.Lock()
 		defer row.PatchMutex.Unlock()

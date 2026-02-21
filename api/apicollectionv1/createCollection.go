@@ -40,7 +40,7 @@ func createCollection(ctx context.Context, w http.ResponseWriter, input *createC
 	w.WriteHeader(http.StatusCreated)
 	return &CollectionResponse{
 		Name:     input.Name,
-		Total:    len(collection.Rows),
+		Total:    collection.Rows.Len(),
 		Defaults: collection.Defaults,
 	}, nil
 }
