@@ -1,11 +1,14 @@
 package collectionv4
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
 	"testing"
 	"time"
+
+	"github.com/tidwall/gjson"
 )
 
 func TestAll(t *testing.T) {
@@ -136,5 +139,68 @@ func TestRecoveryPerformance(t *testing.T) {
 		}
 
 		store.Close()
+	}
+}
+
+func TestJSONOperations(t *testing.T) {
+	filename := path.Join(t.TempDir(), "json_data.wal")
+	store, _ := NewStore(filename)
+	col := NewCollection("users", store)
+
+	stopFlusher := StartBackgroundFlusher(store, 500*time.Millisecond)
+	defer close(stopFlusher)
+	defer store.Close()
+
+	id1, _ := col.Insert([]byte(`{"name": "Alice", "age": 30}`))
+	id2, _ := col.Insert([]byte(`{"name": "Bob", "age": 40}`))
+
+	// Test Get
+	res, err := col.Get(id1, "name")
+	if err != nil || res.String() != "Alice" {
+		t.Fatalf("Expected Alice, got %v (err: %v)", res.String(), err)
+	}
+
+	// Test UpdateField
+	err = col.UpdateField(id1, "age", 31)
+	if err != nil {
+		t.Fatalf("Failed to update field: %v", err)
+	}
+	res, _ = col.Get(id1, "age")
+	if res.Int() != 31 {
+		t.Fatalf("Expected 31, got %v", res.Int())
+	}
+
+	// Test Where
+	count := 0
+	rows := col.Scan().Where("name", "Bob")
+	for rows.Next() {
+		count++
+		id, _ := rows.Read()
+		if id != id2 {
+			t.Fatalf("Expected id2, got %v", id)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("Expected 1 match, got %d", count)
+	}
+}
+
+func BenchmarkJSONRead_GJSON(b *testing.B) {
+	data := []byte(`{"name": "Alice", "age": 30, "active": true, "address": {"city": "Madrid"}}`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = gjson.GetBytes(data, "address.city").String()
+	}
+}
+
+func BenchmarkJSONRead_Unmarshal(b *testing.B) {
+	data := []byte(`{"name": "Alice", "age": 30, "active": true, "address": {"city": "Madrid"}}`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var m map[string]interface{}
+		_ = json.Unmarshal(data, &m)
+		if addr, ok := m["address"].(map[string]interface{}); ok {
+			_ = addr["city"].(string)
+		}
 	}
 }

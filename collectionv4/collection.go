@@ -3,6 +3,9 @@ package collectionv4
 import (
 	"fmt"
 	"sync"
+
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 // Record es la celda de nuestro FlatSlice
@@ -132,6 +135,45 @@ func (c *Collection) Recover() error {
 
 	fmt.Printf("Recuperación exitosa: %d registros activos, %d huecos en FreeList\n",
 		int64(len(c.records))-int64(len(c.freeList)), len(c.freeList))
+
+	return nil
+}
+
+// Get extrae un valor del JSON de un registro específico usando su ID y un "path" sin alocar memoria.
+func (c *Collection) Get(id int64, path string) (gjson.Result, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if id < 0 || id >= int64(len(c.records)) || !c.records[id].Active {
+		return gjson.Result{}, fmt.Errorf("record not found")
+	}
+
+	return gjson.GetBytes(c.records[id].Data, path), nil
+}
+
+// UpdateField modifica un campo específico de un registro usando sjson y escribe el cambio en el WAL.
+// Utiliza OpUpdate para la persistencia.
+func (c *Collection) UpdateField(id int64, path string, value interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if id < 0 || id >= int64(len(c.records)) || !c.records[id].Active {
+		return fmt.Errorf("record not found")
+	}
+
+	// sjson.SetBytes genera un nuevo slice de bytes con la modificación aplicada
+	newData, err := sjson.SetBytesOptions(c.records[id].Data, path, value, &sjson.Options{Optimistic: true})
+	if err != nil {
+		return fmt.Errorf("error updating json field: %v", err)
+	}
+
+	// Persistir la actualización en disco usando el WAL
+	if err := c.store.Append(OpUpdate, id, newData); err != nil {
+		return fmt.Errorf("journal write failed on update: %v", err)
+	}
+
+	// Confirmar en memoria
+	c.records[id].Data = newData
 
 	return nil
 }
