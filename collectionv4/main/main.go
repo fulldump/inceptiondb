@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	store, _ := collectionv4.NewStore("data.wal")
+	store, _ := collectionv4.NewJournal("data.wal")
 	col := collectionv4.NewCollection("users", store)
 
 	stopFlusher := StartBackgroundFlusher(store, 500*time.Millisecond)
@@ -19,17 +19,16 @@ func main() {
 	// col.Delete(0) // Borra a Alice
 
 	// Iterar (solo debería imprimir a Bob)
-	rows := col.Scan()
-	for rows.Next() {
-		id, data := rows.Read()
+	col.Traverse(func(id int64, data []byte) bool {
 		fmt.Printf("ID: %d, Data: %s\n", id, string(data))
-	}
+		return true
+	})
 
 	close(stopFlusher) // Detiene la goroutine
 	store.Close()      // Vacía el último buffer y cierra el archivo
 }
 
-func StartBackgroundFlusher(store *collectionv4.Store, interval time.Duration) chan struct{} {
+func StartBackgroundFlusher(store *collectionv4.Journal, interval time.Duration) chan struct{} {
 	stopChan := make(chan struct{})
 
 	go func() {

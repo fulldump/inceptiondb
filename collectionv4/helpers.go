@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func StartBackgroundFlusher(store *Store, interval time.Duration) chan struct{} {
+func StartBackgroundFlusher(store *Journal, interval time.Duration) chan struct{} {
 	stopChan := make(chan struct{})
 
 	go func() {
