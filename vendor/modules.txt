@@ -3,6 +3,9 @@
 github.com/SierraSoftworks/connor
 github.com/SierraSoftworks/connor/internal/fields
 github.com/SierraSoftworks/connor/internal/numbers
+# github.com/buger/jsonparser v1.1.1
+## explicit; go 1.13
+github.com/buger/jsonparser
 # github.com/fulldump/apitest v1.3.0
 ## explicit; go 1.17
 github.com/fulldump/apitest
@@ -30,3 +33,7 @@ github.com/google/btree
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
+# github.com/valyala/fastjson v1.6.10
+## explicit; go 1.24
+github.com/valyala/fastjson
+github.com/valyala/fastjson/fastfloat
