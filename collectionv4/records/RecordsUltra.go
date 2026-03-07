@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 )
 
-const recordsUltraShardBits = 8
-const recordsUltraNumShards = 1 << recordsUltraShardBits // 256
+const recordsUltraShardBits = 9
+const recordsUltraNumShards = 1 << recordsUltraShardBits // 512
 const recordsUltraShardMask = recordsUltraNumShards - 1
 
 const recordsUltraSegmentShift = 12
@@ -104,11 +104,10 @@ func NewRecordsUltra[T any]() *RecordsUltra[T] {
 		r.shards[i] = newRecordsUltraShard[T](i)
 	}
 
-	var pickerCounter uint32
+	var pickerCounter atomic.Uint32
 	r.picker.New = func() any {
-		idx := atomic.AddUint32(&pickerCounter, 1) % recordsUltraNumShards
-		v := int(idx)
-		return &v
+		idx := int(pickerCounter.Add(1)-1) & recordsUltraShardMask
+		return &idx
 	}
 
 	return r

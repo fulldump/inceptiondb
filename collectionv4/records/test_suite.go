@@ -224,3 +224,51 @@ func RunConcurrentMixedOperationsBenchmark(b *testing.B, workers int, newRecords
 		1/secPerMillionOps,
 	)
 }
+
+func RunConcurrentInsertBenchmark(b *testing.B, workers int, newRecords func() Records[int]) {
+	b.Helper()
+
+	r := newRecords()
+
+	var nextVal atomic.Int64
+	nextVal.Store(0)
+
+	var insertOps atomic.Int64
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	start := time.Now()
+
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+
+			for i := worker; i < b.N; i += workers {
+				insertOps.Add(1)
+				val := int(nextVal.Add(1))
+				r.Insert(val)
+			}
+		}(w)
+	}
+
+	wg.Wait()
+
+	elapsed := time.Since(start)
+	totalOps := insertOps.Load()
+	opsPerSec := float64(totalOps) / elapsed.Seconds()
+	secPerMillionOps := elapsed.Seconds() / (float64(totalOps) / 1_000_000)
+	b.ReportMetric(float64(insertOps.Load()), "insert_total")
+	b.ReportMetric(float64(elapsed.Milliseconds()), "elapsed_ms")
+	b.ReportMetric(opsPerSec, "ops_per_sec")
+	b.ReportMetric(1/secPerMillionOps, "M/s")
+	b.Logf(
+		"workers=%d elapsed=%s insert=%d ops/s=%.0f M/s=%.6f",
+		workers,
+		elapsed,
+		insertOps.Load(),
+		opsPerSec,
+		1/secPerMillionOps,
+	)
+}
