@@ -93,6 +93,24 @@ func (s *recordsUltraShard[T]) delete(lid int64) {
 	}
 }
 
+func (s *recordsUltraShard[T]) set(lid int64, val T) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	segIdx := lid >> recordsUltraSegmentShift
+	for segIdx >= int64(len(s.segments)) {
+		s.segments = append(s.segments, make([]ultraSlot[T], recordsUltraSegmentSize))
+	}
+
+	slot := &s.segments[segIdx][lid&recordsUltraSegmentMask]
+	slot.val = val
+	slot.active = true
+
+	if lid >= s.localID {
+		s.localID = lid + 1
+	}
+}
+
 type RecordsUltra[T any] struct {
 	shards [recordsUltraNumShards]*recordsUltraShard[T]
 	picker sync.Pool
@@ -138,4 +156,13 @@ func (r *RecordsUltra[T]) Delete(id int64) {
 	shardIndex := int(id & recordsUltraShardMask)
 	localID := id >> recordsUltraShardBits
 	r.shards[shardIndex].delete(localID)
+}
+
+func (r *RecordsUltra[T]) Set(id int64, val T) {
+	if id <= 0 {
+		return
+	}
+	shardIndex := int(id & recordsUltraShardMask)
+	localID := id >> recordsUltraShardBits
+	r.shards[shardIndex].set(localID, val)
 }

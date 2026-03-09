@@ -272,3 +272,48 @@ func RunConcurrentInsertBenchmark(b *testing.B, workers int, newRecords func() R
 		1/secPerMillionOps,
 	)
 }
+
+func RunConcurrentSetBenchmark(b *testing.B, workers int, newRecords func() Records[int]) {
+	b.Helper()
+
+	r := newRecords()
+
+	var setOps atomic.Int64
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	start := time.Now()
+
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+
+			for i := worker; i < b.N; i += workers {
+				setOps.Add(1)
+				// Using index + 1 ensures we avoid id=0, which is invalid for some implementations
+				r.Set(int64(i+1), i)
+			}
+		}(w)
+	}
+
+	wg.Wait()
+
+	elapsed := time.Since(start)
+	totalOps := setOps.Load()
+	opsPerSec := float64(totalOps) / elapsed.Seconds()
+	secPerMillionOps := elapsed.Seconds() / (float64(totalOps) / 1_000_000)
+	b.ReportMetric(float64(setOps.Load()), "set_total")
+	b.ReportMetric(float64(elapsed.Milliseconds()), "elapsed_ms")
+	b.ReportMetric(opsPerSec, "ops_per_sec")
+	b.ReportMetric(1/secPerMillionOps, "M/s")
+	b.Logf(
+		"workers=%d elapsed=%s set=%d ops/s=%.0f M/s=%.6f",
+		workers,
+		elapsed,
+		setOps.Load(),
+		opsPerSec,
+		1/secPerMillionOps,
+	)
+}

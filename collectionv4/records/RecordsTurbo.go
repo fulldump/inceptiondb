@@ -108,3 +108,20 @@ func (r *RecordsTurbo[T]) ensureSegment(segmentIndex int) *recordsTurboSegment[T
 	r.table.Store(&recordsTurboTable[T]{segments: newSegments})
 	return newSegments[segmentIndex]
 }
+
+func (r *RecordsTurbo[T]) Set(id int64, val T) {
+	if id <= 0 {
+		return
+	}
+	segmentIndex := int(id >> recordsTurboSegmentShift)
+	segment := r.ensureSegment(segmentIndex)
+	offset := int(id & recordsTurboSegmentMask)
+	segment.slots[offset].Store(&recordsTurboValue[T]{val: val})
+
+	for {
+		curr := r.nextID.Load()
+		if id <= curr || r.nextID.CompareAndSwap(curr, id) {
+			break
+		}
+	}
+}

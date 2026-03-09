@@ -65,3 +65,18 @@ func (r *RecordsFast[T]) Get(id int64) (val T) {
 	}
 	return
 }
+
+func (r *RecordsFast[T]) Set(id int64, val T) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	for int64(len(r.recods)) <= id {
+		var zero T
+		r.recods = append(r.recods, zero)
+	}
+
+	r.recods[id] = val
+	if id >= r.recordsLength {
+		r.recordsLength = id + 1
+	}
+}

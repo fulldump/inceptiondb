@@ -66,7 +66,7 @@ func (s *recordsHyperShard[T]) insert(val T) int64 {
 
 func (s *recordsHyperShard[T]) get(lid int64) T {
 	s.mutex.Lock()
-	
+
 	segIdx := lid >> recordsHyperSegmentShift
 	if segIdx < int64(len(s.segments)) {
 		slot := &s.segments[segIdx][lid&recordsHyperSegmentMask]
@@ -76,7 +76,7 @@ func (s *recordsHyperShard[T]) get(lid int64) T {
 			return val
 		}
 	}
-	
+
 	s.mutex.Unlock()
 	var zero T
 	return zero
@@ -95,7 +95,26 @@ func (s *recordsHyperShard[T]) delete(lid int64) {
 			s.freeList = append(s.freeList, lid)
 		}
 	}
-	
+
+	s.mutex.Unlock()
+}
+
+func (s *recordsHyperShard[T]) set(lid int64, val T) {
+	s.mutex.Lock()
+
+	segIdx := lid >> recordsHyperSegmentShift
+	for segIdx >= int64(len(s.segments)) {
+		s.segments = append(s.segments, make([]hyperSlot[T], recordsHyperSegmentSize))
+	}
+
+	slot := &s.segments[segIdx][lid&recordsHyperSegmentMask]
+	slot.val = val
+	slot.active = true
+
+	if lid >= s.localID {
+		s.localID = lid + 1
+	}
+
 	s.mutex.Unlock()
 }
 
@@ -144,4 +163,13 @@ func (r *RecordsHyper[T]) Delete(id int64) {
 	shardIndex := int(id & recordsHyperShardMask)
 	localID := id >> recordsHyperShardBits
 	r.shards[shardIndex].delete(localID)
+}
+
+func (r *RecordsHyper[T]) Set(id int64, val T) {
+	if id <= 0 {
+		return
+	}
+	shardIndex := int(id & recordsHyperShardMask)
+	localID := id >> recordsHyperShardBits
+	r.shards[shardIndex].set(localID, val)
 }

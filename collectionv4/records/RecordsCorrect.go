@@ -38,3 +38,12 @@ func (r *RecordsCorrect[T]) Get(id int64) (val T) {
 	defer r.mutex.RUnlock()
 	return r.vals[id]
 }
+
+func (r *RecordsCorrect[T]) Set(id int64, val T) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.vals[id] = val
+	if id > r.lastid {
+		r.lastid = id
+	}
+}

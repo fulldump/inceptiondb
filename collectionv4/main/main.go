@@ -14,9 +14,9 @@ func main() {
 	stopFlusher := StartBackgroundFlusher(store, 500*time.Millisecond)
 
 	// Insertar
-	// col.Insert([]byte(`{"name": "Alice"}`))
-	// col.Insert([]byte(`{"name": "Bob"}`))
-	// col.Delete(0) // Borra a Alice
+	col.Insert([]byte(`{"name": "Alice"}`))
+	col.Insert([]byte(`{"name": "Bob"}`))
+	col.Delete(0) // Borra a Alice
 
 	// Iterar (solo debería imprimir a Bob)
 	rows := col.Scan()

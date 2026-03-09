@@ -9,32 +9,32 @@ type Rows struct {
 }
 
 func (c *Collection) Scan() *Rows {
-	// Ojo: En un entorno altamente concurrente, deberías tomar un Read Lock
-	// o usar un snapshot para evitar que los datos cambien mientras iteras.
 	return &Rows{
 		col:   c,
-		index: -1,
+		index: 0, // Starts at 0 (IDs start at 1 if Ultra is used, or from DB)
 	}
 }
 
 // Next avanza al siguiente registro válido (saltando huecos).
 // Devuelve false cuando no hay más registros.
 func (r *Rows) Next() bool {
-	r.col.mu.RLock()
-	defer r.col.mu.RUnlock()
+	maxID := r.col.maxID.Load()
 
 	for {
-		r.index++
-		if r.index >= int64(len(r.col.records)) {
+		if r.index > maxID {
 			return false // Fin de la tabla
 		}
 
-		if r.col.records[r.index].Active {
-			r.currentID = r.index
-			r.currentData = r.col.records[r.index].Data
+		rec := r.col.records.Get(r.index)
+		id := r.index
+		r.index++ // Avanzamos el índice para la próxima iteración
+
+		if rec.Active {
+			r.currentID = id
+			r.currentData = rec.Data
 			return true
 		}
-		// Si no está activo (es un hueco), el bucle continúa
+		// Si no está activo (es un hueco o no existe), el bucle continúa
 	}
 }
 
