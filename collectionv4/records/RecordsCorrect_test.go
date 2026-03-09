@@ -20,3 +20,13 @@ func Benchmark_RecordsCorrect_Stress(b *testing.B) {
 		})
 	}
 }
+
+func Benchmark_RecordsCorrect_Insert(b *testing.B) {
+	for _, workers := range []int{16, 32, 64, 128} {
+		b.Run(fmt.Sprintf("workers_%d", workers), func(b *testing.B) {
+			RunConcurrentInsertBenchmark(b, workers, func() Records[int] {
+				return NewRecordsCorrect[int]()
+			})
+		})
+	}
+}
