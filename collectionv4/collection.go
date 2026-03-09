@@ -16,12 +16,12 @@ type Record struct {
 
 type Collection struct {
 	name    string
-	store   *Store
+	store   Store
 	records records.Records[Record]
 	maxID   atomic.Int64
 }
 
-func NewCollection(name string, store *Store) *Collection {
+func NewCollection(name string, store Store) *Collection {
 	return &Collection{
 		name:    name,
 		store:   store,

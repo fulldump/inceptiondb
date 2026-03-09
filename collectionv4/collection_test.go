@@ -13,7 +13,7 @@ func TestAll(t *testing.T) {
 	filename := path.Join(t.TempDir(), "data.wal")
 
 	{
-		store, _ := NewStore(filename)
+		store, _ := NewStoreDisk(filename)
 		col := NewCollection("users", store)
 
 		stopFlusher := StartBackgroundFlusher(store, 500*time.Millisecond)
@@ -35,7 +35,7 @@ func TestAll(t *testing.T) {
 	}
 
 	{
-		store, _ := NewStore(filename)
+		store, _ := NewStoreDisk(filename)
 		col := NewCollection("users", store)
 
 		// ¡Recuperamos el estado desde disco!
@@ -68,7 +68,7 @@ func TestRecoveryPerformance(t *testing.T) {
 	// FASE 1: Inserción Masiva
 	// ==========================================
 	{
-		store, err := NewStore(filename)
+		store, err := NewStoreDisk(filename)
 		if err != nil {
 			t.Fatalf("Error creando store: %v", err)
 		}
@@ -104,7 +104,7 @@ func TestRecoveryPerformance(t *testing.T) {
 	// FASE 2: Lectura y Reconstrucción (Recover)
 	// ==========================================
 	{
-		store, err := NewStore(filename)
+		store, err := NewStoreDisk(filename)
 		if err != nil {
 			t.Fatalf("Error abriendo store para recuperación: %v", err)
 		}

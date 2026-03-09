@@ -2,21 +2,37 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fulldump/inceptiondb/collectionv4"
 )
 
 func main() {
-	store, _ := collectionv4.NewStore("data.wal")
+	store, _ := collectionv4.NewStoreDisk("data.wal")
 	col := collectionv4.NewCollection("users", store)
+
+	err := col.Recover()
+	if err != nil {
+		fmt.Printf("Error haciendo recover collection: %v\n", err)
+	}
 
 	stopFlusher := StartBackgroundFlusher(store, 500*time.Millisecond)
 
 	// Insertar
 	col.Insert([]byte(`{"name": "Alice"}`))
 	col.Insert([]byte(`{"name": "Bob"}`))
-	col.Delete(0) // Borra a Alice
+
+	it := col.Scan()
+	for it.Next() {
+		id, data := it.Read()
+		if strings.Contains(string(data), `"Alice"`) {
+			err := col.Delete(id)
+			if err != nil {
+				fmt.Printf("Error haciendo delete collection: %v\n", err)
+			}
+		}
+	}
 
 	// Iterar (solo debería imprimir a Bob)
 	rows := col.Scan()
@@ -29,7 +45,7 @@ func main() {
 	store.Close()      // Vacía el último buffer y cierra el archivo
 }
 
-func StartBackgroundFlusher(store *collectionv4.Store, interval time.Duration) chan struct{} {
+func StartBackgroundFlusher(store collectionv4.Store, interval time.Duration) chan struct{} {
 	stopChan := make(chan struct{})
 
 	go func() {

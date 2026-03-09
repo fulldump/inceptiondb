@@ -19,18 +19,26 @@ const (
 
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
-type Store struct {
+type Store interface {
+	Append(op uint8, id int64, data []byte) error
+	Flush() error
+	Sync() error
+	Close() error
+	Replay(fn func(op uint8, id int64, data []byte) error) error
+}
+
+type StoreDisk struct {
 	file   *os.File
 	writer *bufio.Writer
 	mu     sync.Mutex
 }
 
-func NewStore(path string) (*Store, error) {
+func NewStoreDisk(path string) (*StoreDisk, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, err
 	}
-	return &Store{
+	return &StoreDisk{
 		file:   f,
 		writer: bufio.NewWriterSize(f, 1024*1024), // Buffer de 1MB para no castigar el disco
 	}, nil
@@ -38,7 +46,7 @@ func NewStore(path string) (*Store, error) {
 
 // Append escribe la operación en el WAL.
 // Header (17 bytes) = OpCode(1) + ID(8) + Length(4) + CRC32(4)
-func (s *Store) Append(op uint8, id int64, data []byte) error {
+func (s *StoreDisk) Append(op uint8, id int64, data []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -67,14 +75,14 @@ func (s *Store) Append(op uint8, id int64, data []byte) error {
 }
 
 // Flush vacía el buffer de Go hacia el Sistema Operativo
-func (s *Store) Flush() error {
+func (s *StoreDisk) Flush() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.writer.Flush()
 }
 
 // Sync asegura que los datos pasen del Sistema Operativo al disco físico (fsync)
-func (s *Store) Sync() error {
+func (s *StoreDisk) Sync() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -87,7 +95,7 @@ func (s *Store) Sync() error {
 }
 
 // Close cierra el Journal de forma segura
-func (s *Store) Close() error {
+func (s *StoreDisk) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -103,7 +111,7 @@ func (s *Store) Close() error {
 
 // Replay lee el WAL de principio a fin y ejecuta la función fn por cada registro.
 // Si encuentra un registro corrupto, se detiene y avisa.
-func (s *Store) Replay(fn func(op uint8, id int64, data []byte) error) error {
+func (s *StoreDisk) Replay(fn func(op uint8, id int64, data []byte) error) error {
 	// Abrimos el archivo en modo solo lectura para la recuperación
 	f, err := os.Open(s.file.Name())
 	if err != nil {

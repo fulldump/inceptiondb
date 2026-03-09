@@ -28,15 +28,19 @@ func (r *RecordsFast[T]) Insert(val T) (id int64) {
 
 	// Can reuse id
 	if r.freeListLength > 0 {
-		id = r.freeList[r.freeListLength]
 		r.freeListLength--
+		id = r.freeList[r.freeListLength]
 		r.recods[id] = val
 		return id
 	}
 
 	// New id
 	id = r.recordsLength
-	r.recods = append(r.recods, val)
+	if id < int64(len(r.recods)) {
+		r.recods[id] = val
+	} else {
+		r.recods = append(r.recods, val)
+	}
 	r.recordsLength++
 	return id
 }
@@ -53,7 +57,11 @@ func (r *RecordsFast[T]) Delete(id int64) {
 	var zero T
 	r.recods[id] = zero
 
-	r.freeList = append(r.freeList, id)
+	if r.freeListLength < int64(len(r.freeList)) {
+		r.freeList[r.freeListLength] = id
+	} else {
+		r.freeList = append(r.freeList, id)
+	}
 	r.freeListLength++
 }
 
