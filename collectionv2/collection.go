@@ -1,7 +1,6 @@
 package collectionv2
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -20,26 +19,6 @@ type Collection struct {
 	Defaults map[string]any
 	Count    int64
 	MaxID    int64 // Monotonic ID counter
-}
-
-type Command struct {
-	Name      string          `json:"name"`
-	Uuid      string          `json:"uuid"`
-	Timestamp int64           `json:"timestamp"`
-	StartByte int64           `json:"start_byte"`
-	Payload   json.RawMessage `json:"payload"`
-
-	serialized chan *bytes.Buffer `json:"-"`
-}
-
-type CreateIndexCommand struct {
-	Name    string      `json:"name"`
-	Type    string      `json:"type"`
-	Options interface{} `json:"options"`
-}
-
-type DropIndexCommand struct {
-	Name string `json:"name"`
 }
 
 func OpenCollection(filename string) (*Collection, error) {
@@ -67,12 +46,6 @@ func OpenCollection(filename string) (*Collection, error) {
 	}
 
 	return c, nil
-}
-
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
 }
 
 func (c *Collection) Close() error {
