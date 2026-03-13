@@ -25,3 +25,7 @@ func NewGzipStorage(filename string) (Storage, error) {
 func NewSnapshotStorage(filename string) (Storage, error) {
 	return storage.NewSnapshotStorage(filename)
 }
+
+func NewWALStorage(filename string) (Storage, error) {
+	return storage.NewWALStorage(filename)
+}
