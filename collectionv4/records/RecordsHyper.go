@@ -118,6 +118,40 @@ func (s *recordsHyperShard[T]) set(lid int64, val T) {
 	s.mutex.Unlock()
 }
 
+func (s *recordsHyperShard[T]) traverse(f func(lid int64, val T) bool) bool {
+	s.mutex.Lock()
+
+	// Create a snapshot of the segments to iterate over while holding the lock briefly?
+	// Actually, Traverse is usually doing a lot of work. Holding the lock over the entire
+	// shard might be bad for concurrency. But since we cannot easily snapshot without allocating,
+	// we will hold the lock and iterate, or we can just iterate.
+	// Since RecordsHyper uses sync.Mutex instead of sync.RWMutex, we must hold the lock.
+
+	for segIdx, seg := range s.segments {
+		for offset, slot := range seg {
+			if slot.active {
+				lid := int64(segIdx<<recordsHyperSegmentShift) | int64(offset)
+				if lid == 0 && segIdx == 0 {
+					continue
+				}
+				val := slot.val
+				// We drop the lock specifically when yielding to `f` so we don't block inserts
+				// However, if we drop the lock, another thread might modify segments.
+				// Since we iterate by index, it's safeish.
+				s.mutex.Unlock()
+				cont := f(lid, val)
+				s.mutex.Lock()
+				if !cont {
+					s.mutex.Unlock()
+					return false
+				}
+			}
+		}
+	}
+	s.mutex.Unlock()
+	return true
+}
+
 type RecordsHyper[T any] struct {
 	shards [recordsHyperNumShards]*recordsHyperShard[T]
 	picker sync.Pool
@@ -172,4 +206,17 @@ func (r *RecordsHyper[T]) Set(id int64, val T) {
 	shardIndex := int(id & recordsHyperShardMask)
 	localID := id >> recordsHyperShardBits
 	r.shards[shardIndex].set(localID, val)
+}
+
+func (r *RecordsHyper[T]) Traverse(f func(id int64, val T) bool) {
+	for i := 0; i < recordsHyperNumShards; i++ {
+		shard := r.shards[i]
+		cont := shard.traverse(func(lid int64, val T) bool {
+			id := (lid << recordsHyperShardBits) | int64(shard.shardIndex)
+			return f(id, val)
+		})
+		if !cont {
+			break
+		}
+	}
 }

@@ -90,21 +90,20 @@ func (i *IndexMap) AddRow(row *Row) error {
 
 	switch value := itemValue.(type) {
 	case string:
-		mutex.RLock()
-		_, exists := entries[value]
-		mutex.RUnlock()
-		if exists {
+		mutex.Lock()
+		if _, exists := entries[value]; exists {
+			mutex.Unlock()
 			return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
 		}
-
-		mutex.Lock()
 		entries[value] = row
 		mutex.Unlock()
 
 	case []interface{}:
+		mutex.Lock()
 		for _, v := range value {
 			s := v.(string)
 			if _, exists := entries[s]; exists {
+				mutex.Unlock()
 				return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
 			}
 		}
@@ -112,6 +111,7 @@ func (i *IndexMap) AddRow(row *Row) error {
 			s := v.(string)
 			entries[s] = row
 		}
+		mutex.Unlock()
 	default:
 		return fmt.Errorf("type not supported")
 	}
@@ -149,6 +149,7 @@ func (i *IndexMap) GetOptions() interface{} {
 
 type IndexBtree struct {
 	Btree   *btree.BTreeG[*RowOrdered]
+	RWmutex *sync.RWMutex
 	Options *IndexBTreeOptions
 }
 
@@ -216,6 +217,7 @@ func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 
 	return &IndexBtree{
 		Btree:   index,
+		RWmutex: &sync.RWMutex{},
 		Options: options,
 	}
 }
@@ -234,10 +236,12 @@ func (b *IndexBtree) RemoveRow(r *Row) error {
 		values = append(values, data[field])
 	}
 
+	b.RWmutex.Lock()
 	b.Btree.Delete(&RowOrdered{
 		Row:    r,
 		Values: values,
 	})
+	b.RWmutex.Unlock()
 
 	return nil
 }
@@ -263,6 +267,9 @@ func (b *IndexBtree) AddRow(r *Row) error {
 		}
 		return fmt.Errorf("field '%s' not defined", field)
 	}
+
+	b.RWmutex.Lock()
+	defer b.RWmutex.Unlock()
 
 	if b.Btree.Has(&RowOrdered{Values: values}) {
 		// Construct error key

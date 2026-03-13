@@ -107,7 +107,7 @@ func (db *Database) Load() error {
 			fmt.Printf("ERROR: open collection '%s': %s\n", filename, err.Error()) // todo: move to logger
 			return err
 		}
-		fmt.Println(name, col.Rows.Len(), time.Since(t0)) // todo: move to logger
+		fmt.Println(name, "col.Rows.Len()", time.Since(t0)) // todo: move to logger
 
 		db.Collections[name] = col
 

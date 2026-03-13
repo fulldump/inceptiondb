@@ -317,3 +317,25 @@ func RunConcurrentSetBenchmark(b *testing.B, workers int, newRecords func() Reco
 		1/secPerMillionOps,
 	)
 }
+
+func RunBenchmarkTraverse(b *testing.B, create func() Records[int]) {
+	records := create()
+	numRecords := 1_000_000
+
+	for i := 0; i < numRecords; i++ {
+		records.Insert(i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		count := 0
+		records.Traverse(func(id int64, val int) bool {
+			count++
+			return true
+		})
+
+		if count != numRecords {
+			b.Fatalf("expected Traverse to visit %d records, but got %d", numRecords, count)
+		}
+	}
+}

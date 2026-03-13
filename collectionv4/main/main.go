@@ -9,6 +9,7 @@ import (
 )
 
 func main() {
+
 	store, _ := collectionv4.NewStoreDisk("data.wal")
 	col := collectionv4.NewCollection("users", store)
 

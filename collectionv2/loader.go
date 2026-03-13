@@ -32,16 +32,15 @@ func LoadCollection(c *Collection) error {
 		case "remove":
 			params := cmd.DecodedPayload.(struct{ I int })
 			// Find row by I
-			dummy := &Row{I: params.I}
-			if c.Rows.Has(dummy) {
+			if c.hasRow(params.I) {
 				// We need the actual row to remove it properly (index removal)
-				// BTree Get?
-				actual, ok := c.Rows.Get(dummy)
-				if ok {
-					err := c.removeByRow(actual, false)
-					if err != nil {
-						return err
-					}
+				actual, ok := c.getRow(params.I)
+				if !ok {
+					continue
+				}
+				err := c.removeByRow(actual, false)
+				if err != nil {
+					return err
 				}
 			}
 
@@ -51,8 +50,7 @@ func LoadCollection(c *Collection) error {
 				Diff map[string]interface{}
 			})
 
-			dummy := &Row{I: params.I}
-			actual, ok := c.Rows.Get(dummy)
+			actual, ok := c.getRow(params.I)
 			if ok {
 				err := c.patchByRow(actual, params.Diff, false)
 				if err != nil {

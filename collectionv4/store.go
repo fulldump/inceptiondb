@@ -12,9 +12,12 @@ import (
 )
 
 const (
-	OpInsert uint8 = 1
-	OpDelete uint8 = 2
-	OpUpdate uint8 = 3
+	OpInsert      uint8 = 1
+	OpDelete      uint8 = 2
+	OpUpdate      uint8 = 3
+	OpCreateIndex uint8 = 4
+	OpDropIndex   uint8 = 5
+	OpSetDefaults uint8 = 6
 )
 
 var crcTable = crc32.MakeTable(crc32.Castagnoli)

@@ -13,7 +13,7 @@ func listCollections(ctx context.Context, w http.ResponseWriter) ([]*CollectionR
 	for name, collection := range s.ListCollections() {
 		response = append(response, &CollectionResponse{
 			Name:     name,
-			Total:    collection.Rows.Len(),
+			Total:    0, // collection.Rows.Len(), // todo: fix this
 			Indexes:  len(collection.Indexes),
 			Defaults: collection.Defaults,
 		})

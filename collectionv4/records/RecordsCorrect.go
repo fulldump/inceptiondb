@@ -47,3 +47,13 @@ func (r *RecordsCorrect[T]) Set(id int64, val T) {
 		r.lastid = id
 	}
 }
+
+func (r *RecordsCorrect[T]) Traverse(f func(id int64, val T) bool) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	for id, val := range r.vals {
+		if !f(id, val) {
+			break
+		}
+	}
+}

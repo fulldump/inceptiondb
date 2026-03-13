@@ -40,3 +40,9 @@ func Benchmark_RecordsUltra_Set(b *testing.B) {
 		})
 	}
 }
+
+func Benchmark_RecordsUltra_Traverse(b *testing.B) {
+	RunBenchmarkTraverse(b, func() Records[int] {
+		return NewRecordsUltra[int]()
+	})
+}

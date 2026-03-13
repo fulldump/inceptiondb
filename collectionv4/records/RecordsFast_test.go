@@ -40,3 +40,9 @@ func Benchmark_RecordsFast_Set(b *testing.B) {
 		})
 	}
 }
+
+func Benchmark_RecordsFast_Traverse(b *testing.B) {
+	RunBenchmarkTraverse(b, func() Records[int] {
+		return NewRecordsFast[int]()
+	})
+}

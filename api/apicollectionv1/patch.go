@@ -36,14 +36,13 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	traverse(requestBody, col, func(row *collectionv2.Row) bool {
 
-		row.PatchMutex.Lock()
-		defer row.PatchMutex.Unlock()
-
-		hasFilter := patch.Filter != nil && len(patch.Filter) > 0
+		hasFilter := len(patch.Filter) > 0
 		if hasFilter {
 
+			row.PatchMutex.Lock()
 			rowData := map[string]interface{}{}
 			json.Unmarshal(row.Payload, &rowData) // todo: handle error here?
+			row.PatchMutex.Unlock()
 
 			match, err := connor.Match(patch.Filter, rowData)
 			if err != nil {

@@ -125,3 +125,24 @@ func (r *RecordsTurbo[T]) Set(id int64, val T) {
 		}
 	}
 }
+
+func (r *RecordsTurbo[T]) Traverse(f func(id int64, val T) bool) {
+	table := r.table.Load()
+	for segIdx, seg := range table.segments {
+		if seg == nil {
+			continue
+		}
+		for offset := 0; offset < len(seg.slots); offset++ {
+			ptr := seg.slots[offset].Load()
+			if ptr != nil {
+				id := int64(segIdx<<recordsTurboSegmentShift) | int64(offset)
+				if id == 0 {
+					continue
+				}
+				if !f(id, ptr.val) {
+					return
+				}
+			}
+		}
+	}
+}

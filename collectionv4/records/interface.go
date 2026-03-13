@@ -5,4 +5,5 @@ type Records[T any] interface {
 	Delete(id int64)
 	Get(id int64) (val T)
 	Set(id int64, val T)
+	Traverse(f func(id int64, val T) bool)
 }

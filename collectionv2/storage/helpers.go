@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"runtime"
+	"strconv"
 	"sync"
 )
 
@@ -49,19 +50,27 @@ func decodePayload(cmd *Command) (interface{}, error) {
 	}
 }
 
-func encodeCommandToBuffer(command *Command) chan *bytes.Buffer {
-	ch := make(chan *bytes.Buffer, 1)
-	go func() {
-		buf := bufferPool.Get().(*bytes.Buffer)
-		buf.Reset()
+func encodeCommandToBuffer(command *Command) *bytes.Buffer {
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
 
-		enc := json.NewEncoder(buf)
-		enc.SetEscapeHTML(false)
-		_ = enc.Encode(command)
+	buf.WriteString(`{"name":"`)
+	buf.WriteString(command.Name)
+	buf.WriteString(`","uuid":"`)
+	buf.WriteString(command.Uuid)
+	buf.WriteString(`","timestamp":`)
+	buf.WriteString(strconv.FormatInt(command.Timestamp, 10))
+	buf.WriteString(`,"start_byte":`)
+	buf.WriteString(strconv.FormatInt(command.StartByte, 10))
+	buf.WriteString(`,"payload":`)
+	if len(command.Payload) > 0 {
+		buf.Write(command.Payload)
+	} else {
+		buf.WriteString(`null`)
+	}
+	buf.WriteString("}\n")
 
-		ch <- buf
-	}()
-	return ch
+	return buf
 }
 
 func loadJSONCommands(reader io.Reader) (<-chan LoadedCommand, <-chan error) {

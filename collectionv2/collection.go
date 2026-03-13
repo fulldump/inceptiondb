@@ -1,24 +1,34 @@
 package collectionv2
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/buger/jsonparser"
+	records "github.com/fulldump/inceptiondb/collectionv4/records"
 	"github.com/google/uuid"
 )
 
+type fastInserter interface {
+	PersistInsert(seq uint64, timestamp int64, payload []byte) error
+}
+
 type Collection struct {
-	Filename string
-	storage  Storage
-	Rows     RowContainer
-	mutex    *sync.RWMutex
-	Indexes  map[string]Index
-	Defaults map[string]any
-	Count    int64
-	MaxID    int64 // Monotonic ID counter
+	Filename   string
+	storage    Storage
+	Rows       records.Records[*Row]
+	mutex      *sync.RWMutex
+	Indexes    map[string]Index
+	Defaults   map[string]any
+	Count      int64
+	MaxID      int64        // Monotonic ID counter
+	Seq        uint64       // Command sequence counter for fast UUID generation
+	fastInsert fastInserter // cached interface for fast-path inserts
 }
 
 func OpenCollection(filename string) (*Collection, error) {
@@ -33,9 +43,14 @@ func OpenCollection(filename string) (*Collection, error) {
 	c := &Collection{
 		Filename: filename,
 		storage:  storage,
-		Rows:     NewSliceContainer(),
+		Rows:     records.NewRecordsUltra[*Row](),
 		mutex:    &sync.RWMutex{},
 		Indexes:  map[string]Index{},
+	}
+
+	// Cache fast-path inserter if storage supports it
+	if fi, ok := storage.(fastInserter); ok {
+		c.fastInsert = fi
 	}
 
 	// Load from storage
@@ -54,6 +69,85 @@ func (c *Collection) Close() error {
 
 func (c *Collection) EncodeCommand(command *Command, id string, payload interface{}) error {
 	return c.storage.Persist(command, id, payload)
+}
+
+func (c *Collection) InsertJSON(payload []byte) (*Row, error) {
+	auto := atomic.AddInt64(&c.Count, 1)
+
+	if len(c.Defaults) > 0 {
+		changed := false
+		var item map[string]any
+
+		for k, v := range c.Defaults {
+			_, _, _, err := jsonparser.Get(payload, k)
+			if err == nil {
+				continue // key already exists
+			}
+
+			// Key is missing, we need to add the default
+			if !changed {
+				changed = true
+				item = map[string]any{}
+				if uerr := json.Unmarshal(payload, &item); uerr != nil {
+					return nil, fmt.Errorf("json decode payload: %w", uerr)
+				}
+			}
+
+			var value any
+			switch v {
+			case "uuid()":
+				value = uuid.NewString()
+			case "unixnano()":
+				value = time.Now().UnixNano()
+			case "auto()":
+				value = auto
+			default:
+				value = v
+			}
+			item[k] = value
+		}
+
+		if changed {
+			var err error
+			payload, err = json.Marshal(item)
+			if err != nil {
+				return nil, fmt.Errorf("json encode payload: %w", err)
+			}
+		} else {
+			payload = bytes.Clone(payload)
+		}
+	} else {
+		payload = bytes.Clone(payload)
+	}
+
+	// Add row
+	row := &Row{
+		Payload: payload,
+	}
+	err := c.addRow(row)
+	if err != nil {
+		return nil, err
+	}
+
+	// Persist via fast path if available
+	seq := atomic.AddUint64(&c.Seq, 1)
+	ts := time.Now().UnixNano()
+	if c.fastInsert != nil {
+		err = c.fastInsert.PersistInsert(seq, ts, payload)
+	} else {
+		command := Command{
+			Name:      "insert",
+			Uuid:      strconv.FormatUint(seq, 36),
+			Timestamp: ts,
+			Payload:   payload,
+		}
+		err = c.EncodeCommand(&command, "", nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return row, nil
 }
 
 func (c *Collection) Insert(item map[string]any) (*Row, error) {
@@ -96,7 +190,7 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 	// Persist
 	command := &Command{
 		Name:      "insert",
-		Uuid:      uuid.New().String(),
+		Uuid:      strconv.FormatUint(atomic.AddUint64(&c.Seq, 1), 36),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
 		Payload:   payload,
@@ -111,19 +205,20 @@ func (c *Collection) Insert(item map[string]any) (*Row, error) {
 }
 
 func (c *Collection) addRow(row *Row) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	// Use monotonic ID
 	id := atomic.AddInt64(&c.MaxID, 1)
 	row.I = int(id)
 
-	err := indexInsert(c.Indexes, row)
-	if err != nil {
-		return err
+	if len(c.Indexes) > 0 {
+		c.mutex.RLock()
+		err := indexInsert(c.Indexes, row)
+		c.mutex.RUnlock()
+		if err != nil {
+			return err
+		}
 	}
 
-	c.Rows.ReplaceOrInsert(row)
+	c.Rows.Set(int64(row.I), row)
 
 	return nil
 }
@@ -133,10 +228,12 @@ func (c *Collection) Remove(r *Row) error {
 }
 
 func (c *Collection) removeByRow(row *Row, persist bool) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	row.PatchMutex.Lock()
+	defer row.PatchMutex.Unlock()
 
-	if !c.Rows.Has(row) {
+	if !c.hasRow(row.I) {
 		return fmt.Errorf("row %d does not exist", row.I)
 	}
 
@@ -148,7 +245,7 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 	// Capture ID before delete (SliceContainer might invalidate it)
 	id := row.I
 
-	c.Rows.Delete(row)
+	c.Rows.Delete(int64(row.I))
 	atomic.AddInt64(&c.Count, -1)
 
 	if !persist {
@@ -164,7 +261,7 @@ func (c *Collection) removeByRow(row *Row, persist bool) error {
 	}
 	command := &Command{
 		Name:      "remove",
-		Uuid:      uuid.New().String(),
+		Uuid:      strconv.FormatUint(atomic.AddUint64(&c.Seq, 1), 36),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
 		Payload:   payload,
@@ -178,8 +275,10 @@ func (c *Collection) Patch(row *Row, patch interface{}) error {
 }
 
 func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	row.PatchMutex.Lock()
+	defer row.PatchMutex.Unlock()
 
 	originalValue, err := decodeJSONValue(row.Payload)
 	if err != nil {
@@ -206,7 +305,7 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 	}
 
 	// Check if row still exists
-	if !c.Rows.Has(row) {
+	if !c.hasRow(row.I) {
 		return fmt.Errorf("row %d does not exist", row.I)
 	}
 
@@ -250,7 +349,7 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 	}
 	command := &Command{
 		Name:      "patch",
-		Uuid:      uuid.New().String(),
+		Uuid:      strconv.FormatUint(atomic.AddUint64(&c.Seq, 1), 36),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
 		Payload:   payload,
@@ -264,7 +363,7 @@ func (c *Collection) FindOne(data interface{}) {
 	defer c.mutex.RUnlock()
 
 	// Just get the first one
-	c.Rows.Traverse(func(row *Row) bool {
+	c.traverseRows(func(row *Row) bool {
 		json.Unmarshal(row.Payload, data)
 		return false // Stop after first
 	})
@@ -274,7 +373,7 @@ func (c *Collection) Traverse(f func(data []byte)) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	c.Rows.Traverse(func(row *Row) bool {
+	c.traverseRows(func(row *Row) bool {
 		f(row.Payload)
 		return true
 	})
@@ -309,7 +408,7 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 
 	// Add all rows to the index
 	var err error
-	c.Rows.Traverse(func(row *Row) bool {
+	c.traverseRows(func(row *Row) bool {
 		err = index.AddRow(row)
 		if err != nil {
 			return false // Stop
@@ -346,7 +445,7 @@ func (c *Collection) createIndex(name string, options interface{}, persist bool)
 
 	command := &Command{
 		Name:      "index",
-		Uuid:      uuid.New().String(),
+		Uuid:      strconv.FormatUint(atomic.AddUint64(&c.Seq, 1), 36),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
 		Payload:   payload,
@@ -382,7 +481,7 @@ func (c *Collection) dropIndex(name string, persist bool) error {
 
 	command := &Command{
 		Name:      "drop_index",
-		Uuid:      uuid.New().String(),
+		Uuid:      strconv.FormatUint(atomic.AddUint64(&c.Seq, 1), 36),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
 		Payload:   payload,
@@ -409,7 +508,7 @@ func (c *Collection) setDefaults(defaults map[string]any, persist bool) error {
 
 	command := &Command{
 		Name:      "set_defaults",
-		Uuid:      uuid.New().String(),
+		Uuid:      strconv.FormatUint(atomic.AddUint64(&c.Seq, 1), 36),
 		Timestamp: time.Now().UnixNano(),
 		StartByte: 0,
 		Payload:   payload,
@@ -449,4 +548,46 @@ func indexRemove(indexes map[string]Index, row *Row) (err error) {
 		}
 	}
 	return
+}
+
+func (c *Collection) hasRow(id int) bool {
+	if id <= 0 {
+		return false
+	}
+	return c.Rows.Get(int64(id)) != nil
+}
+
+func (c *Collection) getRow(id int) (*Row, bool) {
+	if id <= 0 {
+		return nil, false
+	}
+	row := c.Rows.Get(int64(id))
+	if row == nil {
+		return nil, false
+	}
+	return row, true
+}
+
+func (c *Collection) rowsLen() int {
+	total := 0
+	max := atomic.LoadInt64(&c.MaxID)
+	for i := int64(1); i <= max; i++ {
+		if c.Rows.Get(i) != nil {
+			total++
+		}
+	}
+	return total
+}
+
+func (c *Collection) traverseRows(iterator func(row *Row) bool) {
+	max := atomic.LoadInt64(&c.MaxID)
+	for i := int64(1); i <= max; i++ {
+		row := c.Rows.Get(i)
+		if row == nil {
+			continue
+		}
+		if !iterator(row) {
+			return
+		}
+	}
 }

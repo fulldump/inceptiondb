@@ -421,16 +421,14 @@ func TestConcurrentConsistency(t *testing.T) {
 		// We need the row pointer, but Traverse only gives payload in current API?
 		// Wait, let's check Collection.Traverse signature.
 		// func (c *Collection) Traverse(f func(data []byte))
-		// It calls c.Rows.Traverse(func(row *Row) bool { f(row.Payload) ... })
+		// It iterates rows and exposes only payload.
 		// So we can't get *Row from public Traverse.
 		// We need a way to get rows.
-		// We can use c.Rows.Traverse directly if we had access, but c.Rows is public?
-		// Yes: Rows RowContainer
 	})
 
 	// Let's collect all rows first
 	rows = make([]*Row, 0, expectedCount)
-	c2.Rows.Traverse(func(r *Row) bool {
+	c2.traverseRows(func(r *Row) bool {
 		rows = append(rows, r)
 		return true
 	})

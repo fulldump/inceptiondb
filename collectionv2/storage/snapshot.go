@@ -79,7 +79,7 @@ func (s *SnapshotStorage) writerLoop() {
 }
 
 func (s *SnapshotStorage) handleCommand(cmd *Command) {
-	buf := <-encodeCommandToBuffer(cmd)
+	buf := encodeCommandToBuffer(cmd)
 	_, _ = s.WalBuf.Write(buf.Bytes())
 	bufferPool.Put(buf)
 

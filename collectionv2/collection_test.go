@@ -61,7 +61,7 @@ func TestCollection_Insert_Concurrency(t *testing.T) {
 
 		wg.Wait()
 
-		AssertEqual(c.Rows.Len(), n)
+		AssertEqual(c.rowsLen(), n)
 	})
 }
 
@@ -95,7 +95,7 @@ func TestInsert100K(t *testing.T) {
 		}
 
 		// Check
-		AssertEqual(c.Rows.Len(), n)
+		AssertEqual(c.rowsLen(), n)
 	})
 }
 
@@ -304,7 +304,7 @@ func TestPersistenceDelete(t *testing.T) {
 
 		// Check
 		AssertEqual(n, 0)
-		AssertEqual(c.Rows.Len(), 2)
+		AssertEqual(c.rowsLen(), 2)
 	})
 }
 
@@ -323,7 +323,7 @@ func TestPersistenceDeleteTwice(t *testing.T) {
 		// Run
 		c, _ = OpenCollection(filename)
 
-		AssertEqual(c.Rows.Len(), 0)
+		AssertEqual(c.rowsLen(), 0)
 	})
 }
 
@@ -352,7 +352,7 @@ func TestPersistenceUpdate(t *testing.T) {
 		AssertEqual(n, 1)
 		AssertEqual(user.Name, "Jaime")
 
-		AssertEqual(c.Rows.Len(), 1)
+		AssertEqual(c.rowsLen(), 1)
 	})
 }
 
@@ -392,7 +392,7 @@ func TestInsert1M_concurrent(t *testing.T) {
 		delay := time.Since(t0)
 
 		// Check
-		AssertEqual(c.Rows.Len(), n*workers)
+		AssertEqual(c.rowsLen(), n*workers)
 		fmt.Println("delay", delay)
 		fmt.Println("throughput (inserts/second)", float64(n*workers)/delay.Seconds())
 	})

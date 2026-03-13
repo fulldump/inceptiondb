@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/fulldump/box"
 
@@ -110,21 +111,25 @@ func findRowByID(col *collectionv2.Collection, documentID string) (*collectionv2
 	// }
 	// }
 
-	col.Rows.Traverse(func(row *collectionv2.Row) bool {
+	max := atomic.LoadInt64(&col.MaxID)
+	for i := int64(1); i <= max; i++ {
+		row := col.Rows.Get(i)
+		if row == nil {
+			continue
+		}
 		var item map[string]any
 		if err := json.Unmarshal(row.Payload, &item); err != nil {
-			return true
+			continue
 		}
 		value, exists := item["id"]
 		if !exists {
-			return true
+			continue
 		}
 		if normalizeDocumentID(value) == normalizedID {
 			found = row
-			return false
+			break
 		}
-		return true
-	})
+	}
 
 	fmt.Println("FOUND", found)
 

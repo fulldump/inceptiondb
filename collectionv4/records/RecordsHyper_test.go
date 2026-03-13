@@ -40,3 +40,9 @@ func Benchmark_RecordsHyper_Set(b *testing.B) {
 		})
 	}
 }
+
+func Benchmark_RecordsHyper_Traverse(b *testing.B) {
+	RunBenchmarkTraverse(b, func() Records[int] {
+		return NewRecordsHyper[int]()
+	})
+}

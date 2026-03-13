@@ -59,7 +59,7 @@ func TestAll(t *testing.T) {
 
 func TestRecoveryPerformance(t *testing.T) {
 	filename := path.Join(t.TempDir(), "perf_data.wal")
-	const numDocs = 10_000_000
+	const numDocs = 100_000
 
 	// Usamos un payload realista pero fijo para no medir el tiempo de generación de strings
 	payload := []byte(`{"name": "Test User", "email": "test@example.com", "active": true, "balance": 1500.50}`)

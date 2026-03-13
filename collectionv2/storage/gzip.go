@@ -50,14 +50,14 @@ func (s *GzipStorage) writerLoop() {
 			if !ok {
 				return
 			}
-			buf := <-encodeCommandToBuffer(cmd)
+			buf := encodeCommandToBuffer(cmd)
 			_, _ = s.gzipWriter.Write(buf.Bytes())
 			bufferPool.Put(buf)
 		case <-s.closed:
 			for {
 				select {
 				case cmd := <-s.commandQueue:
-					buf := <-encodeCommandToBuffer(cmd)
+					buf := encodeCommandToBuffer(cmd)
 					_, _ = s.gzipWriter.Write(buf.Bytes())
 					bufferPool.Put(buf)
 				default:

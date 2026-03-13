@@ -111,6 +111,40 @@ func (s *recordsUltraShard[T]) set(lid int64, val T) {
 	}
 }
 
+func (s *recordsUltraShard[T]) traverse(f func(lid int64, val T) bool) bool {
+	s.mutex.RLock()
+	maxLid := s.localID
+	s.mutex.RUnlock()
+
+	for lid := int64(0); lid < maxLid; lid++ {
+		// Skip lid=0 on shard 0 because global ID 0 is reserved (means "no ID")
+		if lid == 0 && s.shardIndex == 0 {
+			continue
+		}
+
+		s.mutex.RLock()
+		var slot *ultraSlot[T]
+		segIdx := lid >> recordsUltraSegmentShift
+		if segIdx < int64(len(s.segments)) {
+			slot = &s.segments[segIdx][lid&recordsUltraSegmentMask]
+		}
+		var val T
+		var active bool
+		if slot != nil {
+			val = slot.val
+			active = slot.active
+		}
+		s.mutex.RUnlock()
+
+		if active {
+			if !f(lid, val) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 type RecordsUltra[T any] struct {
 	shards [recordsUltraNumShards]*recordsUltraShard[T]
 	picker sync.Pool
@@ -165,4 +199,17 @@ func (r *RecordsUltra[T]) Set(id int64, val T) {
 	shardIndex := int(id & recordsUltraShardMask)
 	localID := id >> recordsUltraShardBits
 	r.shards[shardIndex].set(localID, val)
+}
+
+func (r *RecordsUltra[T]) Traverse(f func(id int64, val T) bool) {
+	for i := 0; i < recordsUltraNumShards; i++ {
+		shard := r.shards[i]
+		cont := shard.traverse(func(lid int64, val T) bool {
+			id := (lid << recordsUltraShardBits) | int64(shard.shardIndex)
+			return f(id, val)
+		})
+		if !cont {
+			break
+		}
+	}
 }

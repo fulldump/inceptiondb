@@ -28,7 +28,7 @@ func traverse(requestBody []byte, col *collectionv2.Collection, f func(row *coll
 		return err
 	}
 
-	hasFilter := options.Filter != nil && len(options.Filter) > 0
+	hasFilter := len(options.Filter) > 0
 
 	skip := options.Skip
 	limit := options.Limit
@@ -78,7 +78,7 @@ func traverse(requestBody []byte, col *collectionv2.Collection, f func(row *coll
 
 func traverseFullscan(col *collectionv2.Collection, f func(row *collectionv2.Row) bool) error {
 
-	col.Rows.Traverse(func(row *collectionv2.Row) bool {
+	col.Rows.Traverse(func(id int64, row *collectionv2.Row) bool {
 		next := f(row)
 		if !next {
 			return false

@@ -1,10 +1,14 @@
 package collectionv4
 
 import (
+	"encoding/json"
 	"fmt"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/fulldump/inceptiondb/collectionv4/records"
+	"github.com/google/uuid"
 )
 
 // Record es la celda de nuestro FlatSlice
@@ -15,17 +19,22 @@ type Record struct {
 }
 
 type Collection struct {
-	name    string
-	store   Store
-	records records.Records[Record]
-	maxID   atomic.Int64
+	name     string
+	store    Store
+	records  records.Records[Record]
+	maxID    atomic.Int64
+	indexes  map[string]Index
+	defaults map[string]any
+	mu       sync.RWMutex
 }
 
 func NewCollection(name string, store Store) *Collection {
 	return &Collection{
-		name:    name,
-		store:   store,
-		records: records.NewRecordsUltra[Record](),
+		name:     name,
+		store:    store,
+		records:  records.NewRecordsUltra[Record](),
+		indexes:  map[string]Index{},
+		defaults: nil,
 	}
 }
 
@@ -45,9 +54,20 @@ func (c *Collection) Insert(jsonData []byte) (int64, error) {
 		}
 	}
 
+	c.mu.RLock()
+	err := indexInsert(c.indexes, id, jsonData)
+	c.mu.RUnlock()
+	if err != nil {
+		c.records.Delete(id)
+		return 0, err
+	}
+
 	// 2. Escribir en el Journal
 	if err := c.store.Append(OpInsert, id, jsonData); err != nil {
 		// Rollback si falla el journal
+		c.mu.RLock()
+		indexRemove(c.indexes, id, jsonData)
+		c.mu.RUnlock()
 		c.records.Delete(id)
 		return 0, fmt.Errorf("journal write failed: %v", err)
 	}
@@ -62,8 +82,17 @@ func (c *Collection) Delete(id int64) error {
 		return nil // Ya está borrado o no existe
 	}
 
+	c.mu.RLock()
+	err := indexRemove(c.indexes, id, rec.Data)
+	c.mu.RUnlock()
+	if err != nil {
+		return fmt.Errorf("could not free index: %w", err)
+	}
+
 	// Persistir el borrado (payload vacío)
 	if err := c.store.Append(OpDelete, id, nil); err != nil {
+		// Si el log falla, tenemos que deshacer el indexRemove, pero es complejo.
+		// Al menos devolvemos error
 		return err
 	}
 
@@ -74,9 +103,10 @@ func (c *Collection) Delete(id int64) error {
 }
 
 // Recover lee el WAL y reconstruye el estado exacto de la base de datos
-func (c *Collection) Recover() error {
+func (c *Collection) Recover() error { // nolint:gocyclo
 	// 1. Limpiamos cualquier estado previo
 	c.records = records.NewRecordsUltra[Record]()
+	c.indexes = map[string]Index{}
 	c.maxID.Store(0)
 
 	var localMaxID int64 = 0
@@ -88,13 +118,90 @@ func (c *Collection) Recover() error {
 		}
 
 		switch op {
-		case OpInsert, OpUpdate: // Para memoria, Update e Insert hacen lo mismo
+		case OpInsert, OpUpdate:
+			// Si es un update, comprobamos si ya había un dato anterior para limpiar los índices
+			rec := c.records.Get(id)
+			if rec.Active {
+				indexRemove(c.indexes, id, rec.Data)
+			}
+
 			c.records.Set(id, Record{
 				Data:   data,
 				Active: true,
 			})
+
+			indexInsert(c.indexes, id, data)
+
 		case OpDelete:
+			rec := c.records.Get(id)
+			if rec.Active {
+				indexRemove(c.indexes, id, rec.Data)
+			}
 			c.records.Delete(id)
+
+		case OpCreateIndex:
+			cmd := &CreateIndexCommand{}
+			if err := json.Unmarshal(data, cmd); err != nil {
+				return err
+			}
+
+			var index Index
+			switch cmd.Type {
+			case "map":
+				var options IndexMapOptions
+				if err := json.Unmarshal(data, &options); err == nil {
+					if cmd.Options != nil {
+						optBytes, _ := json.Marshal(cmd.Options)
+						json.Unmarshal(optBytes, &options)
+					}
+					index = NewIndexMap(&options)
+				}
+			case "btree":
+				var options IndexBTreeOptions
+				if err := json.Unmarshal(data, &options); err == nil {
+					if cmd.Options != nil {
+						optBytes, _ := json.Marshal(cmd.Options)
+						json.Unmarshal(optBytes, &options)
+					}
+					index = NewIndexBTree(&options)
+				}
+			case "fts":
+				var options IndexFTSOptions
+				if err := json.Unmarshal(data, &options); err == nil {
+					if cmd.Options != nil {
+						optBytes, _ := json.Marshal(cmd.Options)
+						json.Unmarshal(optBytes, &options)
+					}
+					index = NewIndexFTS(&options)
+				}
+			}
+
+			if index != nil {
+				c.indexes[cmd.Name] = index
+				// No necesitamos iterar para lenar el índice aquí, porque la WAL
+				// debió haber registrado todos los INSERTS después de este comando.
+				// O wait, si crearon el índice a mitad, ¿qué hay de los que estaban antes?
+				// Sí necesitamos llenar con los existentes
+				for i := int64(0); i <= localMaxID; i++ {
+					rec := c.records.Get(i)
+					if rec.Active {
+						index.Add(i, rec.Data)
+					}
+				}
+			}
+
+		case OpDropIndex:
+			cmd := &DropIndexCommand{}
+			if err := json.Unmarshal(data, cmd); err == nil {
+				delete(c.indexes, cmd.Name)
+			}
+
+		case OpSetDefaults:
+			var defaults map[string]any
+			if err := json.Unmarshal(data, &defaults); err == nil {
+				c.defaults = defaults
+			}
+
 		default:
 			return fmt.Errorf("operación desconocida en el WAL: %d", op)
 		}
@@ -111,4 +218,153 @@ func (c *Collection) Recover() error {
 	fmt.Printf("Recuperación exitosa: maxID = %d\n", localMaxID)
 
 	return nil
+}
+
+func (c *Collection) CreateIndex(name string, options interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, exists := c.indexes[name]; exists {
+		return fmt.Errorf("index '%s' already exists", name)
+	}
+
+	var index Index
+	var typeStr string
+
+	switch value := options.(type) {
+	case *IndexMapOptions:
+		typeStr = "map"
+		index = NewIndexMap(value)
+	case *IndexBTreeOptions:
+		typeStr = "btree"
+		index = NewIndexBTree(value)
+	case *IndexFTSOptions:
+		typeStr = "fts"
+		index = NewIndexFTS(value)
+	default:
+		return fmt.Errorf("unexpected options parameters, it should be [*IndexMapOptions|*IndexBTreeOptions|*IndexFTSOptions]")
+	}
+
+	c.indexes[name] = index
+
+	// Llenar el índice con los datos existentes
+	maxID := c.maxID.Load()
+	for i := int64(0); i <= maxID; i++ {
+		rec := c.records.Get(i)
+		if !rec.Active {
+			continue
+		}
+		if err := index.Add(i, rec.Data); err != nil {
+			// En caso de error, podríamos hacer rollback borbrando el index de c.indexes.
+			// Pero por ahora, devolvemos el error y lo removemos.
+			delete(c.indexes, name)
+			return fmt.Errorf("error indexing existing data: %w", err)
+		}
+	}
+
+	// Persistir la creación
+	payload, err := json.Marshal(&CreateIndexCommand{
+		Name:    name,
+		Type:    typeStr,
+		Options: options,
+	})
+	if err != nil {
+		return fmt.Errorf("json encode payload: %w", err)
+	}
+
+	return c.store.Append(OpCreateIndex, 0, payload)
+}
+
+func (c *Collection) DropIndex(name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, exists := c.indexes[name]; !exists {
+		return fmt.Errorf("dropIndex: index '%s' not found", name)
+	}
+
+	delete(c.indexes, name)
+
+	payload, err := json.Marshal(&DropIndexCommand{
+		Name: name,
+	})
+	if err != nil {
+		return fmt.Errorf("json encode payload: %w", err)
+	}
+
+	return c.store.Append(OpDropIndex, 0, payload)
+}
+
+func (c *Collection) FindOne(data interface{}) error { // nolint:gocyclo
+	// Just get the first one
+	rows := c.Scan()
+	if rows.Next() {
+		_, payload := rows.Read()
+		return json.Unmarshal(payload, data)
+	}
+	return fmt.Errorf("collection is empty")
+}
+
+func (c *Collection) Traverse(f func(data []byte)) {
+	rows := c.Scan()
+	for rows.Next() {
+		_, payload := rows.Read()
+		f(payload)
+	}
+}
+
+func (c *Collection) TraverseRange(from, to int, f func(data []byte)) {
+	count := 0
+	rows := c.Scan()
+	for rows.Next() {
+		if count >= to && to > 0 {
+			break
+		}
+		if count >= from {
+			_, payload := rows.Read()
+			f(payload)
+		}
+		count++
+	}
+}
+
+func (c *Collection) SetDefaults(defaults map[string]any) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.defaults = defaults
+
+	payload, err := json.Marshal(defaults)
+	if err != nil {
+		return fmt.Errorf("json encode payload: %w", err)
+	}
+
+	return c.store.Append(OpSetDefaults, 0, payload)
+}
+
+func (c *Collection) InsertMap(item map[string]any) (int64, error) {
+	c.mu.RLock()
+	defs := c.defaults
+	c.mu.RUnlock()
+
+	for k, v := range defs {
+		if item[k] != nil {
+			continue
+		}
+		switch v {
+		case "uuid()":
+			item[k] = uuid.NewString()
+		case "unixnano()":
+			item[k] = time.Now().UnixNano()
+		default:
+			item[k] = v
+		}
+	}
+
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return 0, fmt.Errorf("json encode payload: %w", err)
+	}
+
+	return c.Insert(payload)
 }

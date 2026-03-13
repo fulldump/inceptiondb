@@ -40,3 +40,9 @@ func Benchmark_RecordsCorrect_Set(b *testing.B) {
 		})
 	}
 }
+
+func Benchmark_RecordsCorrect_Traverse(b *testing.B) {
+	RunBenchmarkTraverse(b, func() Records[int] {
+		return NewRecordsCorrect[int]()
+	})
+}

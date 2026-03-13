@@ -88,3 +88,13 @@ func (r *RecordsFast[T]) Set(id int64, val T) {
 		r.recordsLength = id + 1
 	}
 }
+
+func (r *RecordsFast[T]) Traverse(f func(id int64, val T) bool) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	for i := int64(0); i < r.recordsLength; i++ {
+		if !f(i, r.recods[i]) {
+			break
+		}
+	}
+}

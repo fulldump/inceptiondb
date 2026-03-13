@@ -40,3 +40,9 @@ func Benchmark_RecordsTurbo_Set(b *testing.B) {
 		})
 	}
 }
+
+func Benchmark_RecordsTurbo_Traverse(b *testing.B) {
+	RunBenchmarkTraverse(b, func() Records[int] {
+		return NewRecordsTurbo[int]()
+	})
+}
