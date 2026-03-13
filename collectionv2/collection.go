@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"github.com/buger/jsonparser"
-	records "github.com/fulldump/inceptiondb/collectionv4/records"
 	"github.com/google/uuid"
+
+	records "github.com/fulldump/inceptiondb/collectionv4/records"
 )
 
 type fastInserter interface {
@@ -35,6 +36,7 @@ func OpenCollection(filename string) (*Collection, error) {
 	// storage, err := NewSnapshotStorage(filename)
 	storage, err := NewJSONStorage(filename)
 	// storage, err := NewGobStorage(filename)
+	// storage, err := NewWALStorage(filename)
 
 	if err != nil {
 		return nil, fmt.Errorf("open storage: %w", err)
