@@ -145,47 +145,17 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 				return err
 			}
 
-			var index Index
-			switch cmd.Type {
-			case "map":
-				var options IndexMapOptions
-				if err := json.Unmarshal(data, &options); err == nil {
-					if cmd.Options != nil {
-						optBytes, _ := json.Marshal(cmd.Options)
-						json.Unmarshal(optBytes, &options)
-					}
-					index = NewIndexMap(&options)
-				}
-			case "btree":
-				var options IndexBTreeOptions
-				if err := json.Unmarshal(data, &options); err == nil {
-					if cmd.Options != nil {
-						optBytes, _ := json.Marshal(cmd.Options)
-						json.Unmarshal(optBytes, &options)
-					}
-					index = NewIndexBTree(&options)
-				}
-			case "fts":
-				var options IndexFTSOptions
-				if err := json.Unmarshal(data, &options); err == nil {
-					if cmd.Options != nil {
-						optBytes, _ := json.Marshal(cmd.Options)
-						json.Unmarshal(optBytes, &options)
-					}
-					index = NewIndexFTS(&options)
-				}
+			index, err := newIndexFromCreateCommand(cmd)
+			if err != nil {
+				return err
 			}
 
-			if index != nil {
-				c.indexes[cmd.Name] = index
-				// No necesitamos iterar para lenar el índice aquí, porque la WAL
-				// debió haber registrado todos los INSERTS después de este comando.
-				// O wait, si crearon el índice a mitad, ¿qué hay de los que estaban antes?
-				// Sí necesitamos llenar con los existentes
-				for i := int64(0); i <= localMaxID; i++ {
-					rec := c.records.Get(i)
-					if rec.Active {
-						index.Add(i, rec.Data)
+			c.indexes[cmd.Name] = index
+			for i := int64(0); i <= localMaxID; i++ {
+				rec := c.records.Get(i)
+				if rec.Active {
+					if err := index.Add(i, rec.Data); err != nil {
+						return fmt.Errorf("error indexing existing data: %w", err)
 					}
 				}
 			}
@@ -275,6 +245,10 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 	return c.store.Append(OpCreateIndex, 0, payload)
 }
 
+func (c *Collection) Index(name string, options interface{}) error {
+	return c.CreateIndex(name, options)
+}
+
 func (c *Collection) DropIndex(name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -293,6 +267,56 @@ func (c *Collection) DropIndex(name string) error {
 	}
 
 	return c.store.Append(OpDropIndex, 0, payload)
+}
+
+func (c *Collection) TraverseIndex(name string, options []byte, f func(id int64, data []byte) bool) error {
+	c.mu.RLock()
+	index, exists := c.indexes[name]
+	c.mu.RUnlock()
+	if !exists {
+		return fmt.Errorf("index '%s' not found", name)
+	}
+
+	index.Traverse(options, f)
+	return nil
+}
+
+func newIndexFromCreateCommand(cmd *CreateIndexCommand) (Index, error) {
+	if cmd == nil {
+		return nil, fmt.Errorf("nil create index command")
+	}
+
+	if cmd.Options == nil {
+		return nil, fmt.Errorf("index '%s' has nil options", cmd.Name)
+	}
+
+	optionsData, err := json.Marshal(cmd.Options)
+	if err != nil {
+		return nil, fmt.Errorf("marshal index options: %w", err)
+	}
+
+	switch cmd.Type {
+	case "map":
+		options := &IndexMapOptions{}
+		if err := json.Unmarshal(optionsData, options); err != nil {
+			return nil, fmt.Errorf("decode map index options: %w", err)
+		}
+		return NewIndexMap(options), nil
+	case "btree":
+		options := &IndexBTreeOptions{}
+		if err := json.Unmarshal(optionsData, options); err != nil {
+			return nil, fmt.Errorf("decode btree index options: %w", err)
+		}
+		return NewIndexBTree(options), nil
+	case "fts":
+		options := &IndexFTSOptions{}
+		if err := json.Unmarshal(optionsData, options); err != nil {
+			return nil, fmt.Errorf("decode fts index options: %w", err)
+		}
+		return NewIndexFTS(options), nil
+	default:
+		return nil, fmt.Errorf("unexpected index type '%s'", cmd.Type)
+	}
 }
 
 func (c *Collection) FindOne(data interface{}) error { // nolint:gocyclo
