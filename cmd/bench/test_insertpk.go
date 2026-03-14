@@ -29,6 +29,7 @@ func TestInsertPK(c Config) {
 
 		conf := configuration.Default()
 		conf.Dir = dir
+		conf.HttpAddr = "127.0.0.1:8081"
 		c.Base = "http://" + conf.HttpAddr
 
 		start, stop = bootstrap.Bootstrap(conf)

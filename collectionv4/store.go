@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -19,6 +20,14 @@ const (
 	OpDropIndex   uint8 = 5
 	OpSetDefaults uint8 = 6
 )
+
+var storeDiskBufferPool = &sync.Pool{
+	New: func() interface{} {
+		// preallocate 1KB buffer minimum
+		b := make([]byte, 0, 1024)
+		return &b
+	},
+}
 
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
@@ -34,6 +43,7 @@ type StoreDisk struct {
 	file   *os.File
 	writer *bufio.Writer
 	mu     sync.Mutex
+	closed atomic.Bool
 }
 
 func NewStoreDisk(path string) (*StoreDisk, error) {
@@ -41,44 +51,53 @@ func NewStoreDisk(path string) (*StoreDisk, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &StoreDisk{
+	s := &StoreDisk{
 		file:   f,
 		writer: bufio.NewWriterSize(f, 1024*1024), // Buffer de 1MB para no castigar el disco
-	}, nil
+	}
+	
+	return s, nil
 }
 
 // Append escribe la operación en el WAL.
 // Header (17 bytes) = OpCode(1) + ID(8) + Length(4) + CRC32(4)
 func (s *StoreDisk) Append(op uint8, id int64, data []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	if s.closed.Load() {
+		return errors.New("StoreDisk closed")
+	}
 
-	header := make([]byte, 17)
+	var header [17]byte
 	header[0] = op
-	binary.LittleEndian.PutUint64(header[1:], uint64(id))
+	binary.LittleEndian.PutUint64(header[1:9], uint64(id))
 
 	length := uint32(len(data))
-	binary.LittleEndian.PutUint32(header[9:], length)
+	binary.LittleEndian.PutUint32(header[9:13], length)
 
 	checksum := crc32.Checksum(data, crcTable)
-	binary.LittleEndian.PutUint32(header[13:], checksum)
+	binary.LittleEndian.PutUint32(header[13:17], checksum)
 
-	// Escribir header y luego el payload (Zero-copy del payload)
-	if _, err := s.writer.Write(header); err != nil {
-		return err
-	}
-	if length > 0 {
-		if _, err := s.writer.Write(data); err != nil {
-			return err
-		}
-	}
+	bufPtr := storeDiskBufferPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0]
+	buf = append(buf, header[:]...)
+	buf = append(buf, data...)
+
+	// Escribir header y luego el payload de una (Single Write)
+	s.mu.Lock()
+	_, err := s.writer.Write(buf)
+	s.mu.Unlock()
+
+	*bufPtr = buf
+	storeDiskBufferPool.Put(bufPtr)
 
 	// Nota: Podrías llamar a s.writer.Flush() aquí o dejarlo para un worker asíncrono
-	return nil
+	return err
 }
 
 // Flush vacía el buffer de Go hacia el Sistema Operativo
 func (s *StoreDisk) Flush() error {
+	if s.closed.Load() {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.writer.Flush()
@@ -86,6 +105,9 @@ func (s *StoreDisk) Flush() error {
 
 // Sync asegura que los datos pasen del Sistema Operativo al disco físico (fsync)
 func (s *StoreDisk) Sync() error {
+	if s.closed.Load() {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -99,6 +121,10 @@ func (s *StoreDisk) Sync() error {
 
 // Close cierra el Journal de forma segura
 func (s *StoreDisk) Close() error {
+	if s.closed.Swap(true) {
+		return nil
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

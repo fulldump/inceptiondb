@@ -29,10 +29,12 @@ func NewStoreJson(path string) (*StoreJson, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &StoreJson{
+	s := &StoreJson{
 		file:   f,
 		writer: bufio.NewWriterSize(f, 4*1024*1024), // 4MB buffer for good throughput
-	}, nil
+	}
+	
+	return s, nil
 }
 
 func (s *StoreJson) Append(op uint8, id int64, data []byte) error {
@@ -95,6 +97,7 @@ func (s *StoreJson) Close() error {
 	if s.closed.Swap(true) {
 		return nil
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -138,7 +141,7 @@ func (s *StoreJson) Replay(fn func(op uint8, id int64, data []byte) error) error
 
 		// Important: If data was extracted, we pass the raw bytes. If not, we pass nil
 		var finalData []byte
-		if parsedLog.Data != nil && len(parsedLog.Data) > 0 {
+		if len(parsedLog.Data) > 0 {
 			finalData = []byte(parsedLog.Data)
 		}
 
