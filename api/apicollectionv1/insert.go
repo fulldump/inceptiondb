@@ -60,7 +60,7 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			}
 			return err
 		}
-		row, err := collection.InsertJSON(payload)
+		id, err := collection.InsertJSON(payload)
 		if err != nil {
 			// TODO: handle error properly
 			if i == 0 {
@@ -83,7 +83,12 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		// )
 
 		// ALT 3
-		w.Write(row.Payload)
+		stored, ok := collection.Get(id)
+		if !ok {
+			return fmt.Errorf("inserted document not found")
+		}
+
+		w.Write(stored)
 		w.Write([]byte("\n"))
 
 		// ALT 4

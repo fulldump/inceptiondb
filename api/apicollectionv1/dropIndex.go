@@ -33,13 +33,17 @@ func dropIndex(ctx context.Context, w http.ResponseWriter, input *dropIndexReque
 		return err // todo: handle/wrap this properly
 	}
 
-	_, exists := col.Indexes[input.Name]
+	indexes := col.ListIndexes()
+	_, exists := indexes[input.Name]
 	if !exists {
 		w.WriteHeader(http.StatusBadRequest)
 		return fmt.Errorf("index '%s' not found", input.Name)
 	}
 
-	delete(col.Indexes, input.Name)
+	err = col.DropIndex(input.Name)
+	if err != nil {
+		return err
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 

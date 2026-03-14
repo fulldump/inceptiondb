@@ -6,11 +6,11 @@ import (
 
 	"github.com/SierraSoftworks/connor"
 
-	"github.com/fulldump/inceptiondb/collectionv2"
+	"github.com/fulldump/inceptiondb/collectionv4"
 	"github.com/fulldump/inceptiondb/utils"
 )
 
-func traverse(requestBody []byte, col *collectionv2.Collection, f func(row *collectionv2.Row) bool) error {
+func traverse(requestBody []byte, col *collectionv4.Collection, f func(id int64, payload []byte) bool) error {
 
 	options := &struct {
 		Index  *string
@@ -32,14 +32,14 @@ func traverse(requestBody []byte, col *collectionv2.Collection, f func(row *coll
 
 	skip := options.Skip
 	limit := options.Limit
-	iterator := func(r *collectionv2.Row) bool {
+	iterator := func(id int64, payload []byte) bool {
 		if limit == 0 {
 			return false
 		}
 
 		if hasFilter {
 			rowData := map[string]interface{}{}
-			json.Unmarshal(r.Payload, &rowData) // todo: handle error here?
+			json.Unmarshal(payload, &rowData) // todo: handle error here?
 
 			match, err := connor.Match(options.Filter, rowData)
 			if err != nil {
@@ -57,7 +57,7 @@ func traverse(requestBody []byte, col *collectionv2.Collection, f func(row *coll
 			return true
 		}
 		limit--
-		return f(r)
+		return f(id, payload)
 	}
 
 	// Fullscan
@@ -66,25 +66,26 @@ func traverse(requestBody []byte, col *collectionv2.Collection, f func(row *coll
 		return nil
 	}
 
-	index, exists := col.Indexes[*options.Index]
+	indexes := col.ListIndexes()
+	index, exists := indexes[*options.Index]
 	if !exists {
-		return fmt.Errorf("index '%s' not found, available indexes %v", *options.Index, utils.GetKeys(col.Indexes))
+		return fmt.Errorf("index '%s' not found, available indexes %v", *options.Index, utils.GetKeys(indexes))
 	}
 
-	index.Traverse(requestBody, iterator)
-
-	return nil
+	_ = index
+	return col.TraverseIndex(*options.Index, requestBody, iterator)
 }
 
-func traverseFullscan(col *collectionv2.Collection, f func(row *collectionv2.Row) bool) error {
+func traverseFullscan(col *collectionv4.Collection, f func(id int64, payload []byte) bool) error {
 
-	col.Rows.Traverse(func(id int64, row *collectionv2.Row) bool {
-		next := f(row)
+	rows := col.Scan()
+	for rows.Next() {
+		id, payload := rows.Read()
+		next := f(id, payload)
 		if !next {
-			return false
+			break
 		}
-		return true
-	})
+	}
 
 	return nil
 }

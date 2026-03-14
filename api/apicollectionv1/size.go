@@ -21,19 +21,17 @@ func size(ctx context.Context) (interface{}, error) {
 
 	result := map[string]interface{}{}
 
-	// Data memory
-	memory := utils.SizeOf(col.Rows)
-	result["memory"] = memory
+	result["memory"] = utils.SizeOf(col)
 
 	// Disk
-	info, err := os.Stat(col.Filename)
+	info, err := os.Stat(col.Filepath())
 	if err == nil {
 		result["disk"] = info.Size()
 	}
 
 	// Indexes
-	for name, index := range col.Indexes {
-		result["index."+name] = utils.SizeOf(index) - memory
+	for name, index := range col.ListIndexes() {
+		result["index."+name] = utils.SizeOf(index)
 	}
 
 	return result, nil

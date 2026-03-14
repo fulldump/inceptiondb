@@ -1,7 +1,6 @@
 package collectionv4
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -28,8 +27,7 @@ type IndexMap struct {
 }
 
 type IndexMapEntry struct {
-	ID   int64
-	Data []byte
+	ID int64
 }
 
 type IndexMapOptions struct {
@@ -98,7 +96,7 @@ func (i *IndexMap) Add(id int64, data []byte) error {
 		if _, exists := i.Entries[value]; exists {
 			return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
 		}
-		i.Entries[value] = &IndexMapEntry{ID: id, Data: bytes.Clone(data)}
+		i.Entries[value] = &IndexMapEntry{ID: id}
 
 	case []interface{}:
 		for _, v := range value {
@@ -112,7 +110,7 @@ func (i *IndexMap) Add(id int64, data []byte) error {
 		}
 		for _, v := range value {
 			if s, ok := v.(string); ok {
-				i.Entries[s] = &IndexMapEntry{ID: id, Data: bytes.Clone(data)}
+				i.Entries[s] = &IndexMapEntry{ID: id}
 			}
 		}
 	default:
@@ -137,7 +135,7 @@ func (i *IndexMap) Traverse(optionsData []byte, f func(id int64, data []byte) bo
 		return
 	}
 
-	f(entry.ID, entry.Data)
+	f(entry.ID, nil)
 }
 
 func (i *IndexMap) GetType() string {
@@ -165,7 +163,6 @@ type IndexBtree struct {
 type RowOrdered struct {
 	ID     int64
 	Values []interface{}
-	Data   []byte
 }
 
 func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
@@ -268,7 +265,6 @@ func (b *IndexBtree) Add(id int64, data []byte) error {
 	b.Btree.ReplaceOrInsert(&RowOrdered{
 		ID:     id,
 		Values: values,
-		Data:   bytes.Clone(data),
 	})
 	b.RWmutex.Unlock()
 
@@ -286,7 +282,7 @@ func (b *IndexBtree) Traverse(optionsData []byte, f func(id int64, data []byte) 
 	_ = json.Unmarshal(optionsData, options)
 
 	iterator := func(r *RowOrdered) bool {
-		return f(r.ID, r.Data)
+		return f(r.ID, nil)
 	}
 
 	hasFrom := len(options.From) > 0
@@ -349,7 +345,7 @@ func (b *IndexBtree) GetOptions() interface{} {
 // --- IndexFTS ---
 
 type IndexFTS struct {
-	Index   map[string]map[int64][]byte
+	Index   map[string]map[int64]struct{}
 	RWmutex *sync.RWMutex
 	Options *IndexFTSOptions
 }
@@ -360,7 +356,7 @@ type IndexFTSOptions struct {
 
 func NewIndexFTS(options *IndexFTSOptions) *IndexFTS {
 	return &IndexFTS{
-		Index:   map[string]map[int64][]byte{},
+		Index:   map[string]map[int64]struct{}{},
 		RWmutex: &sync.RWMutex{},
 		Options: options,
 	}
@@ -395,9 +391,9 @@ func (i *IndexFTS) Add(id int64, data []byte) error {
 
 	for _, token := range tokens {
 		if _, ok := i.Index[token]; !ok {
-			i.Index[token] = map[int64][]byte{}
+			i.Index[token] = map[int64]struct{}{}
 		}
-		i.Index[token][id] = bytes.Clone(data)
+		i.Index[token][id] = struct{}{}
 	}
 
 	return nil
@@ -425,7 +421,7 @@ func (i *IndexFTS) Traverse(optionsData []byte, f func(id int64, data []byte) bo
 		return
 	}
 
-	for id, data := range rows {
+	for id := range rows {
 		matchAll := true
 		for _, token := range tokens[1:] {
 			otherRows, ok := i.Index[token]
@@ -440,7 +436,7 @@ func (i *IndexFTS) Traverse(optionsData []byte, f func(id int64, data []byte) bo
 		}
 
 		if matchAll {
-			if !f(id, data) {
+			if !f(id, nil) {
 				return
 			}
 		}

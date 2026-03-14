@@ -22,7 +22,8 @@ func getIndex(ctx context.Context, input getIndexInput) (*listIndexesItem, error
 	}
 
 	name := input.Name
-	index, found := current.Indexes[name]
+	indexes := current.ListIndexes()
+	index, found := indexes[name]
 
 	if !found {
 		box.GetResponse(ctx).WriteHeader(http.StatusNotFound)

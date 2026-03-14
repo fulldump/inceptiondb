@@ -11,8 +11,9 @@ import (
 	"time"
 
 	. "github.com/fulldump/biff"
-	"github.com/fulldump/inceptiondb/utils"
 	"github.com/google/uuid"
+
+	"github.com/fulldump/inceptiondb/utils"
 )
 
 func Environment(f func(filename string)) {
@@ -62,23 +63,6 @@ func TestCollection_Insert_Concurrency(t *testing.T) {
 		wg.Wait()
 
 		AssertEqual(c.rowsLen(), n)
-	})
-}
-
-func TestFindOne(t *testing.T) {
-	Environment(func(filename string) {
-
-		// Setup
-		ioutil.WriteFile(filename, []byte(`{"name":"insert","uuid":"ec59a0e6-8fcb-4c1c-91e5-3dd7df6a0b80","timestamp":1648937091073939741,"start_byte":0,"payload":{"name": "Fulanez"}}`), 0666)
-
-		// Run
-		c, _ := OpenCollection(filename)
-		defer c.Close()
-
-		// Check
-		row := map[string]interface{}{}
-		c.FindOne(&row)
-		AssertEqualJson(row, map[string]interface{}{"name": "Fulanez"})
 	})
 }
 

@@ -8,8 +8,6 @@ import (
 
 	"github.com/SierraSoftworks/connor"
 	"github.com/fulldump/box"
-
-	"github.com/fulldump/inceptiondb/collectionv2"
 )
 
 func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -32,17 +30,12 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}{}
 	json.Unmarshal(requestBody, &patch) // TODO: handle err
 
-	e := json.NewEncoder(w)
-
-	traverse(requestBody, col, func(row *collectionv2.Row) bool {
+	traverse(requestBody, col, func(id int64, payload []byte) bool {
 
 		hasFilter := len(patch.Filter) > 0
 		if hasFilter {
-
-			row.PatchMutex.Lock()
 			rowData := map[string]interface{}{}
-			json.Unmarshal(row.Payload, &rowData) // todo: handle error here?
-			row.PatchMutex.Unlock()
+			json.Unmarshal(payload, &rowData) // todo: handle error here?
 
 			match, err := connor.Match(patch.Filter, rowData)
 			if err != nil {
@@ -55,14 +48,20 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		err := col.Patch(row, patch.Patch)
+		err := col.Patch(id, patch.Patch)
 		if err != nil {
 			// TODO: handle err??
 			// return err
 			return true // todo: OR return false?
 		}
 
-		e.Encode(row.Payload) // todo: handle err?
+		updated, ok := col.Get(id)
+		if !ok {
+			return false
+		}
+
+		w.Write(updated)
+		w.Write([]byte("\n"))
 
 		return true
 	})

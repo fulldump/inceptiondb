@@ -360,17 +360,6 @@ func (c *Collection) patchByRow(row *Row, patch interface{}, persist bool) error
 	return c.EncodeCommand(command, fmt.Sprintf("%d", row.I), newValue)
 }
 
-func (c *Collection) FindOne(data interface{}) {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	// Just get the first one
-	c.traverseRows(func(row *Row) bool {
-		json.Unmarshal(row.Payload, data)
-		return false // Stop after first
-	})
-}
-
 func (c *Collection) Traverse(f func(data []byte)) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()

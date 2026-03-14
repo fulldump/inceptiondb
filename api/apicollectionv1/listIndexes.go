@@ -36,7 +36,7 @@ func listIndexes(ctx context.Context) ([]*listIndexesItem, error) {
 	}
 
 	result := []*listIndexesItem{}
-	for name, index := range collection.Indexes {
+	for name, index := range collection.ListIndexes() {
 		result = append(result, &listIndexesItem{
 			Name:    name,
 			Type:    index.GetType(),

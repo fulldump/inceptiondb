@@ -1,12 +1,14 @@
 package collectionv4
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/buger/jsonparser"
 	"github.com/fulldump/inceptiondb/collectionv4/records"
 	"github.com/google/uuid"
 )
@@ -20,9 +22,12 @@ type Record struct {
 
 type Collection struct {
 	name     string
+	filepath string
 	store    Store
 	records  records.Records[Record]
 	maxID    atomic.Int64
+	count    atomic.Int64
+	autoID   atomic.Int64
 	indexes  map[string]Index
 	defaults map[string]any
 	mu       sync.RWMutex
@@ -31,11 +36,66 @@ type Collection struct {
 func NewCollection(name string, store Store) *Collection {
 	return &Collection{
 		name:     name,
+		filepath: "",
 		store:    store,
 		records:  records.NewRecordsUltra[Record](),
 		indexes:  map[string]Index{},
 		defaults: nil,
 	}
+}
+
+func (c *Collection) SetFilepath(filepath string) {
+	c.mu.Lock()
+	c.filepath = filepath
+	c.mu.Unlock()
+}
+
+func (c *Collection) Filepath() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.filepath
+}
+
+func (c *Collection) Close() error {
+	if c.store == nil {
+		return nil
+	}
+	return c.store.Close()
+}
+
+func (c *Collection) Count() int64 {
+	return c.count.Load()
+}
+
+func (c *Collection) Defaults() map[string]any {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.defaults == nil {
+		return nil
+	}
+	out := make(map[string]any, len(c.defaults))
+	for k, v := range c.defaults {
+		out[k] = v
+	}
+	return out
+}
+
+func (c *Collection) ListIndexes() map[string]Index {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]Index, len(c.indexes))
+	for name, index := range c.indexes {
+		out[name] = index
+	}
+	return out
+}
+
+func (c *Collection) Get(id int64) ([]byte, bool) {
+	rec := c.records.Get(id)
+	if !rec.Active {
+		return nil, false
+	}
+	return rec.Data, true
 }
 
 func (c *Collection) Insert(jsonData []byte) (int64, error) {
@@ -45,6 +105,7 @@ func (c *Collection) Insert(jsonData []byte) (int64, error) {
 		Active: true,
 	}
 	id := c.records.Insert(rec)
+	c.count.Add(1)
 
 	// Actualizamos el maxID atómicamente
 	for {
@@ -59,6 +120,7 @@ func (c *Collection) Insert(jsonData []byte) (int64, error) {
 	c.mu.RUnlock()
 	if err != nil {
 		c.records.Delete(id)
+		c.count.Add(-1)
 		return 0, err
 	}
 
@@ -69,6 +131,7 @@ func (c *Collection) Insert(jsonData []byte) (int64, error) {
 		indexRemove(c.indexes, id, jsonData)
 		c.mu.RUnlock()
 		c.records.Delete(id)
+		c.count.Add(-1)
 		return 0, fmt.Errorf("journal write failed: %v", err)
 	}
 
@@ -98,6 +161,7 @@ func (c *Collection) Delete(id int64) error {
 
 	// Liberar memoria para el GC y marcar como inactivo
 	c.records.Delete(id)
+	c.count.Add(-1)
 
 	return nil
 }
@@ -108,6 +172,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 	c.records = records.NewRecordsUltra[Record]()
 	c.indexes = map[string]Index{}
 	c.maxID.Store(0)
+	c.count.Store(0)
 
 	var localMaxID int64 = 0
 
@@ -125,10 +190,14 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 				indexRemove(c.indexes, id, rec.Data)
 			}
 
+			wasActive := rec.Active
 			c.records.Set(id, Record{
 				Data:   data,
 				Active: true,
 			})
+			if !wasActive {
+				c.count.Add(1)
+			}
 
 			indexInsert(c.indexes, id, data)
 
@@ -136,6 +205,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 			rec := c.records.Get(id)
 			if rec.Active {
 				indexRemove(c.indexes, id, rec.Data)
+				c.count.Add(-1)
 			}
 			c.records.Delete(id)
 
@@ -180,6 +250,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 	})
 
 	c.maxID.Store(localMaxID)
+	c.autoID.Store(c.Count())
 
 	if err != nil {
 		return fmt.Errorf("error recuperando datos: %v", err)
@@ -277,7 +348,16 @@ func (c *Collection) TraverseIndex(name string, options []byte, f func(id int64,
 		return fmt.Errorf("index '%s' not found", name)
 	}
 
-	index.Traverse(options, f)
+	index.Traverse(options, func(id int64, data []byte) bool {
+		if data == nil {
+			resolved, ok := c.Get(id)
+			if !ok {
+				return true
+			}
+			return f(id, resolved)
+		}
+		return f(id, data)
+	})
 	return nil
 }
 
@@ -371,6 +451,8 @@ func (c *Collection) InsertMap(item map[string]any) (int64, error) {
 	defs := c.defaults
 	c.mu.RUnlock()
 
+	auto := c.autoID.Add(1)
+
 	for k, v := range defs {
 		if item[k] != nil {
 			continue
@@ -380,9 +462,62 @@ func (c *Collection) InsertMap(item map[string]any) (int64, error) {
 			item[k] = uuid.NewString()
 		case "unixnano()":
 			item[k] = time.Now().UnixNano()
+		case "auto()":
+			item[k] = auto
 		default:
 			item[k] = v
 		}
+	}
+
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return 0, fmt.Errorf("json encode payload: %w", err)
+	}
+
+	return c.Insert(payload)
+}
+
+func (c *Collection) InsertJSON(payload []byte) (int64, error) {
+	c.mu.RLock()
+	defs := c.defaults
+	c.mu.RUnlock()
+
+	if len(defs) == 0 {
+		return c.Insert(bytes.Clone(payload))
+	}
+
+	auto := c.autoID.Add(1)
+	changed := false
+	var item map[string]any
+
+	for k, v := range defs {
+		_, _, _, err := jsonparser.Get(payload, k)
+		if err == nil {
+			continue
+		}
+
+		if !changed {
+			changed = true
+			item = map[string]any{}
+			if err := json.Unmarshal(payload, &item); err != nil {
+				return 0, fmt.Errorf("json decode payload: %w", err)
+			}
+		}
+
+		switch v {
+		case "uuid()":
+			item[k] = uuid.NewString()
+		case "unixnano()":
+			item[k] = time.Now().UnixNano()
+		case "auto()":
+			item[k] = auto
+		default:
+			item[k] = v
+		}
+	}
+
+	if !changed {
+		return c.Insert(bytes.Clone(payload))
 	}
 
 	payload, err := json.Marshal(item)
