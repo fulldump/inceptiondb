@@ -36,7 +36,7 @@ func TestFindRowByID_UsesIndex(t *testing.T) {
 		t.Fatalf("create index: %v", err)
 	}
 
-	if _, err := col.InsertMap(map[string]any{"id": "doc-1", "name": "Alice"}); err != nil {
+	if _, err := col.InsertMap(map[string]any{"id": "doc-1", "name": "Alice"}, false); err != nil {
 		t.Fatalf("insert document: %v", err)
 	}
 
@@ -62,7 +62,7 @@ func TestFindRowByID_Fullscan(t *testing.T) {
 
 	col := newTestCollection(t)
 
-	if _, err := col.InsertMap(map[string]any{"id": "doc-2", "name": "Bob"}); err != nil {
+	if _, err := col.InsertMap(map[string]any{"id": "doc-2", "name": "Bob"}, false); err != nil {
 		t.Fatalf("insert document: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestFindRowByID_NotFound(t *testing.T) {
 
 	col := newTestCollection(t)
 
-	if _, err := col.InsertMap(map[string]any{"id": "doc-3"}); err != nil {
+	if _, err := col.InsertMap(map[string]any{"id": "doc-3"}, false); err != nil {
 		t.Fatalf("insert document: %v", err)
 	}
 

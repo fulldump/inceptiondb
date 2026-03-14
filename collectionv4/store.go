@@ -32,7 +32,7 @@ var storeDiskBufferPool = &sync.Pool{
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
 type Store interface {
-	Append(op uint8, id int64, data []byte) error
+	Append(op uint8, id int64, data []byte, sync bool) error
 	Flush() error
 	Sync() error
 	Close() error
@@ -61,7 +61,7 @@ func NewStoreDisk(path string) (*StoreDisk, error) {
 
 // Append escribe la operación en el WAL.
 // Header (17 bytes) = OpCode(1) + ID(8) + Length(4) + CRC32(4)
-func (s *StoreDisk) Append(op uint8, id int64, data []byte) error {
+func (s *StoreDisk) Append(op uint8, id int64, data []byte, sync bool) error {
 	if s.closed.Load() {
 		return errors.New("StoreDisk closed")
 	}
@@ -89,7 +89,15 @@ func (s *StoreDisk) Append(op uint8, id int64, data []byte) error {
 	*bufPtr = buf
 	storeDiskBufferPool.Put(bufPtr)
 
-	// Nota: Podrías llamar a s.writer.Flush() aquí o dejarlo para un worker asíncrono
+	if sync {
+		if err := s.writer.Flush(); err != nil {
+			return err
+		}
+		if err := s.file.Sync(); err != nil {
+			return err
+		}
+	}
+
 	return err
 }
 

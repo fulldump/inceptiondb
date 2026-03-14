@@ -36,7 +36,8 @@ func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	var result error
 
 	traverse(requestBody, col, func(id int64, payload []byte) bool {
-		err := col.Delete(id)
+		waitParam := r.URL.Query().Get("wait") == "true"
+		err := col.Delete(id, waitParam)
 		if err != nil {
 			result = err
 			return false

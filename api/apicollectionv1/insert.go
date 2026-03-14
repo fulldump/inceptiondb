@@ -60,7 +60,8 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			}
 			return err
 		}
-		id, err := collection.InsertJSON(payload)
+		waitParam := r.URL.Query().Get("wait") == "true"
+		id, err := collection.InsertJSON(payload, waitParam)
 		if err != nil {
 			// TODO: handle error properly
 			if i == 0 {

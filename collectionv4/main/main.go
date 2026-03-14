@@ -21,14 +21,14 @@ func main() {
 	stopFlusher := StartBackgroundFlusher(store, 500*time.Millisecond)
 
 	// Insertar
-	col.Insert([]byte(`{"name": "Alice"}`))
-	col.Insert([]byte(`{"name": "Bob"}`))
+	col.Insert([]byte(`{"name": "Alice"}`), false)
+	col.Insert([]byte(`{"name": "Bob"}`), false)
 
 	it := col.Scan()
 	for it.Next() {
 		id, data := it.Read()
 		if strings.Contains(string(data), `"Alice"`) {
-			err := col.Delete(id)
+			err := col.Delete(id, false)
 			if err != nil {
 				fmt.Printf("Error haciendo delete collection: %v\n", err)
 			}

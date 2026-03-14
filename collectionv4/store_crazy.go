@@ -43,7 +43,7 @@ func NewStoreCrazy(path string) (*StoreCrazy, error) {
 
 // Append writes the operation to the WAL.
 // Header (13 bytes) = OpCode(1) + ID(8) + Length(4) (NO CRC)
-func (s *StoreCrazy) Append(op uint8, id int64, data []byte) error {
+func (s *StoreCrazy) Append(op uint8, id int64, data []byte, sync bool) error {
 	if s.closed.Load() {
 		return errors.New("StoreCrazy closed")
 	}
@@ -66,6 +66,15 @@ func (s *StoreCrazy) Append(op uint8, id int64, data []byte) error {
 
 	*bufPtr = buf
 	storeCrazyBufferPool.Put(bufPtr)
+
+	if sync {
+		if err := s.writer.Flush(); err != nil {
+			return err
+		}
+		if err := s.file.Sync(); err != nil {
+			return err
+		}
+	}
 
 	return err
 }

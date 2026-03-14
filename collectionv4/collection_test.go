@@ -19,9 +19,9 @@ func TestAll(t *testing.T) {
 		stopFlusher := StartBackgroundFlusher(store, 500*time.Millisecond)
 
 		// Insertar
-		col.Insert([]byte(`{"name": "Alice"}`))
-		col.Insert([]byte(`{"name": "Bob"}`))
-		col.Delete(0) // Borra a Alice
+		col.Insert([]byte(`{"name": "Alice"}`), false)
+		col.Insert([]byte(`{"name": "Bob"}`), false)
+		col.Delete(0, false) // Borra a Alice
 
 		// Iterar (solo debería imprimir a Bob)
 		rows := col.Scan()
@@ -81,7 +81,7 @@ func TestRecoveryPerformance(t *testing.T) {
 		startInsert := time.Now()
 
 		for i := 0; i < numDocs; i++ {
-			if _, err := col.Insert(payload); err != nil {
+			if _, err := col.Insert(payload, false); err != nil {
 				t.Fatalf("Error en insert %d: %v", i, err)
 			}
 		}

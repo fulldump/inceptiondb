@@ -99,7 +99,7 @@ func (c *Collection) Get(id int64) ([]byte, bool) {
 	return rec.Data, true
 }
 
-func (c *Collection) Insert(jsonData []byte) (int64, error) {
+func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
 	// 1. Insertar en memoria (optimista)
 	rec := Record{
 		Data:   jsonData,
@@ -126,7 +126,7 @@ func (c *Collection) Insert(jsonData []byte) (int64, error) {
 	}
 
 	// 2. Escribir en el Journal
-	if err := c.store.Append(OpInsert, id, jsonData); err != nil {
+	if err := c.store.Append(OpInsert, id, jsonData, wait); err != nil {
 		// Rollback si falla el journal
 		c.mu.RLock()
 		indexRemove(c.indexes, id, jsonData)
@@ -139,7 +139,7 @@ func (c *Collection) Insert(jsonData []byte) (int64, error) {
 	return id, nil
 }
 
-func (c *Collection) Delete(id int64) error {
+func (c *Collection) Delete(id int64, wait bool) error {
 	// Verificar si existe antes de persistir (opcional)
 	rec := c.records.Get(id)
 	if !rec.Active {
@@ -154,7 +154,7 @@ func (c *Collection) Delete(id int64) error {
 	}
 
 	// Persistir el borrado (payload vacío)
-	if err := c.store.Append(OpDelete, id, nil); err != nil {
+	if err := c.store.Append(OpDelete, id, nil, wait); err != nil {
 		// Si el log falla, tenemos que deshacer el indexRemove, pero es complejo.
 		// Al menos devolvemos error
 		return err
@@ -317,7 +317,7 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.store.Append(OpCreateIndex, 0, payload)
+	return c.store.Append(OpCreateIndex, 0, payload, true)
 }
 
 func (c *Collection) Index(name string, options interface{}) error {
@@ -341,7 +341,7 @@ func (c *Collection) DropIndex(name string) error {
 		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.store.Append(OpDropIndex, 0, payload)
+	return c.store.Append(OpDropIndex, 0, payload, true)
 }
 
 func (c *Collection) TraverseIndex(name string, options []byte, f func(id int64, data []byte) bool) error {
@@ -453,10 +453,10 @@ func (c *Collection) SetDefaults(defaults map[string]any) error {
 		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.store.Append(OpSetDefaults, 0, payload)
+	return c.store.Append(OpSetDefaults, 0, payload, true)
 }
 
-func (c *Collection) InsertMap(item map[string]any) (int64, error) {
+func (c *Collection) InsertMap(item map[string]any, wait bool) (int64, error) {
 	c.mu.RLock()
 	defs := c.defaults
 	c.mu.RUnlock()
@@ -484,16 +484,16 @@ func (c *Collection) InsertMap(item map[string]any) (int64, error) {
 		return 0, fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.Insert(payload)
+	return c.Insert(payload, wait)
 }
 
-func (c *Collection) InsertJSON(payload []byte) (int64, error) {
+func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
 	c.mu.RLock()
 	defs := c.defaults
 	c.mu.RUnlock()
 
 	if len(defs) == 0 {
-		return c.Insert(bytes.Clone(payload))
+		return c.Insert(bytes.Clone(payload), wait)
 	}
 
 	auto := c.autoID.Add(1)
@@ -527,7 +527,7 @@ func (c *Collection) InsertJSON(payload []byte) (int64, error) {
 	}
 
 	if !changed {
-		return c.Insert(bytes.Clone(payload))
+		return c.Insert(bytes.Clone(payload), wait)
 	}
 
 	payload, err := json.Marshal(item)
@@ -535,5 +535,5 @@ func (c *Collection) InsertJSON(payload []byte) (int64, error) {
 		return 0, fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.Insert(payload)
+	return c.Insert(payload, wait)
 }

@@ -48,7 +48,8 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		err := col.Patch(id, patch.Patch)
+		waitParam := r.URL.Query().Get("wait") == "true"
+		err := col.Patch(id, patch.Patch, waitParam)
 		if err != nil {
 			// TODO: handle err??
 			// return err

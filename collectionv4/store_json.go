@@ -37,7 +37,7 @@ func NewStoreJson(path string) (*StoreJson, error) {
 	return s, nil
 }
 
-func (s *StoreJson) Append(op uint8, id int64, data []byte) error {
+func (s *StoreJson) Append(op uint8, id int64, data []byte, sync bool) error {
 	if s.closed.Load() {
 		return fmt.Errorf("StoreJson closed")
 	}
@@ -69,6 +69,16 @@ func (s *StoreJson) Append(op uint8, id int64, data []byte) error {
 	s.mu.Unlock()
 
 	storeJsonBufferPool.Put(buf)
+	
+	if sync {
+		if err := s.writer.Flush(); err != nil {
+			return err
+		}
+		if err := s.file.Sync(); err != nil {
+			return err
+		}
+	}
+	
 	return err
 }
 

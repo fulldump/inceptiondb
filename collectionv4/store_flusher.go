@@ -4,43 +4,57 @@ import (
 	"time"
 )
 
-// StoreFlusher is a wrapper that decorates any Store
-// adding a background goroutine to periodically flush its buffers.
+// StoreFlusher is a wrapper that periodically calls Flush() and Sync() on the
+// underlying store in a background goroutine.
 type StoreFlusher struct {
-	Store
-	done     chan struct{}
-	interval time.Duration
+	store Store
+	done  chan struct{}
 }
 
-// NewStoreFlusher wraps an existing Store ensuring it flushes to disk
-// periodically, safeguarding buffered data in low-throughput situations.
 func NewStoreFlusher(store Store, interval time.Duration) *StoreFlusher {
-	s := &StoreFlusher{
-		Store:    store,
-		done:     make(chan struct{}),
-		interval: interval,
+	sf := &StoreFlusher{
+		store: store,
+		done:  make(chan struct{}),
 	}
-
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				_ = store.Flush()
-			case <-s.done:
-				// When closed, trigger a final flush gracefully
-				_ = store.Flush()
-				return
-			}
-		}
-	}()
-
-	return s
+	go sf.worker(interval)
+	return sf
 }
 
-// Close stops the background flusher and closes the underlying store.
+func (s *StoreFlusher) worker(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			_ = s.store.Flush()
+			_ = s.store.Sync()
+		case <-s.done:
+			return
+		}
+	}
+}
+
+func (s *StoreFlusher) Append(op uint8, id int64, data []byte, sync bool) error {
+	return s.store.Append(op, id, data, sync)
+}
+
+func (s *StoreFlusher) Flush() error {
+	return s.store.Flush()
+}
+
+func (s *StoreFlusher) Sync() error {
+	return s.store.Sync()
+}
+
 func (s *StoreFlusher) Close() error {
 	close(s.done)
-	return s.Store.Close()
+	// Vaciar cualquier búfer pendiente antes de cerrar
+	_ = s.store.Flush()
+	_ = s.store.Sync()
+	return s.store.Close()
+}
+
+func (s *StoreFlusher) Replay(fn func(op uint8, id int64, data []byte) error) error {
+	return s.store.Replay(fn)
 }

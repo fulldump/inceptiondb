@@ -6,7 +6,7 @@ import (
 	"reflect"
 )
 
-func (c *Collection) Patch(id int64, patch interface{}) error { // nolint:gocyclo
+func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // nolint:gocyclo
 	rec := c.records.Get(id)
 	if !rec.Active {
 		return fmt.Errorf("row %d does not exist", id)
@@ -59,7 +59,7 @@ func (c *Collection) Patch(id int64, patch interface{}) error { // nolint:gocycl
 	// Persist partial diff logic
 	// Pero en inceptiondb V4 el log es binario y soporta OpUpdate.
 	// Podemos simplemente hacer Append del newPayload.
-	if err := c.store.Append(OpUpdate, id, newPayload); err != nil {
+	if err := c.store.Append(OpUpdate, id, newPayload, wait); err != nil {
 		return fmt.Errorf("journal write failed: %v", err)
 	}
 
@@ -67,7 +67,7 @@ func (c *Collection) Patch(id int64, patch interface{}) error { // nolint:gocycl
 }
 
 // Update acts as a full payload replacement
-func (c *Collection) Update(id int64, data []byte) error {
+func (c *Collection) Update(id int64, data []byte, wait bool) error {
 	rec := c.records.Get(id)
 	if !rec.Active {
 		return fmt.Errorf("row %d does not exist", id)
@@ -90,7 +90,7 @@ func (c *Collection) Update(id int64, data []byte) error {
 		return fmt.Errorf("indexInsert: %w", err)
 	}
 
-	if err := c.store.Append(OpUpdate, id, data); err != nil {
+	if err := c.store.Append(OpUpdate, id, data, wait); err != nil {
 		return fmt.Errorf("journal write failed: %v", err)
 	}
 

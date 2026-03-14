@@ -377,7 +377,7 @@ func (h *v4Harness) createIndexes() error {
 }
 
 func (h *v4Harness) insert(item map[string]any) error {
-	_, err := h.col.InsertMap(item)
+	_, err := h.col.InsertMap(item, false)
 	return err
 }
 
@@ -451,7 +451,7 @@ func (h *v4Harness) deleteByEmail(email string) error {
 	if !found {
 		return nil
 	}
-	return h.col.Delete(id)
+	return h.col.Delete(id, false)
 }
 
 func (h *v4Harness) patchByEmail(email string, patch map[string]any) error {
@@ -471,7 +471,7 @@ func (h *v4Harness) patchByEmail(email string, patch map[string]any) error {
 	if id < 0 {
 		return nil
 	}
-	return h.col.Patch(id, patch)
+	return h.col.Patch(id, patch, false)
 }
 
 func (h *v4Harness) dumpAllCanonical(t *testing.T) []string {

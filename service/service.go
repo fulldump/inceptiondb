@@ -84,7 +84,7 @@ func (s *Service) Insert(name string, data io.Reader) error {
 			fmt.Println("ERROR:", err.Error())
 			return ErrorInsertBadJson
 		}
-		_, err = collection.InsertMap(item)
+		_, err = collection.InsertMap(item, false)
 		if err != nil {
 			// TODO: handle error properly
 			return ErrorInsertConflict
@@ -92,6 +92,4 @@ func (s *Service) Insert(name string, data io.Reader) error {
 
 		// jsonWriter.Encode(item)
 	}
-
-	return nil
 }

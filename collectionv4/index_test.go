@@ -39,7 +39,7 @@ func TestIndexMap(t *testing.T) {
 		t.Fatalf("expected Bob, got %v", found)
 	}
 
-	_, err = c.InsertMap(map[string]any{"id": 4, "email": "alice@example.com", "name": "Alice Duplicate"})
+	_, err = c.InsertMap(map[string]any{"id": 4, "email": "alice@example.com", "name": "Alice Duplicate"}, false)
 	if err == nil || !strings.Contains(err.Error(), "index conflict") {
 		t.Fatalf("expected index conflict, got %v", err)
 	}
@@ -239,7 +239,7 @@ func mustJSON(t *testing.T, value interface{}) []byte {
 
 func mustInsertMap(t *testing.T, c *Collection, item map[string]any) int64 {
 	t.Helper()
-	id, err := c.InsertMap(item)
+	id, err := c.InsertMap(item, false)
 	if err != nil {
 		t.Fatalf("insert map: %v", err)
 	}

@@ -14,3 +14,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/valyala/fastjson v1.6.10
 )
+
+require github.com/golang/snappy v1.0.0 // indirect
+
+replace inceptiondb => ./

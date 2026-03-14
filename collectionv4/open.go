@@ -2,7 +2,6 @@ package collectionv4
 
 import (
 	"path/filepath"
-	"time"
 )
 
 func OpenCollection(filename string) (*Collection, error) {
@@ -13,8 +12,10 @@ func OpenCollection(filename string) (*Collection, error) {
 		return nil, err
 	}
 
+	storeZip := NewStoreSnappy(rawStore)
+
 	// store := rawStore
-	store := NewStoreFlusher(rawStore, 1*time.Second)
+	store := NewStoreAsync(storeZip)
 
 	col := NewCollection(filepath.Base(filename), store)
 	col.SetFilepath(filename)
