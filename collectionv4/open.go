@@ -5,7 +5,8 @@ import (
 )
 
 func OpenCollection(filename string) (*Collection, error) {
-	store, err := NewStoreDisk(filename)
+	// store, err := NewStoreDisk(filename)
+	store, err := NewStoreJson(filename)
 	if err != nil {
 		return nil, err
 	}
