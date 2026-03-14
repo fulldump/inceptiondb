@@ -9,7 +9,7 @@ import (
 )
 
 type Config struct {
-	Test    string `usage:"name of the test: ALL | INSERT | PATCH | REMOVE"`
+	Test    string `usage:"name of the test: ALL | INSERT | INSERTPK | PATCH | REMOVE"`
 	Base    string `usage:"base URL"`
 	N       int64  `usage:"number of documents"`
 	Workers int    `usage:"number of workers"`
@@ -27,7 +27,7 @@ func main() {
 	}()
 
 	c := Config{
-		Test:    "insert",
+		Test:    "insertpk",
 		Base:    "",
 		N:       1_000_000,
 		Workers: 16,
@@ -38,6 +38,8 @@ func main() {
 	case "ALL":
 	case "INSERT":
 		TestInsert(c)
+	case "INSERTPK":
+		TestInsertPK(c)
 	case "PATCH":
 		TestPatch(c)
 	case "REMOVE":

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -57,6 +58,27 @@ func CreateCollection(base string) string {
 	io.Copy(os.Stdout, resp.Body)
 
 	return name
+}
+
+func CreatePKIndex(base, collectionName string) {
+	payload, _ := json.Marshal(JSON{
+		"name":   "pk",
+		"type":   "map",
+		"field":  "id",
+		"sparse": false,
+	})
+
+	req, _ := http.NewRequest("POST", base+"/v1/collections/"+collectionName+":createIndex", bytes.NewReader(payload))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		panic(fmt.Sprintf("create pk index failed: status=%s body=%s", resp.Status, string(body)))
+	}
 }
 
 func CreateServer(c *Config) (start, stop func()) {
