@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/buger/jsonparser"
-	"github.com/fulldump/inceptiondb/collectionv4/records"
 	"github.com/google/uuid"
+
+	"github.com/fulldump/inceptiondb/collectionv4/records"
 )
 
 // Record es la celda de nuestro FlatSlice
@@ -282,8 +283,11 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 	case *IndexFTSOptions:
 		typeStr = "fts"
 		index = NewIndexFTS(value)
+	case *IndexPKOptions:
+		typeStr = "pk"
+		index = NewIndexPK(value)
 	default:
-		return fmt.Errorf("unexpected options parameters, it should be [*IndexMapOptions|*IndexBTreeOptions|*IndexFTSOptions]")
+		return fmt.Errorf("unexpected options parameters, it should be [*IndexMapOptions|*IndexBTreeOptions|*IndexFTSOptions|*IndexPKOptions]")
 	}
 
 	c.indexes[name] = index
@@ -394,6 +398,12 @@ func newIndexFromCreateCommand(cmd *CreateIndexCommand) (Index, error) {
 			return nil, fmt.Errorf("decode fts index options: %w", err)
 		}
 		return NewIndexFTS(options), nil
+	case "pk":
+		options := &IndexPKOptions{}
+		if err := json.Unmarshal(optionsData, options); err != nil {
+			return nil, fmt.Errorf("decode pk index options: %w", err)
+		}
+		return NewIndexPK(options), nil
 	default:
 		return nil, fmt.Errorf("unexpected index type '%s'", cmd.Type)
 	}

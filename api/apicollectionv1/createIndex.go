@@ -64,8 +64,10 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 		options = &collectionv4.IndexBTreeOptions{}
 	case "fts":
 		options = &collectionv4.IndexFTSOptions{}
+	case "pk":
+		options = &collectionv4.IndexPKOptions{}
 	default:
-		return nil, fmt.Errorf("unexpected type '%s' instead of [map|btree|fts]", input.Type)
+		return nil, fmt.Errorf("unexpected type '%s' instead of [map|btree|fts|pk]", input.Type)
 	}
 
 	err = json.Unmarshal(requestBody, &options)

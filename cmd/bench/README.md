@@ -21,3 +21,9 @@ go run . --test insertpk --n 2_000_000 --workers 16
 ```sh
 go run . --test patch --n 100_000 --workers 16 
 ```
+
+## Test remove
+
+```sh
+go run . --test remove --n 1_000_000 --workers 16 
+```

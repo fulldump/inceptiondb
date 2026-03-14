@@ -1,6 +1,8 @@
 package collectionv4
 
-import "path/filepath"
+import (
+	"path/filepath"
+)
 
 func OpenCollection(filename string) (*Collection, error) {
 	store, err := NewStoreDisk(filename)
