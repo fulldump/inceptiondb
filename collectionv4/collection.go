@@ -419,12 +419,20 @@ func (c *Collection) FindOne(data interface{}) error { // nolint:gocyclo
 	return fmt.Errorf("collection is empty")
 }
 
+func (c *Collection) TraverseRecords(f func(id int64, data []byte) bool) {
+	c.records.Traverse(func(id int64, val Record) bool {
+		if !val.Active {
+			return true // continue traversing
+		}
+		return f(id, val.Data)
+	})
+}
+
 func (c *Collection) Traverse(f func(data []byte)) {
-	rows := c.Scan()
-	for rows.Next() {
-		_, payload := rows.Read()
-		f(payload)
-	}
+	c.TraverseRecords(func(id int64, data []byte) bool {
+		f(data)
+		return true
+	})
 }
 
 func (c *Collection) TraverseRange(from, to int, f func(data []byte)) {

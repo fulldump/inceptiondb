@@ -1,9 +1,12 @@
 package collectionv4
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"reflect"
+	"strconv"
+
+	"github.com/valyala/fastjson"
 )
 
 func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // nolint:gocyclo
@@ -12,29 +15,20 @@ func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // no
 		return fmt.Errorf("row %d does not exist", id)
 	}
 
-	originalValue, err := decodeJSONValue(rec.Data)
+	var p fastjson.Parser
+	v, err := p.ParseBytes(rec.Data)
 	if err != nil {
 		return fmt.Errorf("decode row payload: %w", err)
 	}
 
-	normalizedPatch, err := normalizeJSONValue(patch)
-	if err != nil {
-		return fmt.Errorf("normalize patch: %w", err)
-	}
-
-	newValue, changed, err := applyMergePatchValue(originalValue, normalizedPatch)
-	if err != nil {
-		return fmt.Errorf("cannot apply patch: %w", err)
-	}
+	var arena fastjson.Arena
+	merged, changed := fastjsonMergePatch(&arena, v, patch)
 
 	if !changed {
 		return nil
 	}
 
-	newPayload, err := json.Marshal(newValue)
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
-	}
+	newPayload := merged.MarshalTo(nil)
 
 	// Update record and indexes
 	c.mu.RLock()
@@ -97,141 +91,125 @@ func (c *Collection) Update(id int64, data []byte, wait bool) error {
 	return nil
 }
 
-func decodeJSONValue(raw []byte) (interface{}, error) {
-	if len(raw) == 0 {
-		return nil, nil
+func fastjsonMergePatch(arena *fastjson.Arena, original *fastjson.Value, patch interface{}) (*fastjson.Value, bool) {
+	if raw, ok := patch.(json.RawMessage); ok {
+		var decoded interface{}
+		if err := json.Unmarshal(raw, &decoded); err == nil {
+			patch = decoded
+		}
 	}
 
-	var value interface{}
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return nil, err
+	if patchMap, ok := patch.(map[string]interface{}); ok {
+		changed := false
+		if original == nil || original.Type() != fastjson.TypeObject {
+			original = arena.NewObject()
+			changed = true
+		}
+
+		for k, v := range patchMap {
+			if v == nil {
+				if original.Get(k) != nil {
+					original.Del(k)
+					changed = true
+				}
+			} else {
+				origVal := original.Get(k)
+				merged, valChanged := fastjsonMergePatch(arena, origVal, v)
+				if valChanged || origVal == nil {
+					original.Set(k, merged)
+					changed = true
+				}
+			}
+		}
+		return original, changed
 	}
-	return value, nil
+
+	newVal := buildFastjsonValue(arena, patch)
+	if original == nil {
+		return newVal, true
+	}
+
+	// Compare bytes to detect if it really changed
+	if bytes.Equal(original.MarshalTo(nil), newVal.MarshalTo(nil)) {
+		return original, false
+	}
+	return newVal, true
 }
 
-func normalizeJSONValue(value interface{}) (interface{}, error) {
-	switch v := value.(type) {
+func buildFastjsonValue(arena *fastjson.Arena, val interface{}) *fastjson.Value {
+	switch v := val.(type) {
+	case string:
+		return arena.NewString(v)
+	case json.Number:
+		return arena.NewNumberString(string(v))
+	case int:
+		return arena.NewNumberInt(v)
+	case int8:
+		return arena.NewNumberInt(int(v))
+	case int16:
+		return arena.NewNumberInt(int(v))
+	case int32:
+		return arena.NewNumberInt(int(v))
+	case int64:
+		return arena.NewNumberString(strconv.FormatInt(v, 10))
+	case uint:
+		return arena.NewNumberString(strconv.FormatUint(uint64(v), 10))
+	case uint8:
+		return arena.NewNumberInt(int(v))
+	case uint16:
+		return arena.NewNumberInt(int(v))
+	case uint32:
+		return arena.NewNumberInt(int(v))
+	case uint64:
+		return arena.NewNumberString(strconv.FormatUint(v, 10))
+	case float32:
+		return arena.NewNumberFloat64(float64(v))
+	case float64:
+		return arena.NewNumberFloat64(v)
+	case bool:
+		if v {
+			return arena.NewTrue()
+		}
+		return arena.NewFalse()
+	case nil:
+		return arena.NewNull()
+	case []interface{}:
+		arr := arena.NewArray()
+		for i, item := range v {
+			if raw, ok := item.(json.RawMessage); ok {
+				var decoded interface{}
+				_ = json.Unmarshal(raw, &decoded)
+				item = decoded
+			}
+			arr.SetArrayItem(i, buildFastjsonValue(arena, item))
+		}
+		return arr
+	case map[string]interface{}:
+		obj := arena.NewObject()
+		for k, item := range v {
+			if raw, ok := item.(json.RawMessage); ok {
+				var decoded interface{}
+				_ = json.Unmarshal(raw, &decoded)
+				item = decoded
+			}
+			obj.Set(k, buildFastjsonValue(arena, item))
+		}
+		return obj
 	case json.RawMessage:
 		var decoded interface{}
-		if err := json.Unmarshal(v, &decoded); err != nil {
-			return nil, err
+		if err := json.Unmarshal(v, &decoded); err == nil {
+			return buildFastjsonValue(arena, decoded)
 		}
-		return normalizeJSONValue(decoded)
-	case map[string]interface{}:
-		normalized := make(map[string]interface{}, len(v))
-		for key, item := range v {
-			nv, err := normalizeJSONValue(item)
-			if err != nil {
-				return nil, err
-			}
-			normalized[key] = nv
-		}
-		return normalized, nil
-	case []interface{}:
-		normalized := make([]interface{}, len(v))
-		for i, item := range v {
-			nv, err := normalizeJSONValue(item)
-			if err != nil {
-				return nil, err
-			}
-			normalized[i] = nv
-		}
-		return normalized, nil
+		return arena.NewNull()
 	default:
-		return v, nil
-	}
-}
-
-func applyMergePatchValue(original interface{}, patch interface{}) (interface{}, bool, error) {
-	switch p := patch.(type) {
-	case map[string]interface{}:
-		var originalMap map[string]interface{}
-		if m, ok := original.(map[string]interface{}); ok {
-			originalMap = m
-		}
-
-		result := make(map[string]interface{}, len(originalMap)+len(p))
-		for k, v := range originalMap {
-			result[k] = cloneJSONValue(v)
-		}
-
-		changed := false
-		for k, item := range p {
-			if item == nil {
-				if _, exists := result[k]; exists {
-					delete(result, k)
-					changed = true
-				}
-				continue
-			}
-
-			originalValue := interface{}(nil)
-			if originalMap != nil {
-				originalValue, _ = originalMap[k]
-			}
-
-			mergedValue, valueChanged, err := applyMergePatchValue(originalValue, item)
-			if err != nil {
-				return nil, false, err
-			}
-
-			if originalMap == nil {
-				changed = true
-			} else {
-				if _, exists := originalMap[k]; !exists || valueChanged {
-					changed = true
-				}
-			}
-
-			result[k] = mergedValue
-		}
-
-		return result, changed, nil
-	case []interface{}:
-		cloned := cloneJSONArray(p)
-		if current, ok := original.([]interface{}); ok {
-			if reflect.DeepEqual(current, cloned) {
-				return cloned, false, nil
+		// Fallback for custom structs or unhandled types
+		b, err := json.Marshal(v)
+		if err == nil {
+			var decoded interface{}
+			if err := json.Unmarshal(b, &decoded); err == nil {
+				return buildFastjsonValue(arena, decoded)
 			}
 		}
-		return cloned, true, nil
-	default:
-		if reflect.DeepEqual(original, p) {
-			return cloneJSONValue(p), false, nil
-		}
-		return cloneJSONValue(p), true, nil
+		return arena.NewNull()
 	}
-}
-
-func cloneJSONValue(value interface{}) interface{} {
-	switch v := value.(type) {
-	case map[string]interface{}:
-		cloned := make(map[string]interface{}, len(v))
-		for k, item := range v {
-			cloned[k] = cloneJSONValue(item)
-		}
-		return cloned
-	case []interface{}:
-		return cloneJSONArray(v)
-	case json.RawMessage:
-		if v == nil {
-			return nil
-		}
-		cloned := make(json.RawMessage, len(v))
-		copy(cloned, v)
-		return cloned
-	default:
-		return v
-	}
-}
-
-func cloneJSONArray(values []interface{}) []interface{} {
-	if values == nil {
-		return nil
-	}
-	cloned := make([]interface{}, len(values))
-	for i, item := range values {
-		cloned[i] = cloneJSONValue(item)
-	}
-	return cloned
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"runtime/pprof"
 	"strings"
 
 	"github.com/fulldump/goconfig"
@@ -18,6 +20,16 @@ type Config struct {
 var cleanups []func()
 
 func main() {
+	if os.Getenv("PPROF") != "" {
+		f, err := os.Create("cpu.prof")
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		cleanups = append(cleanups, pprof.StopCPUProfile)
+	}
 
 	defer func() {
 		fmt.Println("Cleaning up...")
@@ -27,7 +39,7 @@ func main() {
 	}()
 
 	c := Config{
-		Test:    "insert",
+		Test:    "patch",
 		Base:    "",
 		N:       1_000_000,
 		Workers: 16,

@@ -1,12 +1,12 @@
 package apicollectionv1
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 
-	"github.com/SierraSoftworks/connor"
 	"github.com/fulldump/box"
 )
 
@@ -30,23 +30,10 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}{}
 	json.Unmarshal(requestBody, &patch) // TODO: handle err
 
+	wb := bufio.NewWriterSize(w, 64*1024)
+	defer wb.Flush()
+
 	traverse(requestBody, col, func(id int64, payload []byte) bool {
-
-		hasFilter := len(patch.Filter) > 0
-		if hasFilter {
-			rowData := map[string]interface{}{}
-			json.Unmarshal(payload, &rowData) // todo: handle error here?
-
-			match, err := connor.Match(patch.Filter, rowData)
-			if err != nil {
-				// todo: handle error?
-				// return fmt.Errorf("match: %w", err)
-				return false
-			}
-			if !match {
-				return false
-			}
-		}
 
 		waitParam := r.URL.Query().Get("wait") == "true"
 		err := col.Patch(id, patch.Patch, waitParam)
@@ -61,8 +48,8 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			return false
 		}
 
-		w.Write(updated)
-		w.Write([]byte("\n"))
+		wb.Write(updated)
+		wb.Write([]byte("\n"))
 
 		return true
 	})

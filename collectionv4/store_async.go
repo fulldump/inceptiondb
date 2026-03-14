@@ -1,5 +1,7 @@
 package collectionv4
 
+import "errors"
+
 type asyncReq struct {
 	op   uint8
 	id   int64
@@ -79,7 +81,13 @@ func (s *StoreAsync) worker() {
 }
 
 // Append pushes the operation to the queue. If sync is true, it blocks until it is physically persisted.
-func (s *StoreAsync) Append(op uint8, id int64, data []byte, sync bool) error {
+func (s *StoreAsync) Append(op uint8, id int64, data []byte, sync bool) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.New("store closed")
+		}
+	}()
+
 	var done chan error
 	if sync {
 		done = make(chan error, 1) // Buffered to avoid blocking the worker
