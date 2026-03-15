@@ -39,7 +39,7 @@ func main() {
 	}()
 
 	c := Config{
-		Test:    "patch",
+		Test:    "insert",
 		Base:    "",
 		N:       1_000_000,
 		Workers: 16,

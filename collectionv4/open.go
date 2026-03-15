@@ -6,16 +6,17 @@ import (
 
 func OpenCollection(filename string) (*Collection, error) {
 	rawStore, err := NewStoreDisk(filename)
-	// rawStore, err := NewStoreJson(filename)
-	// rawStore, err := NewStoreCrazy(filename)
+	//rawStore, err := NewStoreJson(filename)
+	//rawStore, err := NewStoreCrazy(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	storeZip := NewStoreSnappy(rawStore)
+	var store Store = rawStore
 
-	// store := rawStore
-	store := NewStoreAsync(storeZip)
+	//store = NewStoreSnappy(store)
+	store = NewStoreAsync(store)
+	//store = NewStoreFlusher(store, 10*time.Second)
 
 	col := NewCollection(filepath.Base(filename), store)
 	col.SetFilepath(filename)
