@@ -31,18 +31,15 @@ func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // no
 	newPayload := merged.MarshalTo(nil)
 
 	// Update record and indexes
-	c.mu.RLock()
-	indexRemove(c.indexes, id, rec.Data)
-	c.mu.RUnlock()
+	idxMap := *c.indexes.Load()
+	indexRemove(idxMap, id, rec.Data)
 
 	c.records.Set(id, Record{
 		Data:   newPayload,
 		Active: true,
 	})
 
-	c.mu.RLock()
-	err = indexInsert(c.indexes, id, newPayload)
-	c.mu.RUnlock()
+	err = indexInsert(idxMap, id, newPayload)
 
 	if err != nil {
 		// Rollback memoria (no es 100% transaccional pero intentamos revertir)
@@ -67,18 +64,15 @@ func (c *Collection) Update(id int64, data []byte, wait bool) error {
 		return fmt.Errorf("row %d does not exist", id)
 	}
 
-	c.mu.RLock()
-	indexRemove(c.indexes, id, rec.Data)
-	c.mu.RUnlock()
+	idxMap := *c.indexes.Load()
+	indexRemove(idxMap, id, rec.Data)
 
 	c.records.Set(id, Record{
 		Data:   data,
 		Active: true,
 	})
 
-	c.mu.RLock()
-	err := indexInsert(c.indexes, id, data)
-	c.mu.RUnlock()
+	err := indexInsert(idxMap, id, data)
 
 	if err != nil {
 		return fmt.Errorf("indexInsert: %w", err)

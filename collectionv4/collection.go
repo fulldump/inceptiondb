@@ -23,38 +23,42 @@ type Record struct {
 
 type Collection struct {
 	name     string
-	filepath string
+	filepath atomic.Pointer[string]
 	store    Store
 	records  records.Records[Record]
 	maxID    atomic.Int64
 	count    atomic.Int64
 	autoID   atomic.Int64
-	indexes  map[string]Index
-	defaults map[string]any
-	mu       sync.RWMutex
+	indexes  atomic.Pointer[map[string]Index]
+	defaults atomic.Pointer[map[string]any]
+	writerMu sync.Mutex
 }
 
 func NewCollection(name string, store Store) *Collection {
-	return &Collection{
-		name:     name,
-		filepath: "",
-		store:    store,
-		records:  records.NewRecordsUltra[Record](),
-		indexes:  map[string]Index{},
-		defaults: nil,
+	c := &Collection{
+		name:    name,
+		store:   store,
+		records: records.NewRecordsUltra[Record](),
 	}
+	emptyPath := ""
+	c.filepath.Store(&emptyPath)
+	emptyIndexes := map[string]Index{}
+	c.indexes.Store(&emptyIndexes)
+	var emptyDefaults map[string]any = nil
+	c.defaults.Store(&emptyDefaults)
+	return c
 }
 
 func (c *Collection) SetFilepath(filepath string) {
-	c.mu.Lock()
-	c.filepath = filepath
-	c.mu.Unlock()
+	c.filepath.Store(&filepath)
 }
 
 func (c *Collection) Filepath() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.filepath
+	ptr := c.filepath.Load()
+	if ptr == nil {
+		return ""
+	}
+	return *ptr
 }
 
 func (c *Collection) Close() error {
@@ -69,23 +73,26 @@ func (c *Collection) Count() int64 {
 }
 
 func (c *Collection) Defaults() map[string]any {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.defaults == nil {
+	defsPtr := c.defaults.Load()
+	if defsPtr == nil || *defsPtr == nil {
 		return nil
 	}
-	out := make(map[string]any, len(c.defaults))
-	for k, v := range c.defaults {
+	defs := *defsPtr
+	out := make(map[string]any, len(defs))
+	for k, v := range defs {
 		out[k] = v
 	}
 	return out
 }
 
 func (c *Collection) ListIndexes() map[string]Index {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	out := make(map[string]Index, len(c.indexes))
-	for name, index := range c.indexes {
+	idxPtr := c.indexes.Load()
+	if idxPtr == nil {
+		return nil
+	}
+	indexes := *idxPtr
+	out := make(map[string]Index, len(indexes))
+	for name, index := range indexes {
 		out[name] = index
 	}
 	return out
@@ -116,9 +123,8 @@ func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
 		}
 	}
 
-	c.mu.RLock()
-	err := indexInsert(c.indexes, id, jsonData)
-	c.mu.RUnlock()
+	indexes := *c.indexes.Load()
+	err := indexInsert(indexes, id, jsonData)
 	if err != nil {
 		c.records.Delete(id)
 		c.count.Add(-1)
@@ -128,9 +134,8 @@ func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
 	// 2. Escribir en el Journal
 	if err := c.store.Append(OpInsert, id, jsonData, wait); err != nil {
 		// Rollback si falla el journal
-		c.mu.RLock()
-		indexRemove(c.indexes, id, jsonData)
-		c.mu.RUnlock()
+		indexes := *c.indexes.Load()
+		indexRemove(indexes, id, jsonData)
 		c.records.Delete(id)
 		c.count.Add(-1)
 		return 0, fmt.Errorf("journal write failed: %v", err)
@@ -146,9 +151,8 @@ func (c *Collection) Delete(id int64, wait bool) error {
 		return nil // Ya está borrado o no existe
 	}
 
-	c.mu.RLock()
-	err := indexRemove(c.indexes, id, rec.Data)
-	c.mu.RUnlock()
+	indexes := *c.indexes.Load()
+	err := indexRemove(indexes, id, rec.Data)
 	if err != nil {
 		return fmt.Errorf("could not free index: %w", err)
 	}
@@ -171,7 +175,10 @@ func (c *Collection) Delete(id int64, wait bool) error {
 func (c *Collection) Recover() error { // nolint:gocyclo
 	// 1. Limpiamos cualquier estado previo
 	c.records = records.NewRecordsUltra[Record]()
-	c.indexes = map[string]Index{}
+	emptyIndexes := map[string]Index{}
+	c.indexes.Store(&emptyIndexes)
+	var emptyDefaults map[string]any = nil
+	c.defaults.Store(&emptyDefaults)
 	c.maxID.Store(0)
 	c.count.Store(0)
 
@@ -188,7 +195,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 			// Si es un update, comprobamos si ya había un dato anterior para limpiar los índices
 			rec := c.records.Get(id)
 			if rec.Active {
-				indexRemove(c.indexes, id, rec.Data)
+				indexRemove(*c.indexes.Load(), id, rec.Data)
 			}
 
 			wasActive := rec.Active
@@ -200,12 +207,12 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 				c.count.Add(1)
 			}
 
-			indexInsert(c.indexes, id, data)
+			indexInsert(*c.indexes.Load(), id, data)
 
 		case OpDelete:
 			rec := c.records.Get(id)
 			if rec.Active {
-				indexRemove(c.indexes, id, rec.Data)
+				indexRemove(*c.indexes.Load(), id, rec.Data)
 				c.count.Add(-1)
 			}
 			c.records.Delete(id)
@@ -221,7 +228,14 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 				return err
 			}
 
-			c.indexes[cmd.Name] = index
+			oldIdxes := *c.indexes.Load()
+			newIdxes := make(map[string]Index, len(oldIdxes)+1)
+			for k, v := range oldIdxes {
+				newIdxes[k] = v
+			}
+			newIdxes[cmd.Name] = index
+			c.indexes.Store(&newIdxes)
+
 			for i := int64(0); i <= localMaxID; i++ {
 				rec := c.records.Get(i)
 				if rec.Active {
@@ -234,13 +248,20 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 		case OpDropIndex:
 			cmd := &DropIndexCommand{}
 			if err := json.Unmarshal(data, cmd); err == nil {
-				delete(c.indexes, cmd.Name)
+				oldIdxes := *c.indexes.Load()
+				newIdxes := make(map[string]Index, len(oldIdxes))
+				for k, v := range oldIdxes {
+					if k != cmd.Name {
+						newIdxes[k] = v
+					}
+				}
+				c.indexes.Store(&newIdxes)
 			}
 
 		case OpSetDefaults:
 			var defaults map[string]any
 			if err := json.Unmarshal(data, &defaults); err == nil {
-				c.defaults = defaults
+				c.defaults.Store(&defaults)
 			}
 
 		default:
@@ -263,10 +284,11 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 }
 
 func (c *Collection) CreateIndex(name string, options interface{}) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
 
-	if _, exists := c.indexes[name]; exists {
+	idxMap := *c.indexes.Load()
+	if _, exists := idxMap[name]; exists {
 		return fmt.Errorf("index '%s' already exists", name)
 	}
 
@@ -290,7 +312,12 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 		return fmt.Errorf("unexpected options parameters, it should be [*IndexMapOptions|*IndexBTreeOptions|*IndexFTSOptions|*IndexPKOptions]")
 	}
 
-	c.indexes[name] = index
+	newIdxMap := make(map[string]Index, len(idxMap)+1)
+	for k, v := range idxMap {
+		newIdxMap[k] = v
+	}
+	newIdxMap[name] = index
+	c.indexes.Store(&newIdxMap)
 
 	// Llenar el índice con los datos existentes
 	maxID := c.maxID.Load()
@@ -302,7 +329,7 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 		if err := index.Add(i, rec.Data); err != nil {
 			// En caso de error, podríamos hacer rollback borbrando el index de c.indexes.
 			// Pero por ahora, devolvemos el error y lo removemos.
-			delete(c.indexes, name)
+			c.indexes.Store(&idxMap)
 			return fmt.Errorf("error indexing existing data: %w", err)
 		}
 	}
@@ -325,14 +352,21 @@ func (c *Collection) Index(name string, options interface{}) error {
 }
 
 func (c *Collection) DropIndex(name string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
 
-	if _, exists := c.indexes[name]; !exists {
+	idxMap := *c.indexes.Load()
+	if _, exists := idxMap[name]; !exists {
 		return fmt.Errorf("dropIndex: index '%s' not found", name)
 	}
 
-	delete(c.indexes, name)
+	newIdxMap := make(map[string]Index, len(idxMap))
+	for k, v := range idxMap {
+		if k != name {
+			newIdxMap[k] = v
+		}
+	}
+	c.indexes.Store(&newIdxMap)
 
 	payload, err := json.Marshal(&DropIndexCommand{
 		Name: name,
@@ -345,9 +379,8 @@ func (c *Collection) DropIndex(name string) error {
 }
 
 func (c *Collection) TraverseIndex(name string, options []byte, f func(id int64, data []byte) bool) error {
-	c.mu.RLock()
-	index, exists := c.indexes[name]
-	c.mu.RUnlock()
+	idxMap := *c.indexes.Load()
+	index, exists := idxMap[name]
 	if !exists {
 		return fmt.Errorf("index '%s' not found", name)
 	}
@@ -451,10 +484,10 @@ func (c *Collection) TraverseRange(from, to int, f func(data []byte)) {
 }
 
 func (c *Collection) SetDefaults(defaults map[string]any) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
 
-	c.defaults = defaults
+	c.defaults.Store(&defaults)
 
 	payload, err := json.Marshal(defaults)
 	if err != nil {
@@ -465,9 +498,11 @@ func (c *Collection) SetDefaults(defaults map[string]any) error {
 }
 
 func (c *Collection) InsertMap(item map[string]any, wait bool) (int64, error) {
-	c.mu.RLock()
-	defs := c.defaults
-	c.mu.RUnlock()
+	defsPtr := c.defaults.Load()
+	var defs map[string]any
+	if defsPtr != nil {
+		defs = *defsPtr
+	}
 
 	auto := c.autoID.Add(1)
 
@@ -496,9 +531,11 @@ func (c *Collection) InsertMap(item map[string]any, wait bool) (int64, error) {
 }
 
 func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
-	c.mu.RLock()
-	defs := c.defaults
-	c.mu.RUnlock()
+	defsPtr := c.defaults.Load()
+	var defs map[string]any
+	if defsPtr != nil {
+		defs = *defsPtr
+	}
 
 	if len(defs) == 0 {
 		return c.Insert(bytes.Clone(payload), wait)
