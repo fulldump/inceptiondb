@@ -8,8 +8,8 @@ require (
 	github.com/fulldump/apitest v1.3.0
 	github.com/fulldump/biff v1.3.0
 	github.com/fulldump/box v0.7.0
-	github.com/fulldump/goconfig v1.7.1
-	github.com/go-json-experiment/json v0.0.0-20250910080747-cc2cfa0554c3
+	github.com/fulldump/goconfig v1.8.0
+	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
 	github.com/golang/snappy v1.0.0
 	github.com/google/btree v1.1.3
 	github.com/google/uuid v1.6.0

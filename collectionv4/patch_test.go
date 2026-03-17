@@ -3,12 +3,14 @@ package collectionv4
 import (
 	"path"
 	"testing"
+
+	"github.com/fulldump/inceptiondb/collectionv4/stores"
 )
 
 func BenchmarkPatch(b *testing.B) {
 	// Setup
 	filename := path.Join(b.TempDir(), "bench.wal")
-	store, _ := NewStoreDisk(filename)
+	store, _ := stores.NewStoreDisk(filename)
 	col := NewCollection("bench", store)
 
 	payload := []byte(`{"id": 1, "name": "Alice Wonderland", "email": "alice@example.com", "age": 30, "active": true, "balance": 1500.50, "tags": ["premium", "user"], "address": {"city": "Madrid", "zip": "28080"}}`)

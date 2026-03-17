@@ -16,11 +16,11 @@ github.com/fulldump/biff
 ## explicit; go 1.19
 github.com/fulldump/box
 github.com/fulldump/box/boxopenapi
-# github.com/fulldump/goconfig v1.7.1
-## explicit; go 1.5
+# github.com/fulldump/goconfig v1.8.0
+## explicit; go 1.20
 github.com/fulldump/goconfig
-# github.com/go-json-experiment/json v0.0.0-20250910080747-cc2cfa0554c3
-## explicit; go 1.25
+# github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
+## explicit; go 1.26
 github.com/go-json-experiment/json
 github.com/go-json-experiment/json/internal
 github.com/go-json-experiment/json/internal/jsonflags

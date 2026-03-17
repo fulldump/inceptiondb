@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/fulldump/inceptiondb/collectionv4/stores"
 	"github.com/valyala/fastjson"
 )
 
@@ -50,12 +51,12 @@ func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // no
 	// Persist partial diff logic
 	// Pero en inceptiondb V4 el log es binario y soporta OpUpdate.
 	// Podemos simplemente hacer Append del newPayload.
-	if err := c.store.Append(OpUpdate, id, newPayload, wait); err != nil {
+	if err := c.store.Append(stores.OpUpdate, id, newPayload, wait); err != nil {
 		return fmt.Errorf("journal write failed: %v", err)
 	}
 
 	if hasAsyncRemove || hasAsyncInsert {
-		c.asyncIndexOp(OpUpdate, id, append([]byte(nil), newPayload...), append([]byte(nil), rec.Data...))
+		c.asyncIndexOp(stores.OpUpdate, id, append([]byte(nil), newPayload...), append([]byte(nil), rec.Data...))
 	}
 
 	return nil
@@ -82,12 +83,12 @@ func (c *Collection) Update(id int64, data []byte, wait bool) error {
 		return fmt.Errorf("indexInsert: %w", err)
 	}
 
-	if err := c.store.Append(OpUpdate, id, data, wait); err != nil {
+	if err := c.store.Append(stores.OpUpdate, id, data, wait); err != nil {
 		return fmt.Errorf("journal write failed: %v", err)
 	}
 
 	if hasAsyncRemove || hasAsyncInsert {
-		c.asyncIndexOp(OpUpdate, id, append([]byte(nil), data...), append([]byte(nil), rec.Data...))
+		c.asyncIndexOp(stores.OpUpdate, id, append([]byte(nil), data...), append([]byte(nil), rec.Data...))
 	}
 
 	return nil

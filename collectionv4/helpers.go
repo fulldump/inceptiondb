@@ -3,9 +3,11 @@ package collectionv4
 import (
 	"fmt"
 	"time"
+
+	"github.com/fulldump/inceptiondb/collectionv4/stores"
 )
 
-func StartBackgroundFlusher(store Store, interval time.Duration) chan struct{} {
+func StartBackgroundFlusher(store stores.Store, interval time.Duration) chan struct{} {
 	stopChan := make(chan struct{})
 
 	go func() {

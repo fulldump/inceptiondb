@@ -5,12 +5,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fulldump/inceptiondb/collectionv4/stores"
 )
 
 func TestIndexMap(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "index_map.wal")
 
-	store, err := NewStoreDisk(filename)
+	store, err := stores.NewStoreDisk(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +51,7 @@ func TestIndexMap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store2, err := NewStoreDisk(filename)
+	store2, err := stores.NewStoreDisk(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +82,7 @@ func TestIndexMap(t *testing.T) {
 func TestIndexBTree(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "index_btree.wal")
 
-	store, err := NewStoreDisk(filename)
+	store, err := stores.NewStoreDisk(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +122,7 @@ func TestIndexBTree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store2, err := NewStoreDisk(filename)
+	store2, err := stores.NewStoreDisk(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +159,7 @@ func TestIndexBTree(t *testing.T) {
 func TestIndexFTS(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "index_fts.wal")
 
-	store, err := NewStoreDisk(filename)
+	store, err := stores.NewStoreDisk(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +207,7 @@ func TestIndexFTS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store2, err := NewStoreDisk(filename)
+	store2, err := stores.NewStoreDisk(filename)
 	if err != nil {
 		t.Fatal(err)
 	}

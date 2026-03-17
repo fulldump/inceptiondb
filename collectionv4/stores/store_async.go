@@ -1,4 +1,4 @@
-package collectionv4
+package stores
 
 import (
 	"errors"

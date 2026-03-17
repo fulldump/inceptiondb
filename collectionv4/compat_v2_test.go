@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/fulldump/inceptiondb/collectionv2"
+	"github.com/fulldump/inceptiondb/collectionv4/stores"
 )
 
 func TestComparatorCollectionV2VsV4(t *testing.T) {
@@ -323,12 +324,12 @@ func (h *v2Harness) dumpAllCanonical(t *testing.T) []string {
 
 type v4Harness struct {
 	path  string
-	store *StoreDisk
+	store *stores.StoreDisk
 	col   *Collection
 }
 
 func openV4Harness(path string) (*v4Harness, error) {
-	store, err := NewStoreDisk(path)
+	store, err := stores.NewStoreDisk(path)
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +353,7 @@ func (h *v4Harness) reload() error {
 			return err
 		}
 	}
-	store, err := NewStoreDisk(h.path)
+	store, err := stores.NewStoreDisk(h.path)
 	if err != nil {
 		return err
 	}

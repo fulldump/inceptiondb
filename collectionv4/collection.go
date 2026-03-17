@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fulldump/inceptiondb/collectionv4/records"
+	"github.com/fulldump/inceptiondb/collectionv4/stores"
 	"github.com/fulldump/inceptiondb/simdscan"
 )
 
@@ -22,7 +23,7 @@ type Record struct {
 type Collection struct {
 	name     string
 	filepath atomic.Pointer[string]
-	store    Store
+	store    stores.Store
 	records  records.Records[Record]
 	count    atomic.Int64
 	autoID   atomic.Int64
@@ -41,7 +42,7 @@ type asyncIndexReq struct {
 	done    chan struct{}
 }
 
-func NewCollection(name string, store Store) *Collection {
+func NewCollection(name string, store stores.Store) *Collection {
 	c := &Collection{
 		name:    name,
 		store:   store,
@@ -69,19 +70,19 @@ func (c *Collection) indexWorker() {
 		indexes := *c.indexes.Load()
 
 		switch req.op {
-		case OpInsert:
+		case stores.OpInsert:
 			for _, idx := range indexes {
 				if !idx.IsUnique() {
 					_ = idx.Add(req.id, req.data)
 				}
 			}
-		case OpDelete:
+		case stores.OpDelete:
 			for _, idx := range indexes {
 				if !idx.IsUnique() {
 					_ = idx.Remove(req.id, req.oldData)
 				}
 			}
-		case OpUpdate:
+		case stores.OpUpdate:
 			for _, idx := range indexes {
 				if !idx.IsUnique() {
 					_ = idx.Remove(req.id, req.oldData)
@@ -201,7 +202,7 @@ func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
 	}
 
 	// 2. Escribir en el Journal
-	if err := c.store.Append(OpInsert, id, jsonData, wait); err != nil {
+	if err := c.store.Append(stores.OpInsert, id, jsonData, wait); err != nil {
 		// Rollback si falla el journal
 		indexes := *c.indexes.Load()
 		indexRemoveSync(indexes, id, jsonData)
@@ -211,7 +212,7 @@ func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
 	}
 
 	if hasAsync {
-		c.asyncIndexOp(OpInsert, id, append([]byte(nil), jsonData...), nil)
+		c.asyncIndexOp(stores.OpInsert, id, append([]byte(nil), jsonData...), nil)
 	}
 
 	return id, nil
@@ -231,14 +232,14 @@ func (c *Collection) Delete(id int64, wait bool) error {
 	}
 
 	// Persistir el borrado (payload vacío)
-	if err := c.store.Append(OpDelete, id, nil, wait); err != nil {
+	if err := c.store.Append(stores.OpDelete, id, nil, wait); err != nil {
 		// Si el log falla, tenemos que deshacer el indexRemove, pero es complejo.
 		// Al menos devolvemos error
 		return err
 	}
 
 	if hasAsync {
-		c.asyncIndexOp(OpDelete, id, nil, append([]byte(nil), rec.Data...))
+		c.asyncIndexOp(stores.OpDelete, id, nil, append([]byte(nil), rec.Data...))
 	}
 
 	// Liberar memoria para el GC y marcar como inactivo
@@ -267,7 +268,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 		}
 
 		switch op {
-		case OpInsert, OpUpdate:
+		case stores.OpInsert, stores.OpUpdate:
 			// Si es un update, comprobamos si ya había un dato anterior para limpiar los índices
 			rec := c.records.Get(id)
 			if rec.Active {
@@ -285,7 +286,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 
 			indexInsertFull(*c.indexes.Load(), id, data)
 
-		case OpDelete:
+		case stores.OpDelete:
 			rec := c.records.Get(id)
 			if rec.Active {
 				indexRemoveFull(*c.indexes.Load(), id, rec.Data)
@@ -293,7 +294,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 			}
 			c.records.Delete(id)
 
-		case OpCreateIndex:
+		case stores.OpCreateIndex:
 			cmd := &CreateIndexCommand{}
 			if err := json.Unmarshal(data, cmd); err != nil {
 				return err
@@ -321,7 +322,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 				}
 			}
 
-		case OpDropIndex:
+		case stores.OpDropIndex:
 			cmd := &DropIndexCommand{}
 			if err := json.Unmarshal(data, cmd); err == nil {
 				oldIdxes := *c.indexes.Load()
@@ -334,7 +335,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 				c.indexes.Store(&newIdxes)
 			}
 
-		case OpSetDefaults:
+		case stores.OpSetDefaults:
 			var defaults map[string]any
 			if err := json.Unmarshal(data, &defaults); err == nil {
 				c.defaults.Store(&defaults)
@@ -419,7 +420,7 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.store.Append(OpCreateIndex, 0, payload, true)
+	return c.store.Append(stores.OpCreateIndex, 0, payload, true)
 }
 
 func (c *Collection) Index(name string, options interface{}) error {
@@ -450,7 +451,7 @@ func (c *Collection) DropIndex(name string) error {
 		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.store.Append(OpDropIndex, 0, payload, true)
+	return c.store.Append(stores.OpDropIndex, 0, payload, true)
 }
 
 func (c *Collection) TraverseIndex(name string, options []byte, f func(id int64, data []byte) bool) error {
@@ -569,7 +570,7 @@ func (c *Collection) SetDefaults(defaults map[string]any) error {
 		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.store.Append(OpSetDefaults, 0, payload, true)
+	return c.store.Append(stores.OpSetDefaults, 0, payload, true)
 }
 
 func (c *Collection) InsertMap(item map[string]any, wait bool) (int64, error) {
