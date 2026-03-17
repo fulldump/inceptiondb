@@ -1,6 +1,6 @@
 module github.com/fulldump/inceptiondb
 
-go 1.25.2
+go 1.26.1
 
 require (
 	github.com/SierraSoftworks/connor v1.0.2
@@ -10,11 +10,10 @@ require (
 	github.com/fulldump/box v0.7.0
 	github.com/fulldump/goconfig v1.7.1
 	github.com/go-json-experiment/json v0.0.0-20250910080747-cc2cfa0554c3
+	github.com/golang/snappy v1.0.0
 	github.com/google/btree v1.1.3
 	github.com/google/uuid v1.6.0
 	github.com/valyala/fastjson v1.6.10
 )
-
-require github.com/golang/snappy v1.0.0 // indirect
 
 replace inceptiondb => ./
