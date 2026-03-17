@@ -636,6 +636,39 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 					}
 				})
 
+				a.Alternative("Find with BTree - exclusive bounds", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:find").
+						WithBodyJson(JSON{
+							"index": "my-index",
+							"skip":  0,
+							"limit": 10,
+							"from>": JSON{
+								"category": "drink",
+								"product":  "milk",
+							},
+							"to<": JSON{
+								"category": "fruit",
+								"product":  "apple",
+							},
+						}).Do()
+					Save(resp, "Find - by BTree with exclusive bounds", ``)
+
+					expectedOrderIDs := []string{"2"}
+
+					d := json.NewDecoder(bytes.NewReader(resp.BodyBytes()))
+					i := 0
+					for {
+						item := JSON{}
+						err := d.Decode(&item)
+						if err == io.EOF {
+							break
+						}
+						biff.AssertEqual(item["id"], expectedOrderIDs[i])
+						i++
+					}
+					biff.AssertEqual(i, len(expectedOrderIDs))
+				})
+
 			})
 
 		})

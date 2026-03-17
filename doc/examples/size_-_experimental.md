@@ -20,14 +20,14 @@ Host: example.com
 
 
 HTTP/1.1 200 OK
-Content-Length: 47
-Content-Type: text/plain; charset=utf-8
+Content-Length: 46
+Content-Type: application/json
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
-    "disk": 783,
-    "index.my-index": 192,
-    "memory": 248
+    "disk": 253,
+    "index.my-index": 205,
+    "memory": -1
 }
 ```
 

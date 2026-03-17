@@ -156,6 +156,107 @@ func TestIndexBTree(t *testing.T) {
 	}
 }
 
+func TestIndexBTreeBoundsSymmetryAndCompoundPrefix(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "index_btree_bounds.wal")
+
+	store, err := stores.NewStoreDisk(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	c := NewCollection("users", store)
+
+	err = c.Index("by_age", &IndexBTreeOptions{Fields: []string{"age"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mustInsertMap(t, c, map[string]any{"id": "1", "age": 30, "name": "Alice"})
+	mustInsertMap(t, c, map[string]any{"id": "2", "age": 20, "name": "Bob"})
+	mustInsertMap(t, c, map[string]any{"id": "3", "age": 40, "name": "Charlie"})
+	mustInsertMap(t, c, map[string]any{"id": "4", "age": 25, "name": "David"})
+	c.SyncIndexes()
+
+	queryIDs := func(indexName string, opts IndexBtreeTraverse) []string {
+		t.Helper()
+		ids := []string{}
+		err := c.TraverseIndex(indexName, mustJSON(t, opts), func(id int64, data []byte) bool {
+			_ = id
+			item := map[string]any{}
+			_ = json.Unmarshal(data, &item)
+			ids = append(ids, item["id"].(string))
+			return true
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ids
+	}
+
+	assertIDs := func(got, expected []string) {
+		t.Helper()
+		if len(got) != len(expected) {
+			t.Fatalf("unexpected length: got=%v expected=%v", got, expected)
+		}
+		for i := range expected {
+			if got[i] != expected[i] {
+				t.Fatalf("unexpected ids: got=%v expected=%v", got, expected)
+			}
+		}
+	}
+
+	defaultForward := queryIDs("by_age", IndexBtreeTraverse{
+		From: map[string]interface{}{"age": 25},
+		To:   map[string]interface{}{"age": 30},
+	})
+	defaultReverse := queryIDs("by_age", IndexBtreeTraverse{
+		From:    map[string]interface{}{"age": 25},
+		To:      map[string]interface{}{"age": 30},
+		Reverse: true,
+	})
+
+	assertIDs(defaultForward, []string{"4", "1"})
+	assertIDs(defaultReverse, []string{"1", "4"})
+
+	exclusiveForward := queryIDs("by_age", IndexBtreeTraverse{
+		FromExclusive: map[string]interface{}{"age": 20},
+		ToExclusive:   map[string]interface{}{"age": 40},
+	})
+	exclusiveReverse := queryIDs("by_age", IndexBtreeTraverse{
+		FromExclusive: map[string]interface{}{"age": 20},
+		ToExclusive:   map[string]interface{}{"age": 40},
+		Reverse:       true,
+	})
+
+	assertIDs(exclusiveForward, []string{"4", "1"})
+	assertIDs(exclusiveReverse, []string{"1", "4"})
+
+	err = c.Index("by_category_product", &IndexBTreeOptions{Fields: []string{"category", "-product"}, Sparse: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mustInsertMap(t, c, map[string]any{"id": "a", "category": "fruit", "product": "orange"})
+	mustInsertMap(t, c, map[string]any{"id": "b", "category": "fruit", "product": "apple"})
+	mustInsertMap(t, c, map[string]any{"id": "c", "category": "drink", "product": "water"})
+	mustInsertMap(t, c, map[string]any{"id": "d", "category": "drink", "product": "milk"})
+	c.SyncIndexes()
+
+	prefixForward := queryIDs("by_category_product", IndexBtreeTraverse{
+		From: map[string]interface{}{"category": "fruit"},
+		To:   map[string]interface{}{"category": "fruit"},
+	})
+	prefixReverse := queryIDs("by_category_product", IndexBtreeTraverse{
+		From:    map[string]interface{}{"category": "fruit"},
+		To:      map[string]interface{}{"category": "fruit"},
+		Reverse: true,
+	})
+
+	assertIDs(prefixForward, []string{"a", "b"})
+	assertIDs(prefixReverse, []string{"b", "a"})
+}
+
 func TestIndexFTS(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "index_fts.wal")
 

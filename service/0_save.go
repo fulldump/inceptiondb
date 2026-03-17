@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -106,12 +107,18 @@ func formatJSON(body string) string {
 		return body
 	}
 
-	bytes, err := json.MarshalIndent(i, "", "    ")
+	buf := &bytes.Buffer{}
+	encoder := json.NewEncoder(buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "    ")
+	err = encoder.Encode(i)
 	if nil != err {
 		return body
 	}
 
-	return string(bytes)
+	output := strings.TrimSuffix(buf.String(), "\n")
+
+	return output
 }
 
 func writeFile(filename, text string) {

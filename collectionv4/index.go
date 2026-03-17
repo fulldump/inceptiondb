@@ -3,7 +3,6 @@ package collectionv4
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -192,40 +191,117 @@ type RowOrdered struct {
 	Values []interface{}
 }
 
+type boundMarker uint8
+
+const (
+	boundLow boundMarker = iota + 1
+	boundHigh
+)
+
+func compareFieldValues(a, b interface{}, reverse bool) int {
+	if markerA, ok := a.(boundMarker); ok {
+		switch markerA {
+		case boundLow:
+			if markerB, ok := b.(boundMarker); ok && markerB == boundLow {
+				return 0
+			}
+			return -1
+		case boundHigh:
+			if markerB, ok := b.(boundMarker); ok && markerB == boundHigh {
+				return 0
+			}
+			return 1
+		}
+	}
+	if markerB, ok := b.(boundMarker); ok {
+		switch markerB {
+		case boundLow:
+			return 1
+		case boundHigh:
+			return -1
+		}
+	}
+
+	cmp := 0
+	switch va := a.(type) {
+	case string:
+		vb, ok := b.(string)
+		if ok {
+			cmp = strings.Compare(va, vb)
+			break
+		}
+		cmp = strings.Compare(fmt.Sprintf("%T:%v", a, a), fmt.Sprintf("%T:%v", b, b))
+
+	case float64:
+		vb, ok := b.(float64)
+		if ok {
+			switch {
+			case va < vb:
+				cmp = -1
+			case va > vb:
+				cmp = 1
+			default:
+				cmp = 0
+			}
+			break
+		}
+		cmp = strings.Compare(fmt.Sprintf("%T:%v", a, a), fmt.Sprintf("%T:%v", b, b))
+
+	case bool:
+		vb, ok := b.(bool)
+		if ok {
+			switch {
+			case va == vb:
+				cmp = 0
+			case !va && vb:
+				cmp = -1
+			default:
+				cmp = 1
+			}
+			break
+		}
+		cmp = strings.Compare(fmt.Sprintf("%T:%v", a, a), fmt.Sprintf("%T:%v", b, b))
+
+	case nil:
+		if b == nil {
+			cmp = 0
+		} else {
+			cmp = -1
+		}
+
+	default:
+		cmp = strings.Compare(fmt.Sprintf("%T:%v", a, a), fmt.Sprintf("%T:%v", b, b))
+	}
+
+	if reverse {
+		return -cmp
+	}
+	return cmp
+}
+
+func compareTupleValues(options *IndexBTreeOptions, a, b []interface{}) int {
+	for i, field := range options.Fields {
+		var va, vb interface{}
+		if i < len(a) {
+			va = a[i]
+		}
+		if i < len(b) {
+			vb = b[i]
+		}
+
+		reverse := strings.HasPrefix(field, "-")
+		cmp := compareFieldValues(va, vb, reverse)
+		if cmp != 0 {
+			return cmp
+		}
+	}
+
+	return 0
+}
+
 func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 	index := btree.NewG(32, func(a, b *RowOrdered) bool {
-		for i, valA := range a.Values {
-			valB := b.Values[i]
-			if reflect.DeepEqual(valA, valB) {
-				continue
-			}
-
-			field := options.Fields[i]
-			reverse := strings.HasPrefix(field, "-")
-
-			switch valA := valA.(type) {
-			case string:
-				valB, ok := valB.(string)
-				if !ok {
-					continue
-				}
-				if reverse {
-					return !(valA < valB)
-				}
-				return valA < valB
-
-			case float64:
-				valB, ok := valB.(float64)
-				if !ok {
-					continue
-				}
-				if reverse {
-					return !(valA < valB)
-				}
-				return valA < valB
-			}
-		}
-		return false
+		return compareTupleValues(options, a.Values, b.Values) < 0
 	})
 
 	return &IndexBtree{
@@ -290,65 +366,113 @@ func (b *IndexBtree) Add(id int64, data []byte) error {
 }
 
 type IndexBtreeTraverse struct {
-	Reverse bool                   `json:"reverse"`
-	From    map[string]interface{} `json:"from"`
-	To      map[string]interface{} `json:"to"`
+	Reverse       bool                   `json:"reverse"`
+	From          map[string]interface{} `json:"from"`
+	To            map[string]interface{} `json:"to"`
+	FromExclusive map[string]interface{} `json:"from>"`
+	ToExclusive   map[string]interface{} `json:"to<"`
+}
+
+func (b *IndexBtree) buildBound(bound map[string]interface{}, lower bool) *RowOrdered {
+	values := make([]interface{}, 0, len(b.Options.Fields))
+	for _, field := range b.Options.Fields {
+		cleanField := strings.TrimPrefix(field, "-")
+		if val, exists := bound[cleanField]; exists {
+			values = append(values, val)
+			continue
+		}
+
+		if lower {
+			values = append(values, boundLow)
+		} else {
+			values = append(values, boundHigh)
+		}
+	}
+
+	return &RowOrdered{Values: values}
 }
 
 func (b *IndexBtree) Traverse(optionsData []byte, f func(id int64, data []byte) bool) {
 	options := &IndexBtreeTraverse{}
 	_ = json.Unmarshal(optionsData, options)
 
+	lowerBound := options.From
+	lowerExclusive := false
+	if len(options.FromExclusive) > 0 {
+		lowerBound = options.FromExclusive
+		lowerExclusive = true
+	}
+
+	upperBound := options.To
+	upperExclusive := false
+	if len(options.ToExclusive) > 0 {
+		upperBound = options.ToExclusive
+		upperExclusive = true
+	}
+
+	hasLower := len(lowerBound) > 0
+	hasUpper := len(upperBound) > 0
+
+	var pivotLower *RowOrdered
+	if hasLower {
+		pivotLower = b.buildBound(lowerBound, true)
+	}
+
+	var pivotUpper *RowOrdered
+	if hasUpper {
+		pivotUpper = b.buildBound(upperBound, false)
+	}
+
 	iterator := func(r *RowOrdered) bool {
+		if !options.Reverse {
+			if hasLower {
+				cmp := compareTupleValues(b.Options, r.Values, pivotLower.Values)
+				if cmp < 0 || (cmp == 0 && lowerExclusive) {
+					return true
+				}
+			}
+
+			if hasUpper {
+				cmp := compareTupleValues(b.Options, r.Values, pivotUpper.Values)
+				if cmp > 0 || (cmp == 0 && upperExclusive) {
+					return false
+				}
+			}
+		} else {
+			if hasUpper {
+				cmp := compareTupleValues(b.Options, r.Values, pivotUpper.Values)
+				if cmp > 0 || (cmp == 0 && upperExclusive) {
+					return true
+				}
+			}
+
+			if hasLower {
+				cmp := compareTupleValues(b.Options, r.Values, pivotLower.Values)
+				if cmp < 0 || (cmp == 0 && lowerExclusive) {
+					return false
+				}
+			}
+		}
+
 		return f(r.ID, nil)
-	}
-
-	hasFrom := len(options.From) > 0
-	hasTo := len(options.To) > 0
-
-	pivotFrom := &RowOrdered{}
-	if hasFrom {
-		for _, field := range b.Options.Fields {
-			field = strings.TrimPrefix(field, "-")
-			pivotFrom.Values = append(pivotFrom.Values, options.From[field])
-		}
-	}
-
-	pivotTo := &RowOrdered{}
-	if hasTo {
-		for _, field := range b.Options.Fields {
-			field = strings.TrimPrefix(field, "-")
-			pivotTo.Values = append(pivotTo.Values, options.To[field])
-		}
 	}
 
 	b.RWmutex.RLock()
 	defer b.RWmutex.RUnlock()
 
-	if !hasFrom && !hasTo {
-		if options.Reverse {
+	if options.Reverse {
+		if hasUpper {
+			b.Btree.DescendLessOrEqual(pivotUpper, iterator)
+		} else {
 			b.Btree.Descend(iterator)
-		} else {
-			b.Btree.Ascend(iterator)
 		}
-	} else if hasFrom && !hasTo {
-		if options.Reverse {
-			b.Btree.DescendGreaterThan(pivotFrom, iterator)
-		} else {
-			b.Btree.AscendGreaterOrEqual(pivotFrom, iterator)
-		}
-	} else if !hasFrom && hasTo {
-		if options.Reverse {
-			b.Btree.DescendLessOrEqual(pivotTo, iterator)
-		} else {
-			b.Btree.AscendLessThan(pivotTo, iterator)
-		}
+		return
+	}
+
+	if hasLower {
+		b.Btree.AscendGreaterOrEqual(pivotLower, iterator)
 	} else {
-		if options.Reverse {
-			b.Btree.DescendRange(pivotTo, pivotFrom, iterator)
-		} else {
-			b.Btree.AscendRange(pivotFrom, pivotTo, iterator)
-		}
+		b.Btree.Ascend(iterator)
 	}
 }
 
