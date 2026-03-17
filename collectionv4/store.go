@@ -55,7 +55,7 @@ func NewStoreDisk(path string) (*StoreDisk, error) {
 		file:   f,
 		writer: bufio.NewWriterSize(f, 1024*1024), // Buffer de 1MB para no castigar el disco
 	}
-	
+
 	return s, nil
 }
 

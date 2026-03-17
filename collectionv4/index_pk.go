@@ -7,7 +7,7 @@ import (
 	"hash/fnv"
 	"sync"
 
-	"github.com/buger/jsonparser"
+	"github.com/fulldump/inceptiondb/simdscan"
 )
 
 const indexPKNumShards = 256
@@ -44,27 +44,22 @@ func (idx *IndexPK) extractPK(payload []byte) (string, error) {
 	}
 
 	if len(idx.paths) == 1 {
-		val, t, _, err := jsonparser.Get(payload, idx.paths[0]...)
+		// Single path (top-level or nested) → use SIMD
+		val, _, err := simdscan.GetPath(payload, idx.paths[0]...)
 		if err != nil {
 			return "", err
-		}
-		if t == jsonparser.String {
-			return string(val), nil
 		}
 		return string(val), nil
 	}
 
+	// Composite PK: concatenate values from multiple paths
 	var buf bytes.Buffer
 	for i, path := range idx.paths {
-		val, t, _, err := jsonparser.Get(payload, path...)
+		val, _, err := simdscan.GetPath(payload, path...)
 		if err != nil {
 			return "", err
 		}
-		if t == jsonparser.String {
-			buf.Write(val)
-		} else {
-			buf.Write(val)
-		}
+		buf.Write(val)
 		if i < len(idx.paths)-1 {
 			buf.WriteByte('|')
 		}
@@ -82,7 +77,7 @@ func getShardIndex(key string) uint32 {
 func (idx *IndexPK) Add(id int64, data []byte) error {
 	key, err := idx.extractPK(data)
 	if err != nil {
-		if errors.Is(err, jsonparser.KeyPathNotFoundError) {
+		if errors.Is(err, simdscan.ErrNotFound) {
 			return fmt.Errorf("primary key missing in payload")
 		}
 		return err
@@ -144,4 +139,8 @@ func (idx *IndexPK) GetOptions() interface{} {
 	return &IndexPKOptions{
 		Paths: idx.paths,
 	}
+}
+
+func (idx *IndexPK) IsUnique() bool {
+	return true
 }

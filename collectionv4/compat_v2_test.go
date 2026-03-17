@@ -51,6 +51,7 @@ func TestComparatorCollectionV2VsV4(t *testing.T) {
 		}
 	}
 
+	v4.col.SyncIndexes()
 	assertEqualQueries(t, v2, v4)
 
 	if err := v2.patchByEmail("alice@example.com", map[string]any{"content": "hello cosmos"}); err != nil {
@@ -67,6 +68,7 @@ func TestComparatorCollectionV2VsV4(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	v4.col.SyncIndexes()
 	assertEqualQueries(t, v2, v4)
 
 	v2BeforeReload := v2.dumpAllCanonical(t)
@@ -82,6 +84,7 @@ func TestComparatorCollectionV2VsV4(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	v4.col.SyncIndexes()
 	assertEqualQueries(t, v2, v4)
 
 	v2AfterReload := v2.dumpAllCanonical(t)

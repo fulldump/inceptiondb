@@ -4,11 +4,34 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/buger/jsonparser"
 	"github.com/google/btree"
+
+	"github.com/fulldump/inceptiondb/simdscan"
 )
+
+// simdToInterface converts a simdscan value+type to a Go interface{}
+// compatible with the BTree comparator (which expects string or float64).
+func simdToInterface(val []byte, t simdscan.Type) interface{} {
+	switch t {
+	case simdscan.TypeString:
+		return string(val)
+	case simdscan.TypeNumber:
+		f, err := strconv.ParseFloat(string(val), 64)
+		if err != nil {
+			return string(val)
+		}
+		return f
+	case simdscan.TypeBoolean:
+		return val[0] == 't'
+	default:
+		return string(val)
+	}
+}
 
 type Index interface {
 	Add(id int64, data []byte) error
@@ -16,6 +39,7 @@ type Index interface {
 	Traverse(options []byte, f func(id int64, data []byte) bool)
 	GetType() string
 	GetOptions() interface{}
+	IsUnique() bool
 }
 
 // --- IndexMap ---
@@ -44,44 +68,33 @@ func NewIndexMap(options *IndexMapOptions) *IndexMap {
 }
 
 func (i *IndexMap) Remove(id int64, data []byte) error {
-	var item map[string]any
-	// TODO: Performance optimization bypassing map decoding
-	if err := json.Unmarshal(data, &item); err != nil {
-		return fmt.Errorf("unmarshal in remove: %w", err)
-	}
-
 	field := i.Options.Field
-	itemValue, itemExists := item[field]
-	if !itemExists {
+	val, dt, err := simdscan.GetField(data, field)
+	if err != nil {
 		return nil
 	}
 
 	i.RWmutex.Lock()
 	defer i.RWmutex.Unlock()
 
-	switch value := itemValue.(type) {
-	case string:
-		delete(i.Entries, value)
-	case []interface{}:
-		for _, v := range value {
-			if s, ok := v.(string); ok {
-				delete(i.Entries, s)
+	switch dt {
+	case simdscan.TypeString:
+		delete(i.Entries, string(val))
+	case simdscan.TypeArray:
+		jsonparser.ArrayEach(data, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+			if dataType == jsonparser.String {
+				delete(i.Entries, string(value))
 			}
-		}
+		}, field)
 	}
 
 	return nil
 }
 
 func (i *IndexMap) Add(id int64, data []byte) error {
-	var item map[string]interface{}
-	if err := json.Unmarshal(data, &item); err != nil {
-		return fmt.Errorf("unmarshal in add: %w", err)
-	}
-
 	field := i.Options.Field
-	itemValue, itemExists := item[field]
-	if !itemExists {
+	val, dt, err := simdscan.GetField(data, field)
+	if err != nil {
 		if i.Options.Sparse {
 			return nil
 		}
@@ -91,28 +104,38 @@ func (i *IndexMap) Add(id int64, data []byte) error {
 	i.RWmutex.Lock()
 	defer i.RWmutex.Unlock()
 
-	switch value := itemValue.(type) {
-	case string:
-		if _, exists := i.Entries[value]; exists {
-			return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
+	switch dt {
+	case simdscan.TypeString:
+		k := string(val)
+		if _, exists := i.Entries[k]; exists {
+			return fmt.Errorf("index conflict: field '%s' with value '%s'", field, k)
 		}
-		i.Entries[value] = &IndexMapEntry{ID: id}
+		i.Entries[k] = &IndexMapEntry{ID: id}
 
-	case []interface{}:
-		for _, v := range value {
-			s, ok := v.(string)
-			if !ok {
-				continue
+	case simdscan.TypeArray:
+		// First pass: check for conflicts
+		var conflict error
+		jsonparser.ArrayEach(data, func(value []byte, adt jsonparser.ValueType, offset int, err error) {
+			if conflict != nil {
+				return
 			}
-			if _, exists := i.Entries[s]; exists {
-				return fmt.Errorf("index conflict: field '%s' with value '%s'", field, value)
+			if adt == jsonparser.String {
+				s := string(value)
+				if _, exists := i.Entries[s]; exists {
+					conflict = fmt.Errorf("index conflict: field '%s' with value '%s'", field, s)
+				}
 			}
+		}, field)
+		if conflict != nil {
+			return conflict
 		}
-		for _, v := range value {
-			if s, ok := v.(string); ok {
-				i.Entries[s] = &IndexMapEntry{ID: id}
+		// Second pass: insert all
+		jsonparser.ArrayEach(data, func(value []byte, adt jsonparser.ValueType, offset int, err error) {
+			if adt == jsonparser.String {
+				i.Entries[string(value)] = &IndexMapEntry{ID: id}
 			}
-		}
+		}, field)
+
 	default:
 		return fmt.Errorf("type not supported by IndexMap")
 	}
@@ -144,6 +167,10 @@ func (i *IndexMap) GetType() string {
 
 func (i *IndexMap) GetOptions() interface{} {
 	return i.Options
+}
+
+func (i *IndexMap) IsUnique() bool {
+	return true
 }
 
 // --- IndexBtree ---
@@ -209,17 +236,14 @@ func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 }
 
 func (b *IndexBtree) Remove(id int64, data []byte) error {
-	var item map[string]interface{}
-	if err := json.Unmarshal(data, &item); err != nil {
-		return fmt.Errorf("unmarshal in remove (btree): %w", err)
-	}
-
 	values := make([]interface{}, 0, len(b.Options.Fields))
 	for _, field := range b.Options.Fields {
-		field = strings.TrimPrefix(field, "-")
-		if v, exists := item[field]; exists {
-			values = append(values, v)
+		cleanField := strings.TrimPrefix(field, "-")
+		val, dt, err := simdscan.GetField(data, cleanField)
+		if err != nil {
+			continue
 		}
+		values = append(values, simdToInterface(val, dt))
 	}
 
 	b.RWmutex.Lock()
@@ -233,23 +257,17 @@ func (b *IndexBtree) Remove(id int64, data []byte) error {
 }
 
 func (b *IndexBtree) Add(id int64, data []byte) error {
-	var item map[string]interface{}
-	if err := json.Unmarshal(data, &item); err != nil {
-		return fmt.Errorf("unmarshal in add (btree): %w", err)
-	}
-
 	var values []interface{}
 	for _, field := range b.Options.Fields {
 		cleanField := strings.TrimPrefix(field, "-")
-		value, exists := item[cleanField]
-		if exists {
-			values = append(values, value)
-			continue
+		val, dt, err := simdscan.GetField(data, cleanField)
+		if err != nil {
+			if b.Options.Sparse {
+				return nil
+			}
+			return fmt.Errorf("field '%s' not defined", cleanField)
 		}
-		if b.Options.Sparse {
-			return nil
-		}
-		return fmt.Errorf("field '%s' not defined", cleanField)
+		values = append(values, simdToInterface(val, dt))
 	}
 
 	if b.Options.Unique {
@@ -342,6 +360,10 @@ func (b *IndexBtree) GetOptions() interface{} {
 	return b.Options
 }
 
+func (b *IndexBtree) IsUnique() bool {
+	return b.Options.Unique
+}
+
 // --- IndexFTS ---
 
 type IndexFTS struct {
@@ -368,23 +390,16 @@ func (i *IndexFTS) tokenize(text string) []string {
 }
 
 func (i *IndexFTS) Add(id int64, data []byte) error {
-	var item map[string]interface{}
-	if err := json.Unmarshal(data, &item); err != nil {
-		return fmt.Errorf("unmarshal in add (fts): %w", err)
-	}
-
 	field := i.Options.Field
-	value, exists := item[field]
-	if !exists {
+	val, dt, err := simdscan.GetField(data, field)
+	if err != nil {
 		return nil // Field missing, skip
 	}
-
-	strValue, ok := value.(string)
-	if !ok {
+	if dt != simdscan.TypeString {
 		return nil // Not a string, skip
 	}
 
-	tokens := i.tokenize(strValue)
+	tokens := i.tokenize(string(val))
 
 	i.RWmutex.Lock()
 	defer i.RWmutex.Unlock()
@@ -444,23 +459,16 @@ func (i *IndexFTS) Traverse(optionsData []byte, f func(id int64, data []byte) bo
 }
 
 func (i *IndexFTS) Remove(id int64, data []byte) error {
-	var item map[string]interface{}
-	if err := json.Unmarshal(data, &item); err != nil {
-		return fmt.Errorf("unmarshal in remove (fts): %w", err)
-	}
-
 	field := i.Options.Field
-	value, exists := item[field]
-	if !exists {
+	val, dt, err := simdscan.GetField(data, field)
+	if err != nil {
+		return nil
+	}
+	if dt != simdscan.TypeString {
 		return nil
 	}
 
-	strValue, ok := value.(string)
-	if !ok {
-		return nil
-	}
-
-	tokens := i.tokenize(strValue)
+	tokens := i.tokenize(string(val))
 
 	i.RWmutex.Lock()
 	defer i.RWmutex.Unlock()
@@ -483,4 +491,8 @@ func (i *IndexFTS) GetType() string {
 
 func (i *IndexFTS) GetOptions() interface{} {
 	return i.Options
+}
+
+func (i *IndexFTS) IsUnique() bool {
+	return false
 }

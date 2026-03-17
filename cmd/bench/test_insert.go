@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -70,7 +71,12 @@ func TestInsert(c Config) {
 				if n < 0 {
 					break
 				}
-				fmt.Fprintf(wb, "{\"id\":%d,\"n\":\"%d\"}\n", n, n)
+				v := strconv.FormatInt(n, 10)
+				wb.WriteString(`{"id":`)
+				wb.WriteString(v)
+				wb.WriteString(`,"n":"`)
+				wb.WriteString(v)
+				wb.WriteString("\"}\n")
 			}
 			wb.Flush()
 			w.Close()

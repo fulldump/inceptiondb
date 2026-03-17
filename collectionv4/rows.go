@@ -18,7 +18,7 @@ func (c *Collection) Scan() *Rows {
 // Next avanza al siguiente registro válido (saltando huecos).
 // Devuelve false cuando no hay más registros.
 func (r *Rows) Next() bool {
-	maxID := r.col.maxID.Load()
+	maxID := r.col.MaxID()
 
 	for {
 		if r.index > maxID {

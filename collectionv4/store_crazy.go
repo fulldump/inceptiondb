@@ -37,7 +37,7 @@ func NewStoreCrazy(path string) (*StoreCrazy, error) {
 		file:   f,
 		writer: bufio.NewWriterSize(f, 1024*1024), // 1MB buffer
 	}
-	
+
 	return s, nil
 }
 
@@ -105,7 +105,7 @@ func (s *StoreCrazy) Close() error {
 	if s.closed.Swap(true) {
 		return nil
 	}
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

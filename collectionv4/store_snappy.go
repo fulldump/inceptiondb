@@ -1,8 +1,8 @@
 package collectionv4
 
 import (
-	"sync"
 	"github.com/golang/snappy"
+	"sync"
 )
 
 // StoreSnappy is a wrapper that compresses payloads using the fast Snappy algorithm.

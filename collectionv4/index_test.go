@@ -24,6 +24,7 @@ func TestIndexMap(t *testing.T) {
 	mustInsertMap(t, c, map[string]any{"id": 1, "email": "alice@example.com", "name": "Alice"})
 	mustInsertMap(t, c, map[string]any{"id": 2, "email": "bob@example.com", "name": "Bob"})
 	mustInsertMap(t, c, map[string]any{"id": 3, "email": "charlie@example.com", "name": "Charlie"})
+	c.SyncIndexes()
 
 	var found map[string]any
 	err = c.TraverseIndex("by_email", mustJSON(t, IndexMapTraverse{Value: "bob@example.com"}), func(id int64, data []byte) bool {
@@ -56,6 +57,7 @@ func TestIndexMap(t *testing.T) {
 	if err := c2.Recover(); err != nil {
 		t.Fatal(err)
 	}
+	c2.SyncIndexes()
 
 	found = nil
 	err = c2.TraverseIndex("by_email", mustJSON(t, IndexMapTraverse{Value: "alice@example.com"}), func(id int64, data []byte) bool {
@@ -93,6 +95,7 @@ func TestIndexBTree(t *testing.T) {
 	mustInsertMap(t, c, map[string]any{"id": 2, "age": 20, "name": "Bob"})
 	mustInsertMap(t, c, map[string]any{"id": 3, "age": 40, "name": "Charlie"})
 	mustInsertMap(t, c, map[string]any{"id": 4, "age": 25, "name": "David"})
+	c.SyncIndexes()
 
 	var names []string
 	err = c.TraverseIndex("by_age", mustJSON(t, IndexBtreeTraverse{
@@ -125,6 +128,7 @@ func TestIndexBTree(t *testing.T) {
 	if err := c2.Recover(); err != nil {
 		t.Fatal(err)
 	}
+	c2.SyncIndexes()
 
 	names = nil
 	err = c2.TraverseIndex("by_age", mustJSON(t, IndexBtreeTraverse{
@@ -167,6 +171,7 @@ func TestIndexFTS(t *testing.T) {
 	mustInsertMap(t, c, map[string]any{"id": 1, "content": "hello world"})
 	mustInsertMap(t, c, map[string]any{"id": 2, "content": "hello there"})
 	mustInsertMap(t, c, map[string]any{"id": 3, "content": "world of go"})
+	c.SyncIndexes()
 
 	count := 0
 	err = c.TraverseIndex("by_content", mustJSON(t, IndexFTSTraverse{Match: "hello"}), func(id int64, data []byte) bool {
@@ -208,6 +213,7 @@ func TestIndexFTS(t *testing.T) {
 	if err := c2.Recover(); err != nil {
 		t.Fatal(err)
 	}
+	c2.SyncIndexes()
 
 	count = 0
 	err = c2.TraverseIndex("by_content", mustJSON(t, IndexFTSTraverse{Match: "go"}), func(id int64, data []byte) bool {

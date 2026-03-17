@@ -213,3 +213,18 @@ func (r *RecordsUltra[T]) Traverse(f func(id int64, val T) bool) {
 		}
 	}
 }
+
+func (r *RecordsUltra[T]) MaxID() int64 {
+	var maxID int64
+	for i := 0; i < recordsUltraNumShards; i++ {
+		shard := r.shards[i]
+		shard.mutex.RLock()
+		localID := shard.localID
+		shard.mutex.RUnlock()
+		id := (localID << recordsUltraShardBits) | int64(shard.shardIndex)
+		if id > maxID {
+			maxID = id
+		}
+	}
+	return maxID
+}

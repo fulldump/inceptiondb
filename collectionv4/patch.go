@@ -32,14 +32,14 @@ func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // no
 
 	// Update record and indexes
 	idxMap := *c.indexes.Load()
-	indexRemove(idxMap, id, rec.Data)
+	hasAsyncRemove, _ := indexRemoveSync(idxMap, id, rec.Data)
 
 	c.records.Set(id, Record{
 		Data:   newPayload,
 		Active: true,
 	})
 
-	err = indexInsert(idxMap, id, newPayload)
+	hasAsyncInsert, err := indexInsertSync(idxMap, id, newPayload)
 
 	if err != nil {
 		// Rollback memoria (no es 100% transaccional pero intentamos revertir)
@@ -54,6 +54,10 @@ func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // no
 		return fmt.Errorf("journal write failed: %v", err)
 	}
 
+	if hasAsyncRemove || hasAsyncInsert {
+		c.asyncIndexOp(OpUpdate, id, append([]byte(nil), newPayload...), append([]byte(nil), rec.Data...))
+	}
+
 	return nil
 }
 
@@ -65,14 +69,14 @@ func (c *Collection) Update(id int64, data []byte, wait bool) error {
 	}
 
 	idxMap := *c.indexes.Load()
-	indexRemove(idxMap, id, rec.Data)
+	hasAsyncRemove, _ := indexRemoveSync(idxMap, id, rec.Data)
 
 	c.records.Set(id, Record{
 		Data:   data,
 		Active: true,
 	})
 
-	err := indexInsert(idxMap, id, data)
+	hasAsyncInsert, err := indexInsertSync(idxMap, id, data)
 
 	if err != nil {
 		return fmt.Errorf("indexInsert: %w", err)
@@ -80,6 +84,10 @@ func (c *Collection) Update(id int64, data []byte, wait bool) error {
 
 	if err := c.store.Append(OpUpdate, id, data, wait); err != nil {
 		return fmt.Errorf("journal write failed: %v", err)
+	}
+
+	if hasAsyncRemove || hasAsyncInsert {
+		c.asyncIndexOp(OpUpdate, id, append([]byte(nil), data...), append([]byte(nil), rec.Data...))
 	}
 
 	return nil

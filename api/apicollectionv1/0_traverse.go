@@ -70,7 +70,7 @@ func traverse(requestBody []byte, col *collectionv4.Collection, f func(id int64,
 						}
 						continue
 					}
-					
+
 					switch exp := expected.(type) {
 					case string:
 						if dataType != jsonparser.String {
@@ -106,12 +106,12 @@ func traverse(requestBody []byte, col *collectionv4.Collection, f func(id int64,
 					default:
 						match = false
 					}
-					
+
 					if !match {
 						break
 					}
 				}
-				
+
 				if !match {
 					return true
 				}

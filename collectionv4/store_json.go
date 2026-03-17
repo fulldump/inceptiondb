@@ -33,7 +33,7 @@ func NewStoreJson(path string) (*StoreJson, error) {
 		file:   f,
 		writer: bufio.NewWriterSize(f, 4*1024*1024), // 4MB buffer for good throughput
 	}
-	
+
 	return s, nil
 }
 
@@ -46,11 +46,11 @@ func (s *StoreJson) Append(op uint8, id int64, data []byte, sync bool) error {
 	buf.Reset()
 
 	buf.WriteString(`{"op":`)
-	
-	// Use stack-allocated byte array for formatting 
+
+	// Use stack-allocated byte array for formatting
 	var numBuf [32]byte
 	buf.Write(strconv.AppendUint(numBuf[:0], uint64(op), 10))
-	
+
 	buf.WriteString(`,"id":`)
 	buf.Write(strconv.AppendInt(numBuf[:0], id, 10))
 
@@ -62,14 +62,14 @@ func (s *StoreJson) Append(op uint8, id int64, data []byte, sync bool) error {
 	buf.WriteString("}\n")
 
 	finalData := buf.Bytes()
-	
+
 	// Minimal critical section to write to our buffer
 	s.mu.Lock()
 	_, err := s.writer.Write(finalData)
 	s.mu.Unlock()
 
 	storeJsonBufferPool.Put(buf)
-	
+
 	if sync {
 		if err := s.writer.Flush(); err != nil {
 			return err
@@ -78,7 +78,7 @@ func (s *StoreJson) Append(op uint8, id int64, data []byte, sync bool) error {
 			return err
 		}
 	}
-	
+
 	return err
 }
 

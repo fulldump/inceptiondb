@@ -62,9 +62,9 @@ func CreateCollection(base string) string {
 
 func CreatePKIndex(base, collectionName string) {
 	payload, _ := json.Marshal(JSON{
-		"name":   "pk",
-		"type":   "pk",
-		"paths":  [][]string{{"id"}},
+		"name":  "pk",
+		"type":  "pk",
+		"paths": [][]string{{"id"}},
 	})
 
 	req, _ := http.NewRequest("POST", base+"/v1/collections/"+collectionName+":createIndex", bytes.NewReader(payload))

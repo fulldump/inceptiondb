@@ -8,10 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/buger/jsonparser"
-	"github.com/google/uuid"
-
 	"github.com/fulldump/inceptiondb/collectionv4/records"
+	"github.com/fulldump/inceptiondb/simdscan"
 )
 
 // Record es la celda de nuestro FlatSlice
@@ -26,12 +24,21 @@ type Collection struct {
 	filepath atomic.Pointer[string]
 	store    Store
 	records  records.Records[Record]
-	maxID    atomic.Int64
 	count    atomic.Int64
 	autoID   atomic.Int64
 	indexes  atomic.Pointer[map[string]Index]
 	defaults atomic.Pointer[map[string]any]
 	writerMu sync.Mutex
+	idxReqs  chan asyncIndexReq
+	idxDone  chan struct{}
+}
+
+type asyncIndexReq struct {
+	op      uint8
+	id      int64
+	data    []byte
+	oldData []byte
+	done    chan struct{}
 }
 
 func NewCollection(name string, store Store) *Collection {
@@ -39,6 +46,8 @@ func NewCollection(name string, store Store) *Collection {
 		name:    name,
 		store:   store,
 		records: records.NewRecordsUltra[Record](),
+		idxReqs: make(chan asyncIndexReq, 1000000),
+		idxDone: make(chan struct{}),
 	}
 	emptyPath := ""
 	c.filepath.Store(&emptyPath)
@@ -46,7 +55,57 @@ func NewCollection(name string, store Store) *Collection {
 	c.indexes.Store(&emptyIndexes)
 	var emptyDefaults map[string]any = nil
 	c.defaults.Store(&emptyDefaults)
+	go c.indexWorker()
 	return c
+}
+
+func (c *Collection) indexWorker() {
+	for req := range c.idxReqs {
+		if req.done != nil {
+			close(req.done)
+			continue
+		}
+
+		indexes := *c.indexes.Load()
+
+		switch req.op {
+		case OpInsert:
+			for _, idx := range indexes {
+				if !idx.IsUnique() {
+					_ = idx.Add(req.id, req.data)
+				}
+			}
+		case OpDelete:
+			for _, idx := range indexes {
+				if !idx.IsUnique() {
+					_ = idx.Remove(req.id, req.oldData)
+				}
+			}
+		case OpUpdate:
+			for _, idx := range indexes {
+				if !idx.IsUnique() {
+					_ = idx.Remove(req.id, req.oldData)
+					_ = idx.Add(req.id, req.data)
+				}
+			}
+		}
+	}
+	close(c.idxDone)
+}
+
+func (c *Collection) SyncIndexes() {
+	done := make(chan struct{})
+	c.idxReqs <- asyncIndexReq{done: done}
+	<-done
+}
+
+func (c *Collection) asyncIndexOp(op uint8, id int64, data []byte, oldData []byte) {
+	c.idxReqs <- asyncIndexReq{
+		op:      op,
+		id:      id,
+		data:    data,
+		oldData: oldData,
+	}
 }
 
 func (c *Collection) SetFilepath(filepath string) {
@@ -62,6 +121,10 @@ func (c *Collection) Filepath() string {
 }
 
 func (c *Collection) Close() error {
+	if c.idxReqs != nil {
+		close(c.idxReqs)
+		<-c.idxDone
+	}
 	if c.store == nil {
 		return nil
 	}
@@ -70,6 +133,20 @@ func (c *Collection) Close() error {
 
 func (c *Collection) Count() int64 {
 	return c.count.Load()
+}
+
+func (c *Collection) MaxID() int64 {
+	if ul, ok := c.records.(*records.RecordsUltra[Record]); ok {
+		return ul.MaxID()
+	}
+	var maxID int64
+	c.records.Traverse(func(id int64, val Record) bool {
+		if id > maxID {
+			maxID = id
+		}
+		return true
+	})
+	return maxID
 }
 
 func (c *Collection) Defaults() map[string]any {
@@ -115,16 +192,8 @@ func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
 	id := c.records.Insert(rec)
 	c.count.Add(1)
 
-	// Actualizamos el maxID atómicamente
-	for {
-		curr := c.maxID.Load()
-		if id <= curr || c.maxID.CompareAndSwap(curr, id) {
-			break
-		}
-	}
-
 	indexes := *c.indexes.Load()
-	err := indexInsert(indexes, id, jsonData)
+	hasAsync, err := indexInsertSync(indexes, id, jsonData)
 	if err != nil {
 		c.records.Delete(id)
 		c.count.Add(-1)
@@ -135,10 +204,14 @@ func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
 	if err := c.store.Append(OpInsert, id, jsonData, wait); err != nil {
 		// Rollback si falla el journal
 		indexes := *c.indexes.Load()
-		indexRemove(indexes, id, jsonData)
+		indexRemoveSync(indexes, id, jsonData)
 		c.records.Delete(id)
 		c.count.Add(-1)
 		return 0, fmt.Errorf("journal write failed: %v", err)
+	}
+
+	if hasAsync {
+		c.asyncIndexOp(OpInsert, id, append([]byte(nil), jsonData...), nil)
 	}
 
 	return id, nil
@@ -152,7 +225,7 @@ func (c *Collection) Delete(id int64, wait bool) error {
 	}
 
 	indexes := *c.indexes.Load()
-	err := indexRemove(indexes, id, rec.Data)
+	hasAsync, err := indexRemoveSync(indexes, id, rec.Data)
 	if err != nil {
 		return fmt.Errorf("could not free index: %w", err)
 	}
@@ -162,6 +235,10 @@ func (c *Collection) Delete(id int64, wait bool) error {
 		// Si el log falla, tenemos que deshacer el indexRemove, pero es complejo.
 		// Al menos devolvemos error
 		return err
+	}
+
+	if hasAsync {
+		c.asyncIndexOp(OpDelete, id, nil, append([]byte(nil), rec.Data...))
 	}
 
 	// Liberar memoria para el GC y marcar como inactivo
@@ -179,7 +256,6 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 	c.indexes.Store(&emptyIndexes)
 	var emptyDefaults map[string]any = nil
 	c.defaults.Store(&emptyDefaults)
-	c.maxID.Store(0)
 	c.count.Store(0)
 
 	var localMaxID int64 = 0
@@ -195,7 +271,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 			// Si es un update, comprobamos si ya había un dato anterior para limpiar los índices
 			rec := c.records.Get(id)
 			if rec.Active {
-				indexRemove(*c.indexes.Load(), id, rec.Data)
+				indexRemoveFull(*c.indexes.Load(), id, rec.Data)
 			}
 
 			wasActive := rec.Active
@@ -207,12 +283,12 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 				c.count.Add(1)
 			}
 
-			indexInsert(*c.indexes.Load(), id, data)
+			indexInsertFull(*c.indexes.Load(), id, data)
 
 		case OpDelete:
 			rec := c.records.Get(id)
 			if rec.Active {
-				indexRemove(*c.indexes.Load(), id, rec.Data)
+				indexRemoveFull(*c.indexes.Load(), id, rec.Data)
 				c.count.Add(-1)
 			}
 			c.records.Delete(id)
@@ -271,7 +347,6 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 		return nil
 	})
 
-	c.maxID.Store(localMaxID)
 	c.autoID.Store(c.Count())
 
 	if err != nil {
@@ -320,7 +395,7 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 	c.indexes.Store(&newIdxMap)
 
 	// Llenar el índice con los datos existentes
-	maxID := c.maxID.Load()
+	maxID := c.MaxID()
 	for i := int64(0); i <= maxID; i++ {
 		rec := c.records.Get(i)
 		if !rec.Active {
@@ -512,7 +587,7 @@ func (c *Collection) InsertMap(item map[string]any, wait bool) (int64, error) {
 		}
 		switch v {
 		case "uuid()":
-			item[k] = uuid.NewString()
+			item[k] = FastUUID()
 		case "unixnano()":
 			item[k] = time.Now().UnixNano()
 		case "auto()":
@@ -546,7 +621,7 @@ func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
 	var item map[string]any
 
 	for k, v := range defs {
-		_, _, _, err := jsonparser.Get(payload, k)
+		_, _, err := simdscan.GetField(payload, k)
 		if err == nil {
 			continue
 		}
@@ -561,7 +636,7 @@ func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
 
 		switch v {
 		case "uuid()":
-			item[k] = uuid.NewString()
+			item[k] = FastUUID()
 		case "unixnano()":
 			item[k] = time.Now().UnixNano()
 		case "auto()":
