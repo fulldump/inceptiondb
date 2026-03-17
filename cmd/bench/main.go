@@ -11,7 +11,7 @@ import (
 )
 
 type Config struct {
-	Test    string `usage:"name of the test: ALL | INSERT | INSERTPK | PATCH | REMOVE"`
+	Test    string `usage:"name of the test: ALL | INSERT | INSERTPK | INSERTBTREE | RETRIEVEBTREE | RETRIEVEFS | PATCH | REMOVE"`
 	Base    string `usage:"base URL"`
 	N       int64  `usage:"number of documents"`
 	Workers int    `usage:"number of workers"`
@@ -52,6 +52,12 @@ func main() {
 		TestInsert(c)
 	case "INSERTPK":
 		TestInsertPK(c)
+	case "INSERTBTREE":
+		TestInsertBtree(c)
+	case "RETRIEVEBTREE":
+		TestRetrieveBtree(c)
+	case "RETRIEVEFS":
+		TestRetrieveFS(c)
 	case "PATCH":
 		TestPatch(c)
 	case "REMOVE":

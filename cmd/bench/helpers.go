@@ -80,6 +80,26 @@ func CreatePKIndex(base, collectionName string) {
 	}
 }
 
+func CreateBtreeIndex(base, collectionName string) {
+	payload, _ := json.Marshal(JSON{
+		"name":   "btree_age",
+		"type":   "btree",
+		"fields": []string{"age"},
+	})
+
+	req, _ := http.NewRequest("POST", base+"/v1/collections/"+collectionName+":createIndex", bytes.NewReader(payload))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		panic(fmt.Sprintf("create btree index failed: status=%s body=%s", resp.Status, string(body)))
+	}
+}
+
 func CreateServer(c *Config) (start, stop func()) {
 	dir, cleanup := TempDir()
 	cleanups = append(cleanups, cleanup)
