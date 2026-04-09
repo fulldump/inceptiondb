@@ -7,8 +7,6 @@ import (
 	"net/http"
 
 	"github.com/fulldump/box"
-
-	"github.com/fulldump/inceptiondb/collection"
 )
 
 func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -37,14 +35,15 @@ func remove(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	var result error
 
-	traverse(requestBody, col, func(row *collection.Row) bool {
-		err := col.Remove(row)
+	traverse(requestBody, col, func(id int64, payload []byte) bool {
+		waitParam := r.URL.Query().Get("wait") == "true"
+		err := col.Delete(id, waitParam)
 		if err != nil {
 			result = err
 			return false
 		}
 
-		w.Write(row.Payload)
+		w.Write(payload)
 		w.Write([]byte("\n"))
 		return true
 	})

@@ -1,15 +1,13 @@
 package apicollectionv1
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 
-	"github.com/SierraSoftworks/connor"
 	"github.com/fulldump/box"
-
-	"github.com/fulldump/inceptiondb/collection"
 )
 
 func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -32,38 +30,26 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}{}
 	json.Unmarshal(requestBody, &patch) // TODO: handle err
 
-	e := json.NewEncoder(w)
+	wb := bufio.NewWriterSize(w, 64*1024)
+	defer wb.Flush()
 
-	traverse(requestBody, col, func(row *collection.Row) bool {
+	traverse(requestBody, col, func(id int64, payload []byte) bool {
 
-		row.PatchMutex.Lock()
-		defer row.PatchMutex.Unlock()
-
-		hasFilter := patch.Filter != nil && len(patch.Filter) > 0
-		if hasFilter {
-
-			rowData := map[string]interface{}{}
-			json.Unmarshal(row.Payload, &rowData) // todo: handle error here?
-
-			match, err := connor.Match(patch.Filter, rowData)
-			if err != nil {
-				// todo: handle error?
-				// return fmt.Errorf("match: %w", err)
-				return false
-			}
-			if !match {
-				return false
-			}
-		}
-
-		err := col.Patch(row, patch.Patch)
+		waitParam := r.URL.Query().Get("wait") == "true"
+		err := col.Patch(id, patch.Patch, waitParam)
 		if err != nil {
 			// TODO: handle err??
 			// return err
 			return true // todo: OR return false?
 		}
 
-		e.Encode(row.Payload) // todo: handle err?
+		updated, ok := col.Get(id)
+		if !ok {
+			return false
+		}
+
+		wb.Write(updated)
+		wb.Write([]byte("\n"))
 
 		return true
 	})

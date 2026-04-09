@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InceptionDB — The Fastest JSON Document Database</title>
+    <meta name="description" content="InceptionDB delivers 9.5M inserts/sec with persistence. Faster than Redis, DragonflyDB, and RocksDB. Built in Go.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --bg-card-hover: #1c1c28;
+            --text-primary: #f0f0f5;
+            --text-secondary: #9090a8;
+            --text-muted: #606078;
+            --accent-cyan: #00d4ff;
+            --accent-purple: #6c3fc5;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --gradient-primary: linear-gradient(135deg, #00d4ff, #6c3fc5);
+            --gradient-hero: linear-gradient(135deg, #00d4ff 0%, #6c3fc5 50%, #ec4899 100%);
+            --border-subtle: rgba(255,255,255,0.06);
+            --glow-cyan: 0 0 40px rgba(0,212,255,0.15);
+            --glow-purple: 0 0 40px rgba(108,63,197,0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Animated background grid */
+        .bg-grid {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* NAV */
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+            background: rgba(10,10,15,0.8);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .nav-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+        .nav-brand img {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+        }
+        .nav-brand span {
+            font-size: 1.25rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            list-style: none;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+        .nav-cta {
+            padding: 8px 20px;
+            background: var(--gradient-primary);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .nav-cta:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--glow-cyan);
+        }
+
+        /* HERO */
+        .hero {
+            padding: 160px 0 100px;
+            text-align: center;
+            position: relative;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(0,212,255,0.08) 0%, rgba(108,63,197,0.05) 40%, transparent 70%);
+            pointer-events: none;
+        }
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border-radius: 100px;
+            border: 1px solid rgba(0,212,255,0.3);
+            background: rgba(0,212,255,0.05);
+            font-size: 0.85rem;
+            color: var(--accent-cyan);
+            font-weight: 500;
+            margin-bottom: 32px;
+            animation: fadeInUp 0.6s ease;
+        }
+        .hero-badge .dot {
+            width: 6px; height: 6px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 900;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 24px;
+            animation: fadeInUp 0.6s ease 0.1s both;
+        }
+        .hero h1 .gradient-text {
+            background: var(--gradient-hero);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 640px;
+            margin: 0 auto 48px;
+            line-height: 1.7;
+            animation: fadeInUp 0.6s ease 0.2s both;
+        }
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: fadeInUp 0.6s ease 0.3s both;
+        }
+        .btn-primary {
+            padding: 14px 32px;
+            background: var(--gradient-primary);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.3s;
+            font-family: 'Inter', sans-serif;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0,212,255,0.3);
+        }
+        .btn-secondary {
+            padding: 14px 32px;
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(255,255,255,0.15);
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* MEGA NUMBER */
+        .mega-stats {
+            padding: 80px 0;
+        }
+        .mega-number {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        .mega-number .number {
+            font-size: clamp(4rem, 10vw, 8rem);
+            font-weight: 900;
+            letter-spacing: -0.04em;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1;
+        }
+        .mega-number .unit {
+            font-size: clamp(1.5rem, 3vw, 2.5rem);
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-top: 8px;
+        }
+        .mega-number .desc {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            margin-top: 12px;
+        }
+
+        /* STATS GRID */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 28px;
+            text-align: center;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: var(--gradient-primary);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .stat-card:hover {
+            background: var(--bg-card-hover);
+            transform: translateY(-4px);
+            box-shadow: var(--glow-cyan);
+        }
+        .stat-card:hover::before { opacity: 1; }
+        .stat-card .value {
+            font-size: 2.2rem;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-card .label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* COMPARISON */
+        .comparison {
+            padding: 100px 0;
+        }
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        .section-header h2 {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+        }
+        .section-header p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .bar-chart {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .bar-label {
+            width: 140px;
+            text-align: right;
+            font-size: 0.9rem;
+            font-weight: 600;
+            flex-shrink: 0;
+            color: var(--text-secondary);
+        }
+        .bar-label.highlight {
+            color: var(--accent-cyan);
+        }
+        .bar-track {
+            flex: 1;
+            height: 40px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            padding-left: 12px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: white;
+            transition: width 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            width: 0;
+        }
+        .bar-fill.inception { background: var(--gradient-primary); }
+        .bar-fill.redis { background: rgba(220,38,38,0.6); }
+        .bar-fill.dragonfly { background: rgba(234,88,12,0.6); }
+        .bar-fill.clickhouse { background: rgba(234,179,8,0.5); }
+        .bar-fill.rocksdb { background: rgba(59,130,246,0.5); }
+        .bar-fill.mongodb { background: rgba(16,185,129,0.4); }
+        .bar-fill.postgres { background: rgba(139,92,246,0.4); }
+        .bar-fill.animated { width: var(--target-width); }
+
+        /* CODE */
+        .code-section {
+            padding: 100px 0;
+        }
+        .code-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 24px;
+        }
+        .code-block {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        .code-block:hover {
+            border-color: rgba(0,212,255,0.2);
+            box-shadow: var(--glow-cyan);
+        }
+        .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .code-header .title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .code-dots {
+            display: flex;
+            gap: 6px;
+        }
+        .code-dots span {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+        }
+        .code-dots span:nth-child(1) { background: #ff5f57; }
+        .code-dots span:nth-child(2) { background: #febc2e; }
+        .code-dots span:nth-child(3) { background: #28c840; }
+        pre {
+            padding: 20px;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            line-height: 1.7;
+            color: #c8c8d8;
+        }
+        pre .keyword { color: var(--accent-purple); }
+        pre .string { color: var(--accent-green); }
+        pre .number { color: var(--accent-orange); }
+        pre .comment { color: var(--text-muted); }
+        pre .method { color: var(--accent-cyan); }
+
+        /* FEATURES */
+        .features {
+            padding: 100px 0;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 32px;
+            transition: all 0.3s;
+        }
+        .feature-card:hover {
+            background: var(--bg-card-hover);
+            transform: translateY(-4px);
+            border-color: rgba(0,212,255,0.15);
+        }
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 16px;
+        }
+        .feature-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .feature-card p {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        /* ARCHITECTURE */
+        .architecture {
+            padding: 100px 0;
+        }
+        .arch-visual {
+            max-width: 700px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .arch-layer {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 20px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s;
+        }
+        .arch-layer:hover {
+            border-color: rgba(0,212,255,0.2);
+            background: var(--bg-card-hover);
+        }
+        .arch-layer .name {
+            font-weight: 700;
+            font-size: 1rem;
+        }
+        .arch-layer .detail {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .arch-arrow {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+
+        /* FOOTER */
+        footer {
+            border-top: 1px solid var(--border-subtle);
+            padding: 48px 0;
+            text-align: center;
+        }
+        footer p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        footer a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .bar-row { flex-direction: column; gap: 4px; }
+            .bar-label { width: 100%; text-align: left; }
+            .code-grid { grid-template-columns: 1fr; }
+            .hero h1 { font-size: 2.2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+
+    <!-- NAV -->
+    <nav>
+        <div class="nav-inner">
+            <a class="nav-brand" href="#">
+                <img src="logo.png" alt="InceptionDB Logo">
+                <span>InceptionDB</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#performance">Performance</a></li>
+                <li><a href="#comparison">Comparison</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#quickstart">Quick Start</a></li>
+            </ul>
+            <a class="nav-cta" href="https://github.com/fulldump/inceptiondb">⭐ GitHub</a>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-badge">
+                <span class="dot"></span>
+                Benchmarked on Intel Core Ultra 7 265K — 20 cores, NVMe SSD
+            </div>
+            <h1>
+                <span class="gradient-text">9.5 Million</span> inserts<br>
+                per second.<br>
+                With persistence.
+            </h1>
+            <p>
+                InceptionDB is a blazing-fast JSON document database written in Go.
+                Faster than Redis. Faster than DragonflyDB.
+                And it actually writes to disk.
+            </p>
+            <div class="hero-actions">
+                <a class="btn-primary" href="https://github.com/fulldump/inceptiondb">Get Started</a>
+                <a class="btn-secondary" href="#comparison">See Benchmarks</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- MEGA STATS -->
+    <section class="mega-stats" id="performance">
+        <div class="container">
+            <div class="mega-number">
+                <div class="number" id="counter">0</div>
+                <div class="unit">rows / second</div>
+                <div class="desc">Insert throughput with WAL persistence to NVMe</div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="value">9.5M/s</div>
+                    <div class="label">Insert</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">9.2M/s</div>
+                    <div class="label">Patch / Update</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">6.6M/s</div>
+                    <div class="label">Delete</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">32M/s</div>
+                    <div class="label">Recovery</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- COMPARISON -->
+    <section class="comparison" id="comparison">
+        <div class="container">
+            <div class="section-header">
+                <h2>How fast is <span style="background:var(--gradient-primary);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">InceptionDB</span>?</h2>
+                <p>Single node insert throughput compared to popular databases. All numbers from public benchmarks on comparable hardware.</p>
+            </div>
+            <div class="bar-chart" id="barChart">
+                <div class="bar-row">
+                    <div class="bar-label highlight">InceptionDB</div>
+                    <div class="bar-track">
+                        <div class="bar-fill inception" style="--target-width:100%">9,500,000/s</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <div class="bar-label">DragonflyDB</div>
+                    <div class="bar-track">
+                        <div class="bar-fill dragonfly" style="--target-width:42%">4,000,000/s</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <div class="bar-label">ClickHouse</div>
+                    <div class="bar-track">
+                        <div class="bar-fill clickhouse" style="--target-width:31%">3,000,000/s</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <div class="bar-label">Redis</div>
+                    <div class="bar-track">
+                        <div class="bar-fill redis" style="--target-width:15%">1,500,000/s</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <div class="bar-label">RocksDB</div>
+                    <div class="bar-track">
+                        <div class="bar-fill rocksdb" style="--target-width:12%">1,200,000/s</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <div class="bar-label">MongoDB</div>
+                    <div class="bar-track">
+                        <div class="bar-fill mongodb" style="--target-width:3%">300,000/s</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <div class="bar-label">PostgreSQL</div>
+                    <div class="bar-track">
+                        <div class="bar-fill postgres" style="--target-width:2%">200,000/s</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>Built for speed. Designed for simplicity.</h2>
+                <p>Everything you need for a modern document database, at insane speeds.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Sharded Lock-Free Writes</h3>
+                    <p>16-shard write buffers with per-shard mutexes eliminate contention. Zero global locks on the insert hot path.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💾</div>
+                    <h3>WAL Persistence</h3>
+                    <p>Write-Ahead Log with group commit to NVMe. Every write is durable. Recovery at 32M rows/second.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3>Rich Indexes</h3>
+                    <p>Primary Key, Map, BTree, and Full-Text Search indexes. All using zero-allocation JSON parsing.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📄</div>
+                    <h3>Native JSON Documents</h3>
+                    <p>Store and query JSON documents directly. No schema required. Defaults with auto-generated UUIDs.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔧</div>
+                    <h3>Simple HTTP API</h3>
+                    <p>RESTful API with streaming bulk operations. Insert millions of documents in a single HTTP request.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🚀</div>
+                    <h3>Zero Dependencies Deploy</h3>
+                    <p>Single Go binary. No JVM, no runtime. Just copy and run. Under 15MB compiled.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section class="architecture">
+        <div class="container">
+            <div class="section-header">
+                <h2>Architecture</h2>
+                <p>Engineered from the ground up for maximum throughput on modern hardware.</p>
+            </div>
+            <div class="arch-visual">
+                <div class="arch-layer">
+                    <span class="name">HTTP Streaming API</span>
+                    <span class="detail">net/http + chunked transfer</span>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <span class="name">Collection Engine</span>
+                    <span class="detail">lock-free inserts, FastUUID (256x batch)</span>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <span class="name">RecordsUltra (512 shards)</span>
+                    <span class="detail">concurrent append, atomic segments</span>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <span class="name">StoreAsync (16-shard WAL)</span>
+                    <span class="detail">group commit, double buffer, NVMe</span>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <span class="name">Index Engine</span>
+                    <span class="detail">zero-alloc jsonparser, PK/Map/BTree/FTS</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- QUICKSTART -->
+    <section class="code-section" id="quickstart">
+        <div class="container">
+            <div class="section-header">
+                <h2>Up and running in 30 seconds</h2>
+                <p>Simple HTTP API. No drivers needed. Works with curl.</p>
+            </div>
+            <div class="code-grid">
+                <div class="code-block">
+                    <div class="code-header">
+                        <span class="title">Install & Run</span>
+                        <div class="code-dots"><span></span><span></span><span></span></div>
+                    </div>
+                    <pre><span class="comment"># Install</span>
+<span class="keyword">go</span> install github.com/fulldump/inceptiondb/cmd/inceptiondb@latest
+
+<span class="comment"># Run</span>
+<span class="keyword">inceptiondb</span>
+<span class="comment"># → listening on 127.0.0.1:8080</span></pre>
+                </div>
+                <div class="code-block">
+                    <div class="code-header">
+                        <span class="title">Insert Documents</span>
+                        <div class="code-dots"><span></span><span></span><span></span></div>
+                    </div>
+                    <pre><span class="comment"># Create a collection</span>
+<span class="keyword">curl</span> -X POST localhost:8080/v1/collections \
+  -d <span class="string">'{"name":"users"}'</span>
+
+<span class="comment"># Insert documents (streaming)</span>
+<span class="keyword">curl</span> -X POST localhost:8080/v1/collections/users:insert \
+  -d <span class="string">'{"name":"Alice","age":30}'</span>
+  -d <span class="string">'{"name":"Bob","age":25}'</span></pre>
+                </div>
+                <div class="code-block">
+                    <div class="code-header">
+                        <span class="title">Query with Filters</span>
+                        <div class="code-dots"><span></span><span></span><span></span></div>
+                    </div>
+                    <pre><span class="comment"># Find documents</span>
+<span class="keyword">curl</span> -X POST localhost:8080/v1/collections/users:find \
+  -d <span class="string">'{"filter":{"name":"Alice"}}'</span>
+
+<span class="comment"># Patch / Update</span>
+<span class="keyword">curl</span> -X POST localhost:8080/v1/collections/users:patch \
+  -d <span class="string">'{"filter":{"name":"Alice"},"patch":{"age":31}}'</span></pre>
+                </div>
+                <div class="code-block">
+                    <div class="code-header">
+                        <span class="title">Run Benchmark</span>
+                        <div class="code-dots"><span></span><span></span><span></span></div>
+                    </div>
+                    <pre><span class="comment"># Built-in benchmark tool</span>
+<span class="keyword">go</span> run ./cmd/bench \
+  --test insert \
+  --n <span class="number">20_000_000</span> \
+  --workers <span class="number">20</span>
+
+<span class="comment"># → Throughput: 9,507,979 rows/sec</span></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section style="padding:100px 0;text-align:center;">
+        <div class="container">
+            <h2 style="font-size:clamp(2rem,4vw,3rem);font-weight:800;margin-bottom:16px;">Ready to go fast?</h2>
+            <p style="color:var(--text-secondary);font-size:1.1rem;margin-bottom:40px;">Open source. MIT License. Built with ❤️ in Go.</p>
+            <div class="hero-actions">
+                <a class="btn-primary" href="https://github.com/fulldump/inceptiondb">⭐ Star on GitHub</a>
+                <a class="btn-secondary" href="https://github.com/fulldump/inceptiondb">Read the Docs</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="container">
+            <p>InceptionDB — Built by <a href="https://github.com/fulldump">fulldump</a>. Benchmarked March 2026.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Counter animation
+        function animateCounter(target, duration) {
+            const el = document.getElementById('counter');
+            const start = 0;
+            const startTime = performance.now();
+
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+                const current = Math.floor(start + (target - start) * eased);
+                el.textContent = current.toLocaleString('en-US').replace(/,/g, ',');
+                if (progress < 1) requestAnimationFrame(update);
+            }
+            requestAnimationFrame(update);
+        }
+
+        // Bar chart animation on scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // Animate bars
+                    if (entry.target.id === 'barChart') {
+                        entry.target.querySelectorAll('.bar-fill').forEach((bar, i) => {
+                            setTimeout(() => bar.classList.add('animated'), i * 100);
+                        });
+                    }
+                    // Animate counter
+                    if (entry.target.id === 'counter') {
+                        animateCounter(9507979, 2000);
+                    }
+                }
+            });
+        }, { threshold: 0.3 });
+
+        observer.observe(document.getElementById('barChart'));
+        observer.observe(document.getElementById('counter'));
+    </script>
+</body>
+</html>

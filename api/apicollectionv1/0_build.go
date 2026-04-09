@@ -19,8 +19,6 @@ func BuildV1Collection(v1 *box.R, s service.Servicer) *box.R {
 		WithActions(
 			box.Get(getCollection),
 			box.ActionPost(insert),
-			box.ActionPost(insertStream),     // todo: experimental!!
-			box.ActionPost(insertFullduplex), // todo: experimental!!
 			box.ActionPost(find),
 			box.ActionPost(remove),
 			box.ActionPost(patch),

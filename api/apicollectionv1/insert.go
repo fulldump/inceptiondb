@@ -2,12 +2,12 @@ package apicollectionv1
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/fulldump/box"
+	"github.com/go-json-experiment/json/jsontext"
 
 	"github.com/fulldump/inceptiondb/service"
 )
@@ -40,27 +40,10 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	// READER
 
 	// ALT 1
-	jsonReader := json.NewDecoder(r.Body)
+	jsonReader := jsontext.NewDecoder(r.Body, jsontext.AllowDuplicateNames(true))
 
-	// ALT 2
-	// jsonReader := jsontext.NewDecoder(r.Body, jsontext.AllowDuplicateNames(true))
-
-	// WRITER
-
-	// ALT 1
-	// jsonWriter := json.NewEncoder(w)
-
-	// ALT 2
-	// jsonWriter := jsontext.NewEncoder(w)
-
-	// ALT 3
-	// not needed
-
-	// item := map[string]any{} // Idea: same item and clean on each iteration
 	for i := 0; true; i++ {
-		item := map[string]any{}
-		// READER:ALT 1
-		err := jsonReader.Decode(&item)
+		payload, err := jsonReader.ReadValue()
 		// READER:ALT 2
 		// err := json2.UnmarshalDecode(jsonReader, &item)
 		if err == io.EOF {
@@ -77,7 +60,8 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			}
 			return err
 		}
-		row, err := collection.Insert(item)
+		waitParam := r.URL.Query().Get("wait") == "true"
+		id, err := collection.InsertJSON(payload, waitParam)
 		if err != nil {
 			// TODO: handle error properly
 			if i == 0 {
@@ -100,7 +84,12 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		// )
 
 		// ALT 3
-		w.Write(row.Payload)
+		stored, ok := collection.Get(id)
+		if !ok {
+			return fmt.Errorf("inserted document not found")
+		}
+
+		w.Write(stored)
 		w.Write([]byte("\n"))
 
 		// ALT 4

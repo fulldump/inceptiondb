@@ -181,10 +181,18 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 							myDocuments[1],
 							{"id": "3", "name": "Pedro"},
 						}
+						actualDocuments := map[string]JSON{}
+						for {
+							var bodyRow JSON
+							if err := dec.Decode(&bodyRow); err == io.EOF {
+								break
+							}
+							actualDocuments[bodyRow["id"].(string)] = bodyRow
+						}
+
 						for _, expectedDocument := range expectedDocuments {
-							var bodyRow interface{}
-							dec.Decode(&bodyRow)
-							biff.AssertEqualJson(bodyRow, expectedDocument)
+							id := expectedDocument["id"].(string)
+							biff.AssertEqualJson(actualDocuments[id], expectedDocument)
 						}
 						biff.AssertEqual(resp.StatusCode, http.StatusOK)
 					}
@@ -218,10 +226,18 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 						myDocuments[0],
 						myDocuments[2],
 					}
+					actualDocuments := map[string]JSON{}
+					for {
+						var bodyRow JSON
+						if err := dec.Decode(&bodyRow); err == io.EOF {
+							break
+						}
+						actualDocuments[bodyRow["id"].(string)] = bodyRow
+					}
+
 					for _, expectedDocument := range expectedDocuments {
-						var bodyRow interface{}
-						dec.Decode(&bodyRow)
-						biff.AssertEqualJson(bodyRow, expectedDocument)
+						id := expectedDocument["id"].(string)
+						biff.AssertEqualJson(actualDocuments[id], expectedDocument)
 					}
 					biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				}
@@ -273,10 +289,19 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 						myDocuments[1],
 						{"id": "3", "name": "Alfonso", "country": "es"},
 					}
+
+					actualDocuments := map[string]JSON{}
+					for {
+						var bodyRow JSON
+						if err := dec.Decode(&bodyRow); err == io.EOF {
+							break
+						}
+						actualDocuments[bodyRow["id"].(string)] = bodyRow
+					}
+
 					for _, expectedDocument := range expectedDocuments {
-						var bodyRow interface{}
-						dec.Decode(&bodyRow)
-						biff.AssertEqualJson(bodyRow, expectedDocument)
+						id := expectedDocument["id"].(string)
+						biff.AssertEqualJson(actualDocuments[id], expectedDocument)
 					}
 					biff.AssertEqual(resp.StatusCode, http.StatusOK)
 				}
@@ -609,6 +634,39 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 						biff.AssertEqual(item["id"], expectedOrderIDs[i])
 						i++
 					}
+				})
+
+				a.Alternative("Find with BTree - exclusive bounds", func(a *biff.A) {
+					resp := apiRequest("POST", "/collections/my-collection:find").
+						WithBodyJson(JSON{
+							"index": "my-index",
+							"skip":  0,
+							"limit": 10,
+							"from>": JSON{
+								"category": "drink",
+								"product":  "milk",
+							},
+							"to<": JSON{
+								"category": "fruit",
+								"product":  "apple",
+							},
+						}).Do()
+					Save(resp, "Find - by BTree with exclusive bounds", ``)
+
+					expectedOrderIDs := []string{"2"}
+
+					d := json.NewDecoder(bytes.NewReader(resp.BodyBytes()))
+					i := 0
+					for {
+						item := JSON{}
+						err := d.Decode(&item)
+						if err == io.EOF {
+							break
+						}
+						biff.AssertEqual(item["id"], expectedOrderIDs[i])
+						i++
+					}
+					biff.AssertEqual(i, len(expectedOrderIDs))
 				})
 
 			})

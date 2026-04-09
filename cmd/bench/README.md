@@ -10,8 +10,20 @@ Compile and run the command.
 go run . --test insert --n 2_000_000 --workers 16
 ```
 
+## Test inserts with PK index
+
+```sh
+go run . --test insertpk --n 2_000_000 --workers 16
+```
+
 ## Test patch
 
 ```sh
 go run . --test patch --n 100_000 --workers 16 
+```
+
+## Test remove
+
+```sh
+go run . --test remove --n 1_000_000 --workers 16 
 ```

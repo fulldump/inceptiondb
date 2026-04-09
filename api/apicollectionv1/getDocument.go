@@ -9,7 +9,7 @@ import (
 
 	"github.com/fulldump/box"
 
-	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collectionv4"
 	"github.com/fulldump/inceptiondb/service"
 )
 
@@ -45,17 +45,17 @@ func getDocument(ctx context.Context) (*documentLookupResponse, error) {
 		return nil, err
 	}
 
-	row, source, err := findRowByID(col, documentID)
+	payload, source, err := findRowByID(col, documentID)
 	if err != nil {
 		return nil, err
 	}
-	if row == nil {
+	if payload == nil {
 		w.WriteHeader(http.StatusNotFound)
 		return nil, fmt.Errorf("document '%s' not found", documentID)
 	}
 
 	document := map[string]any{}
-	if err := json.Unmarshal(row.Payload, &document); err != nil {
+	if err := json.Unmarshal(payload, &document); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
@@ -66,52 +66,20 @@ func getDocument(ctx context.Context) (*documentLookupResponse, error) {
 	}, nil
 }
 
-func findRowByID(col *collection.Collection, documentID string) (*collection.Row, *documentLookupSource, error) {
+func findRowByID(col *collectionv4.Collection, documentID string) ([]byte, *documentLookupSource, error) {
+
+	var found []byte
 
 	normalizedID := strings.TrimSpace(documentID)
 	if normalizedID == "" {
 		return nil, nil, nil
 	}
 
-	type mapLookupPayload struct {
-		Value string `json:"value"`
-	}
-
-	for name, idx := range col.Indexes {
-		if idx == nil || idx.Index == nil {
-			continue
-		}
-		if idx.Type != "map" {
-			continue
-		}
-
-		mapOptions, err := normalizeMapOptions(idx.Options)
-		if err != nil || mapOptions == nil {
-			continue
-		}
-		if mapOptions.Field != "id" {
-			continue
-		}
-
-		payload, err := json.Marshal(&mapLookupPayload{Value: normalizedID})
-		if err != nil {
-			return nil, nil, fmt.Errorf("prepare index lookup: %w", err)
-		}
-
-		var found *collection.Row
-		idx.Traverse(payload, func(row *collection.Row) bool {
-			found = row
-			return false
-		})
-
-		if found != nil {
-			return found, &documentLookupSource{Type: "index", Name: name}, nil
-		}
-	}
-
-	for _, row := range col.Rows {
+	rows := col.Scan()
+	for rows.Next() {
+		_, payload := rows.Read()
 		var item map[string]any
-		if err := json.Unmarshal(row.Payload, &item); err != nil {
+		if err := json.Unmarshal(payload, &item); err != nil {
 			continue
 		}
 		value, exists := item["id"]
@@ -119,35 +87,16 @@ func findRowByID(col *collection.Collection, documentID string) (*collection.Row
 			continue
 		}
 		if normalizeDocumentID(value) == normalizedID {
-			return row, &documentLookupSource{Type: "fullscan"}, nil
+			found = payload
+			break
 		}
 	}
 
-	return nil, nil, nil
-}
-
-func normalizeMapOptions(options interface{}) (*collection.IndexMapOptions, error) {
-
-	if options == nil {
-		return nil, nil
+	if found == nil {
+		return nil, nil, nil
 	}
 
-	switch value := options.(type) {
-	case *collection.IndexMapOptions:
-		return value, nil
-	case collection.IndexMapOptions:
-		return &value, nil
-	default:
-		data, err := json.Marshal(value)
-		if err != nil {
-			return nil, err
-		}
-		opts := &collection.IndexMapOptions{}
-		if err := json.Unmarshal(data, opts); err != nil {
-			return nil, err
-		}
-		return opts, nil
-	}
+	return found, &documentLookupSource{Type: "fullscan"}, nil
 }
 
 func normalizeDocumentID(value interface{}) string {
