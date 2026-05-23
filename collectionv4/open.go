@@ -1,26 +1,62 @@
 package collectionv4
 
 import (
+	"fmt"
 	"path/filepath"
+	"time"
 
+	"github.com/fulldump/inceptiondb/collectionv4/records"
 	"github.com/fulldump/inceptiondb/collectionv4/stores"
 )
 
-func OpenCollection(filename string) (*Collection, error) {
-	rawStore, err := stores.NewStoreDisk(filename)
-	//rawStore, err := stores.NewStoreJson(filename)
-	//rawStore, err := stores.NewStoreCrazy(filename)
+func OpenCollectionCustom(filename, rawstore_name, wrapstore_name, records_name string) (*Collection, error) {
+	var store stores.Store
+	var err error
+
+	switch rawstore_name {
+	case "disk":
+		store, err = stores.NewStoreDisk(filename)
+	case "json":
+		store, err = stores.NewStoreJson(filename)
+	case "crazy":
+		store, err = stores.NewStoreCrazy(filename)
+	default:
+		return nil, fmt.Errorf("unknown raw store type: %s", rawstore_name)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	var store stores.Store = rawStore
+	switch wrapstore_name {
+	case "snappy":
+		store = stores.NewStoreSnappy(store)
+	case "async":
+		store = stores.NewStoreAsync(store)
+	case "flusher":
+		store = stores.NewStoreFlusher(store, 10*time.Second)
+	case "":
+	// do nothing
+	default:
+		return nil, fmt.Errorf("unknown wrap store type: %s", rawstore_name)
+	}
 
-	//store = stores.NewStoreSnappy(store)
-	store = stores.NewStoreAsync(store)
-	//store = stores.NewStoreFlusher(store, 10*time.Second)
+	var rr records.Records[Record]
+	switch records_name {
+	case "correct":
+		rr = records.NewRecordsCorrect[Record]()
+	case "fast":
+		rr = records.NewRecordsFast[Record]()
+	case "Hyper":
+		rr = records.NewRecordsHyper[Record]()
+	case "Turbo":
+		rr = records.NewRecordsTurbo[Record]()
+	case "ultra", "":
+		rr = records.NewRecordsUltra[Record]()
+	default:
+		return nil, fmt.Errorf("unknown records type: %s", records_name)
+	}
 
-	col := NewCollection(filepath.Base(filename), store)
+	col := NewCollectionBase(filepath.Base(filename), store, rr)
 	col.SetFilepath(filename)
 
 	if err := col.Recover(); err != nil {
@@ -29,4 +65,8 @@ func OpenCollection(filename string) (*Collection, error) {
 	}
 
 	return col, nil
+}
+
+func OpenCollection(filename string) (*Collection, error) {
+	return OpenCollectionCustom(filename, "disk", "async", "ultra")
 }

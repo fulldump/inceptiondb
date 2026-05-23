@@ -43,10 +43,14 @@ type asyncIndexReq struct {
 }
 
 func NewCollection(name string, store stores.Store) *Collection {
+	return NewCollectionBase(name, store, records.NewRecordsUltra[Record]())
+}
+
+func NewCollectionBase(name string, store stores.Store, rr records.Records[Record]) *Collection {
 	c := &Collection{
 		name:    name,
 		store:   store,
-		records: records.NewRecordsUltra[Record](),
+		records: rr,
 		idxReqs: make(chan asyncIndexReq, 1000000),
 		idxDone: make(chan struct{}),
 	}
