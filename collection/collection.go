@@ -21,17 +21,18 @@ type Record struct {
 }
 
 type Collection struct {
-	name     string
-	filepath atomic.Pointer[string]
-	store    stores.Store
-	records  records.Records[Record]
-	count    atomic.Int64
-	autoID   atomic.Int64
-	indexes  atomic.Pointer[map[string]Index]
-	defaults atomic.Pointer[map[string]any]
-	writerMu sync.Mutex
-	idxReqs  chan asyncIndexReq
-	idxDone  chan struct{}
+	name       string
+	filepath   atomic.Pointer[string]
+	store      stores.Store
+	records    records.Records[Record]
+	newRecords func() records.Records[Record]
+	count      atomic.Int64
+	autoID     atomic.Int64
+	indexes    atomic.Pointer[map[string]Index]
+	defaults   atomic.Pointer[map[string]any]
+	writerMu   sync.Mutex
+	idxReqs    chan asyncIndexReq
+	idxDone    chan struct{}
 }
 
 type asyncIndexReq struct {
@@ -47,12 +48,24 @@ func NewCollection(name string, store stores.Store) *Collection {
 }
 
 func NewCollectionBase(name string, store stores.Store, rr records.Records[Record]) *Collection {
+	return NewCollectionConfigured(name, store, rr, func() records.Records[Record] {
+		return records.NewRecordsUltra[Record]()
+	})
+}
+
+func NewCollectionConfigured(name string, store stores.Store, rr records.Records[Record], newRecords func() records.Records[Record]) *Collection {
+	if newRecords == nil {
+		newRecords = func() records.Records[Record] {
+			return records.NewRecordsUltra[Record]()
+		}
+	}
 	c := &Collection{
-		name:    name,
-		store:   store,
-		records: rr,
-		idxReqs: make(chan asyncIndexReq, 1000000),
-		idxDone: make(chan struct{}),
+		name:       name,
+		store:      store,
+		records:    rr,
+		newRecords: newRecords,
+		idxReqs:    make(chan asyncIndexReq, 1000000),
+		idxDone:    make(chan struct{}),
 	}
 	emptyPath := ""
 	c.filepath.Store(&emptyPath)
@@ -256,7 +269,7 @@ func (c *Collection) Delete(id int64, wait bool) error {
 // Recover lee el WAL y reconstruye el estado exacto de la base de datos
 func (c *Collection) Recover() error { // nolint:gocyclo
 	// 1. Limpiamos cualquier estado previo
-	c.records = records.NewRecordsUltra[Record]()
+	c.records = c.newRecords()
 	emptyIndexes := map[string]Index{}
 	c.indexes.Store(&emptyIndexes)
 	var emptyDefaults map[string]any = nil
