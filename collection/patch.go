@@ -7,13 +7,99 @@ import (
 	"strconv"
 
 	"github.com/fulldump/inceptiondb/collection/stores"
+	"github.com/fulldump/inceptiondb/simdscan"
 	"github.com/valyala/fastjson"
 )
+
+type PatchPlan struct {
+	Patch    interface{}
+	topLevel map[string]patchField
+}
+
+type patchField struct {
+	raw    []byte
+	delete bool
+}
+
+func CompilePatch(patch interface{}) (*PatchPlan, error) {
+	if plan, ok := patch.(*PatchPlan); ok {
+		return plan, nil
+	}
+
+	plan := &PatchPlan{Patch: patch}
+	if raw, ok := patch.(json.RawMessage); ok {
+		decoded, err := decodeRawPatch(raw)
+		if err != nil {
+			return nil, err
+		}
+		plan.Patch = decoded
+		if err := plan.compileTopLevelRaw(raw); err != nil {
+			return nil, err
+		}
+		return plan, nil
+	}
+
+	if patchMap, ok := patch.(map[string]interface{}); ok {
+		plan.topLevel = make(map[string]patchField, len(patchMap))
+		for k, v := range patchMap {
+			if v == nil {
+				plan.topLevel[k] = patchField{delete: true}
+				continue
+			}
+			raw, err := json.Marshal(v)
+			if err != nil {
+				return nil, err
+			}
+			plan.topLevel[k] = patchField{raw: raw}
+		}
+	}
+
+	return plan, nil
+}
+
+func decodeRawPatch(raw json.RawMessage) (interface{}, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var decoded interface{}
+	if err := dec.Decode(&decoded); err != nil {
+		return nil, err
+	}
+	return decoded, nil
+}
+
+func (p *PatchPlan) compileTopLevelRaw(raw json.RawMessage) error {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return nil
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &fields); err != nil {
+		return err
+	}
+	p.topLevel = make(map[string]patchField, len(fields))
+	for k, v := range fields {
+		value := bytes.TrimSpace(v)
+		p.topLevel[k] = patchField{
+			raw:    append([]byte(nil), value...),
+			delete: bytes.Equal(value, []byte("null")),
+		}
+	}
+	return nil
+}
 
 func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // nolint:gocyclo
 	rec := c.records.Get(id)
 	if !rec.Active {
 		return fmt.Errorf("row %d does not exist", id)
+	}
+
+	plan, err := CompilePatch(patch)
+	if err != nil {
+		return fmt.Errorf("compile patch: %w", err)
+	}
+	if changed, ok := patchPlanChangesTopLevel(rec.Data, plan); ok && !changed {
+		return nil
 	}
 
 	var p fastjson.Parser
@@ -23,7 +109,7 @@ func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // no
 	}
 
 	var arena fastjson.Arena
-	merged, changed := fastjsonMergePatch(&arena, v, patch)
+	merged, changed := fastjsonMergePatch(&arena, v, plan.Patch)
 
 	if !changed {
 		return nil
@@ -60,6 +146,40 @@ func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // no
 	}
 
 	return nil
+}
+
+func patchPlanChangesTopLevel(data []byte, plan *PatchPlan) (bool, bool) {
+	if plan == nil || plan.topLevel == nil {
+		return true, false
+	}
+	for key, field := range plan.topLevel {
+		current, typ, err := simdscan.GetField(data, key)
+		if field.delete {
+			if err == nil {
+				return true, true
+			}
+			continue
+		}
+		if err != nil || !rawPatchValueEqual(current, typ, field.raw) {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+func rawPatchValueEqual(current []byte, typ simdscan.Type, expected []byte) bool {
+	expected = bytes.TrimSpace(expected)
+	if typ != simdscan.TypeString {
+		return bytes.Equal(current, expected)
+	}
+	if len(expected) < 2 || expected[0] != '"' {
+		return false
+	}
+	unquoted, err := strconv.Unquote(string(expected))
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(current, []byte(unquoted))
 }
 
 // Update acts as a full payload replacement

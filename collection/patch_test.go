@@ -1,10 +1,12 @@
 package collection
 
 import (
+	"encoding/json"
 	"path"
 	"testing"
 
 	"github.com/fulldump/inceptiondb/collection/stores"
+	"github.com/fulldump/inceptiondb/simdscan"
 )
 
 func BenchmarkPatch(b *testing.B) {
@@ -30,5 +32,41 @@ func BenchmarkPatch(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestPatchCompiledRawMessage(t *testing.T) {
+	filename := path.Join(t.TempDir(), "patch.wal")
+	store, err := stores.NewStoreDisk(filename)
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	defer store.Close()
+
+	col := NewCollection("patch", store)
+	id, err := col.Insert([]byte(`{"name":"Alice","age":30,"active":true}`), true)
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	plan, err := CompilePatch(json.RawMessage(`{"age":31,"active":true}`))
+	if err != nil {
+		t.Fatalf("compile patch: %v", err)
+	}
+	if err := col.Patch(id, plan, true); err != nil {
+		t.Fatalf("patch: %v", err)
+	}
+
+	data, ok := col.Get(id)
+	if !ok {
+		t.Fatalf("missing patched document")
+	}
+	age, _, err := simdscan.GetField(data, "age")
+	if err != nil || string(age) != "31" {
+		t.Fatalf("age = %q, err = %v, data = %s", age, err, data)
+	}
+
+	if err := col.Patch(id, plan, true); err != nil {
+		t.Fatalf("second patch: %v", err)
 	}
 }

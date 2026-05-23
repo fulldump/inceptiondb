@@ -46,7 +46,7 @@ Important benchmark observations from this run:
 | `RecordsHyper` | Insert around 17.9M to 19.0M ops/s; set around 27.5M to 28.0M ops/s; mixed stress has more variance, around 18.1M to 26.8M ops/s. |
 | `RecordsTurbo` | Mixed stress around 17.8M to 20.4M ops/s; set around 25.9M to 26.9M ops/s. |
 | `RecordsFast` | Very fast mixed stress around 29.6M to 30.6M ops/s, but insert/set are lower than specialized implementations. |
-| `Patch` | Around 984 ns/op, 3600 B/op and 22 allocations/op. This is much more allocation-heavy than record operations. |
+| `Patch` | Initial raw/compiled patch work reduced the benchmark to around 399 ns/op, 504 B/op and 5 allocations/op. More work remains for index-aware deltas and raw JSON rewrite. |
 | Store compression | Snappy wrapper measured around 183 ns/op and 224 B/op; no compression around 51 ns/op and 0 B/op. |
 | JSON field scan | `simdscan.GetField` around 33 ns/op versus `jsonparser.Get` around 45 ns/op and stdlib unmarshal around 1928 ns/op. |
 
@@ -178,7 +178,7 @@ Create release gates for target workloads. Example initial budgets:
 | --- | --- |
 | In-memory insert without fsync | No regression above 10 percent versus previous release. |
 | Insert with PK index | No regression above 10 percent versus previous release. |
-| Patch | Allocation count must trend down; current result is 22 allocs/op. |
+| Patch | Allocation count must trend down further; current result is around 5 allocs/op after the first compiled-patch optimization. |
 | Recovery | Maximum startup time per million WAL operations should be measured and bounded. |
 | Indexed find | p99 latency should be tracked under concurrent writes. |
 
@@ -474,7 +474,7 @@ The collection spec should be written to a catalog file or a catalog WAL before 
 
 ### P0: Rewrite PATCH Around Raw JSON Operations
 
-`Collection.Patch` is currently correct enough for simple merge patch behavior, but inefficient and hard to make transactional. It parses the full document with `fastjson`, recursively converts patch values from `interface{}` to `fastjson.Value`, marshals values to compare equality and rewrites the whole payload. It also updates indexes and records before WAL append with incomplete rollback.
+`Collection.Patch` is correct enough for simple merge patch behavior, and now has an initial compiled-patch/no-op fast path. The remaining inefficient path still parses the full document with `fastjson`, recursively converts patch values from `interface{}` to `fastjson.Value`, marshals values to compare equality and rewrites the whole payload. It also updates indexes and records before WAL append with incomplete rollback.
 
 Recommended PATCH semantics:
 

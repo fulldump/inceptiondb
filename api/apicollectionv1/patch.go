@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/fulldump/box"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
 func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -26,9 +27,15 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	patch := struct {
 		Filter map[string]interface{}
-		Patch  interface{}
+		Patch  json.RawMessage
 	}{}
 	json.Unmarshal(requestBody, &patch) // TODO: handle err
+
+	plan, err := collection.CompilePatch(patch.Patch)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return err
+	}
 
 	wb := bufio.NewWriterSize(w, 64*1024)
 	defer wb.Flush()
@@ -36,7 +43,7 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	traverse(requestBody, col, func(id int64, payload []byte) bool {
 
 		waitParam := r.URL.Query().Get("wait") == "true"
-		err := col.Patch(id, patch.Patch, waitParam)
+		err := col.Patch(id, plan, waitParam)
 		if err != nil {
 			// TODO: handle err??
 			// return err
