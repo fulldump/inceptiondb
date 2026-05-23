@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fulldump/inceptiondb/collection"
@@ -25,6 +26,7 @@ type Config struct {
 type Database struct {
 	Config      *Config
 	status      string
+	mu          sync.RWMutex
 	Collections map[string]*collection.Collection
 	exit        chan struct{}
 }
@@ -49,6 +51,8 @@ func (db *Database) CreateCollection(name string) (*collection.Collection, error
 }
 
 func (db *Database) CreateCollectionSpec(name string, spec collection.CollectionSpec) (*collection.Collection, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	_, exists := db.Collections[name]
 	if exists {
@@ -80,6 +84,8 @@ func (db *Database) CreateCollectionSpec(name string, spec collection.Collection
 }
 
 func (db *Database) DropCollection(name string) error { // TODO: rename drop?
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	col, exists := db.Collections[name]
 	if !exists {
@@ -99,6 +105,23 @@ func (db *Database) DropCollection(name string) error { // TODO: rename drop?
 	delete(db.Collections, name) // TODO: protect section! not threadsafe
 
 	return col.Close()
+}
+
+func (db *Database) GetCollection(name string) (*collection.Collection, bool) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	col, ok := db.Collections[name]
+	return col, ok
+}
+
+func (db *Database) ListCollections() map[string]*collection.Collection {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	out := make(map[string]*collection.Collection, len(db.Collections))
+	for name, col := range db.Collections {
+		out[name] = col
+	}
+	return out
 }
 
 func (db *Database) Load() error {
@@ -132,7 +155,9 @@ func (db *Database) Load() error {
 		}
 		fmt.Println(name, "collection open took", time.Since(t0)) // todo: move to logger
 
+		db.mu.Lock()
 		db.Collections[name] = col
+		db.mu.Unlock()
 
 		return nil
 	})
@@ -166,7 +191,7 @@ func (db *Database) Stop() error {
 	db.status = StatusClosing
 
 	var lastErr error
-	for name, col := range db.Collections {
+	for name, col := range db.ListCollections() {
 		fmt.Printf("Closing '%s'...\n", name)
 		err := col.Close()
 		if err != nil {

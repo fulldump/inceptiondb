@@ -241,15 +241,15 @@ Recommended improvement: centralize writes in a small transaction-like sequence 
 
 ### P0: Protect Shared Database State
 
-`database.Database.Collections` is a plain map accessed by API/service paths and lifecycle operations. There is an existing TODO noting `DropCollection` is not thread-safe.
+`database.Database.Collections` is now guarded by a mutex and `service.Service` no longer exposes the raw map directly. Some code still keeps the exported field for compatibility, so the long-term cleanup is to make the map private and force all access through methods.
 
 Recommended improvement:
 
 | Change | Reason |
 | --- | --- |
-| Add `sync.RWMutex` around collection map access | Avoid concurrent map writes/panics under create/drop/list/get. |
-| Do not expose the raw map | `Service.ListCollections` currently returns the map directly. Return a copy. |
-| Remove duplicate ownership | `Service` stores `collections: db.Collections`; use `Database` methods instead. |
+| Make `Database.Collections` private | Avoid bypassing the locking methods. |
+| Add race/concurrency tests around create/drop/list/get | Validate the registry under real API concurrency. |
+| Keep returning copies from list operations | Prevent callers from mutating registry state. |
 
 ### P1: Separate Public Product Code From Experimental Internals
 
@@ -671,7 +671,7 @@ Before public release, add:
 | --- | --- |
 | P0 | Define durability, consistency and API contracts. |
 | P0 | Add authentication and read/write/admin authorization. |
-| P0 | Add DB collection map locking and stop exposing raw maps. |
+| P0 | Finish DB collection registry encapsulation by making the map private and adding concurrency tests. |
 | P0 | Fix write rollback paths around WAL/index/memory updates. |
 | P0 | Introduce `CollectionSpec` and factory-based dependency injection for WAL, codecs, records, indexes and JSON helpers. |
 | P0 | Persist collection-level storage and records choices so recovery uses the same engines. |
