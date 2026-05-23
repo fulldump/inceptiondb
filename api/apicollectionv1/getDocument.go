@@ -9,7 +9,7 @@ import (
 
 	"github.com/fulldump/box"
 
-	"github.com/fulldump/inceptiondb/collectionv4"
+	"github.com/fulldump/inceptiondb/collection"
 	"github.com/fulldump/inceptiondb/service"
 )
 
@@ -66,7 +66,7 @@ func getDocument(ctx context.Context) (*documentLookupResponse, error) {
 	}, nil
 }
 
-func findRowByID(col *collectionv4.Collection, documentID string) ([]byte, *documentLookupSource, error) {
+func findRowByID(col *collection.Collection, documentID string) ([]byte, *documentLookupSource, error) {
 
 	var found []byte
 

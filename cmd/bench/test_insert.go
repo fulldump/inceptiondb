@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/fulldump/inceptiondb/bootstrap"
-	"github.com/fulldump/inceptiondb/collectionv4"
+	"github.com/fulldump/inceptiondb/collection"
 	"github.com/fulldump/inceptiondb/configuration"
 )
 
@@ -105,7 +105,7 @@ func TestInsert(c Config) {
 		stop() // Stop the server
 
 		t1 := time.Now()
-		col, err := collectionv4.OpenCollection(path.Join(dataDir, collectionName))
+		col, err := collection.OpenCollection(path.Join(dataDir, collectionName))
 		if err == nil {
 			_ = col.Close()
 		}

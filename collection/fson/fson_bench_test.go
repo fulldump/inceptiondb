@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/fulldump/inceptiondb/collectionv4/stonejson"
+	"github.com/fulldump/inceptiondb/collection/stonejson"
 )
 
 var benchData = []byte(`{

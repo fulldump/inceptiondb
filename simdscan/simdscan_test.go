@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/buger/jsonparser"
-	"github.com/fulldump/inceptiondb/collectionv4/stonejson"
+	"github.com/fulldump/inceptiondb/collection/stonejson"
 )
 
 // ============================================================================

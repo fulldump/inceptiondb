@@ -1,4 +1,4 @@
-package collectionv4
+package collection
 
 type Rows struct {
 	col   *Collection

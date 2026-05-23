@@ -1,4 +1,4 @@
-package collectionv4
+package collection
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fulldump/inceptiondb/collectionv4/stores"
+	"github.com/fulldump/inceptiondb/collection/stores"
 )
 
 func TestIndexMap(t *testing.T) {

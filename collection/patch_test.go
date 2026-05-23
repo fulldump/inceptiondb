@@ -1,10 +1,10 @@
-package collectionv4
+package collection
 
 import (
 	"path"
 	"testing"
 
-	"github.com/fulldump/inceptiondb/collectionv4/stores"
+	"github.com/fulldump/inceptiondb/collection/stores"
 )
 
 func BenchmarkPatch(b *testing.B) {

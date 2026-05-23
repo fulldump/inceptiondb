@@ -1,12 +1,12 @@
-package collectionv4
+package collection
 
 import (
 	"fmt"
 	"path/filepath"
 	"time"
 
-	"github.com/fulldump/inceptiondb/collectionv4/records"
-	"github.com/fulldump/inceptiondb/collectionv4/stores"
+	"github.com/fulldump/inceptiondb/collection/records"
+	"github.com/fulldump/inceptiondb/collection/stores"
 )
 
 func OpenCollectionCustom(filename, rawstore_name, wrapstore_name, records_name string) (*Collection, error) {

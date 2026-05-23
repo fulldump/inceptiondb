@@ -1,4 +1,4 @@
-package collectionv4
+package collection
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/fulldump/inceptiondb/collectionv4/stores"
+	"github.com/fulldump/inceptiondb/collection/stores"
 	"github.com/valyala/fastjson"
 )
 

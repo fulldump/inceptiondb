@@ -1,10 +1,10 @@
-package collectionv4
+package collection
 
 import (
 	"fmt"
 	"time"
 
-	"github.com/fulldump/inceptiondb/collectionv4/stores"
+	"github.com/fulldump/inceptiondb/collection/stores"
 )
 
 func StartBackgroundFlusher(store stores.Store, interval time.Duration) chan struct{} {

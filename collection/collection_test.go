@@ -1,4 +1,4 @@
-package collectionv4
+package collection
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fulldump/inceptiondb/collectionv4/stores"
+	"github.com/fulldump/inceptiondb/collection/stores"
 )
 
 func TestAll(t *testing.T) {

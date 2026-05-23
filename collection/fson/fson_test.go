@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fulldump/inceptiondb/collectionv4/stonejson"
+	"github.com/fulldump/inceptiondb/collection/stonejson"
 )
 
 func TestLolo(t *testing.T) {

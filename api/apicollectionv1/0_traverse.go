@@ -8,11 +8,11 @@ import (
 	"github.com/SierraSoftworks/connor"
 	"github.com/buger/jsonparser"
 
-	"github.com/fulldump/inceptiondb/collectionv4"
+	"github.com/fulldump/inceptiondb/collection"
 	"github.com/fulldump/inceptiondb/utils"
 )
 
-func traverse(requestBody []byte, col *collectionv4.Collection, f func(id int64, payload []byte) bool) error {
+func traverse(requestBody []byte, col *collection.Collection, f func(id int64, payload []byte) bool) error {
 
 	options := &struct {
 		Index  *string
@@ -158,7 +158,7 @@ func traverse(requestBody []byte, col *collectionv4.Collection, f func(id int64,
 	return col.TraverseIndex(*options.Index, requestBody, iterator)
 }
 
-func traverseFullscan(col *collectionv4.Collection, f func(id int64, payload []byte) bool) error {
+func traverseFullscan(col *collection.Collection, f func(id int64, payload []byte) bool) error {
 	col.TraverseRecords(func(id int64, payload []byte) bool {
 		return f(id, payload)
 	})

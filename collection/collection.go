@@ -1,4 +1,4 @@
-package collectionv4
+package collection
 
 import (
 	"bytes"
@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fulldump/inceptiondb/collectionv4/records"
-	"github.com/fulldump/inceptiondb/collectionv4/stores"
+	"github.com/fulldump/inceptiondb/collection/records"
+	"github.com/fulldump/inceptiondb/collection/stores"
 	"github.com/fulldump/inceptiondb/simdscan"
 )
 

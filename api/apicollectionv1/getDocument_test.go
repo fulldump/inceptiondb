@@ -5,16 +5,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fulldump/inceptiondb/collectionv4"
+	"github.com/fulldump/inceptiondb/collection"
 )
 
-func newTestCollection(t *testing.T) *collectionv4.Collection {
+func newTestCollection(t *testing.T) *collection.Collection {
 
 	t.Helper()
 
 	dir := t.TempDir()
 	filename := filepath.Join(dir, "collection.jsonl")
-	col, err := collectionv4.OpenCollection(filename)
+	col, err := collection.OpenCollection(filename)
 	if err != nil {
 		t.Fatalf("open collection: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestFindRowByID_UsesIndex(t *testing.T) {
 
 	col := newTestCollection(t)
 
-	if err := col.Index("by-id", &collectionv4.IndexMapOptions{Field: "id"}); err != nil {
+	if err := col.Index("by-id", &collection.IndexMapOptions{Field: "id"}); err != nil {
 		t.Fatalf("create index: %v", err)
 	}
 
