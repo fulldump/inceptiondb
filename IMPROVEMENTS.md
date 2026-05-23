@@ -195,7 +195,7 @@ Recommended focus areas:
 | Patch allocations | `Patch` is allocation-heavy compared with insert/set primitives. Reduce JSON conversion/marshal work where possible. |
 | Traversal variance | `RecordsUltra` and `RecordsHyper` have slower traversals than `RecordsFast`/`RecordsTurbo`; choose the default based on whole-product workload, not only insert/set. |
 | Async index queue | `idxReqs` has a fixed capacity of 1,000,000 and non-unique indexes update asynchronously. Add metrics, backpressure and documented consistency semantics. |
-| StoreAsync error handling | The async worker ignores append errors inside the batch loop and returns only flush/sync errors. Preserve first append error and report it to waiting callers. |
+| StoreAsync error handling | The async worker now preserves the first append error in a batch for waiting callers; continue adding metrics and coverage for async failures. |
 | WAL compaction | Deletes and updates keep growing the WAL. Implement snapshots or compaction to control recovery time and disk usage. |
 
 ### P1: Add Soak and Race Testing

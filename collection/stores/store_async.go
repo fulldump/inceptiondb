@@ -70,18 +70,22 @@ func (s *StoreAsync) worker() {
 		if len(batch) > 0 {
 			// Process the batch
 			needsSync := false
+			var err error
 			for _, r := range batch {
-				_ = s.store.Append(r.op, r.id, r.data, false)
+				if appendErr := s.store.Append(r.op, r.id, r.data, false); appendErr != nil && err == nil {
+					err = appendErr
+				}
 				if r.sync {
 					needsSync = true
 				}
 			}
 
-			var err error
-			if needsSync {
-				err = s.store.Sync()
-			} else {
-				err = s.store.Flush()
+			if err == nil {
+				if needsSync {
+					err = s.store.Sync()
+				} else {
+					err = s.store.Flush()
+				}
 			}
 
 			for _, r := range batch {
@@ -110,13 +114,18 @@ func (s *StoreAsync) worker() {
 	// Final drain: sweep any remaining data added after last check
 	batch = s.sweep(batch)
 	if len(batch) > 0 {
+		var err error
 		for _, r := range batch {
-			_ = s.store.Append(r.op, r.id, r.data, false)
+			if appendErr := s.store.Append(r.op, r.id, r.data, false); appendErr != nil && err == nil {
+				err = appendErr
+			}
 		}
-		_ = s.store.Flush()
+		if err == nil {
+			err = s.store.Flush()
+		}
 		for _, r := range batch {
 			if r.done != nil {
-				r.done <- nil
+				r.done <- err
 			}
 		}
 	}
