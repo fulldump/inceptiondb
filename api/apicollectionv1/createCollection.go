@@ -4,12 +4,15 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/fulldump/inceptiondb/collection"
 	"github.com/fulldump/inceptiondb/service"
 )
 
 type createCollectionRequest struct {
-	Name     string         `json:"name"`
-	Defaults map[string]any `json:"defaults"`
+	Name     string                 `json:"name"`
+	Defaults map[string]any         `json:"defaults"`
+	Storage  collection.StoreSpec   `json:"storage"`
+	Records  collection.RecordsSpec `json:"records"`
 }
 
 func newCollectionDefaults() map[string]any {
@@ -22,7 +25,12 @@ func createCollection(ctx context.Context, w http.ResponseWriter, input *createC
 
 	s := GetServicer(ctx)
 
-	collection, err := s.CreateCollection(input.Name)
+	spec := collection.CollectionSpec{
+		Name:    input.Name,
+		Store:   input.Storage,
+		Records: input.Records,
+	}
+	col, err := s.CreateCollectionSpec(input.Name, spec)
 	if err == service.ErrorCollectionAlreadyExists {
 		w.WriteHeader(http.StatusConflict)
 		return nil, err // todo: return custom error, with detailed description
@@ -35,12 +43,12 @@ func createCollection(ctx context.Context, w http.ResponseWriter, input *createC
 	if input.Defaults == nil {
 		input.Defaults = newCollectionDefaults()
 	}
-	collection.SetDefaults(input.Defaults)
+	col.SetDefaults(input.Defaults)
 
 	w.WriteHeader(http.StatusCreated)
 	return &CollectionResponse{
 		Name:     input.Name,
-		Total:    int(collection.Count()),
-		Defaults: collection.Defaults(),
+		Total:    int(col.Count()),
+		Defaults: col.Defaults(),
 	}, nil
 }

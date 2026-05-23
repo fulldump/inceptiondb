@@ -5,7 +5,14 @@ Curl example:
 ```sh
 curl -X POST "https://example.com/v1/collections" \
 -d '{
-    "name": "my-collection"
+    "name": "my-collection",
+    "storage": {
+        "backend": "disk",
+        "wrappers": [{"type": "async"}]
+    },
+    "records": {
+        "engine": "ultra"
+    }
 }'
 ```
 
@@ -17,7 +24,14 @@ POST /v1/collections HTTP/1.1
 Host: example.com
 
 {
-    "name": "my-collection"
+    "name": "my-collection",
+    "storage": {
+        "backend": "disk",
+        "wrappers": [{"type": "async"}]
+    },
+    "records": {
+        "engine": "ultra"
+    }
 }
 
 HTTP/1.1 201 Created
@@ -34,5 +48,4 @@ Date: Mon, 15 Aug 2022 02:08:13 GMT
     "total": 0
 }
 ```
-
 

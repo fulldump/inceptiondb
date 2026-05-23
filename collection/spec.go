@@ -1,8 +1,11 @@
 package collection
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fulldump/inceptiondb/collection/records"
@@ -26,24 +29,24 @@ const (
 )
 
 type CollectionSpec struct {
-	Name     string
-	Filename string
-	Store    StoreSpec
-	Records  RecordsSpec
+	Name     string      `json:"name"`
+	Filename string      `json:"-"`
+	Store    StoreSpec   `json:"storage"`
+	Records  RecordsSpec `json:"records"`
 }
 
 type StoreSpec struct {
-	Backend  string
-	Wrappers []StoreWrapperSpec
+	Backend  string             `json:"backend"`
+	Wrappers []StoreWrapperSpec `json:"wrappers"`
 }
 
 type StoreWrapperSpec struct {
-	Type          string
-	FlushInterval time.Duration
+	Type          string        `json:"type"`
+	FlushInterval time.Duration `json:"flush_interval"`
 }
 
 type RecordsSpec struct {
-	Engine string
+	Engine string `json:"engine"`
 }
 
 type StoreFactory func(filename string) (stores.Store, error)
@@ -96,6 +99,48 @@ func DefaultCollectionSpec(filename string) CollectionSpec {
 		},
 		Records: RecordsSpec{Engine: RecordsUltra},
 	}
+}
+
+func CollectionSpecPath(filename string) string {
+	return filename + ".collection.json"
+}
+
+func IsCollectionSpecFile(filename string) bool {
+	return strings.HasSuffix(filename, ".collection.json")
+}
+
+func SaveCollectionSpec(spec CollectionSpec) error {
+	if spec.Filename == "" {
+		return fmt.Errorf("collection filename is required")
+	}
+	if spec.Name == "" {
+		spec.Name = filepath.Base(spec.Filename)
+	}
+	data, err := json.MarshalIndent(spec, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(CollectionSpecPath(spec.Filename), data, 0666)
+}
+
+func LoadCollectionSpec(filename string) (CollectionSpec, bool, error) {
+	data, err := os.ReadFile(CollectionSpecPath(filename))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return DefaultCollectionSpec(filename), false, nil
+		}
+		return CollectionSpec{}, false, err
+	}
+
+	spec := DefaultCollectionSpec(filename)
+	if err := json.Unmarshal(data, &spec); err != nil {
+		return CollectionSpec{}, true, err
+	}
+	spec.Filename = filename
+	if spec.Name == "" {
+		spec.Name = filepath.Base(filename)
+	}
+	return spec, true, nil
 }
 
 func OpenCollectionSpec(spec CollectionSpec) (*Collection, error) {

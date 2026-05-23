@@ -45,6 +45,10 @@ func (db *Database) GetStatus() string {
 }
 
 func (db *Database) CreateCollection(name string) (*collection.Collection, error) {
+	return db.CreateCollectionSpec(name, collection.DefaultCollectionSpec(path.Join(db.Config.Dir, name)))
+}
+
+func (db *Database) CreateCollectionSpec(name string, spec collection.CollectionSpec) (*collection.Collection, error) {
 
 	_, exists := db.Collections[name]
 	if exists {
@@ -52,7 +56,20 @@ func (db *Database) CreateCollection(name string) (*collection.Collection, error
 	}
 
 	filename := path.Join(db.Config.Dir, name)
-	col, err := collection.OpenCollection(filename)
+	spec.Name = name
+	spec.Filename = filename
+	if spec.Store.Backend == "" {
+		spec.Store = collection.DefaultCollectionSpec(filename).Store
+	}
+	if spec.Records.Engine == "" {
+		spec.Records = collection.DefaultCollectionSpec(filename).Records
+	}
+
+	if err := collection.SaveCollectionSpec(spec); err != nil {
+		return nil, err
+	}
+
+	col, err := collection.OpenCollectionSpec(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +92,9 @@ func (db *Database) DropCollection(name string) error { // TODO: rename drop?
 	if err != nil {
 		return err // TODO: wrap?
 	}
+	if err := os.Remove(collection.CollectionSpecPath(filename)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
 
 	delete(db.Collections, name) // TODO: protect section! not threadsafe
 
@@ -94,6 +114,9 @@ func (db *Database) Load() error {
 			return err
 		}
 		if d.IsDir() {
+			return nil
+		}
+		if collection.IsCollectionSpecFile(filename) {
 			return nil
 		}
 

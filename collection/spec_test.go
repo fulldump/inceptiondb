@@ -55,3 +55,38 @@ func TestOpenCollectionSpecRejectsUnknownComponents(t *testing.T) {
 		t.Fatalf("expected unknown records error")
 	}
 }
+
+func TestSaveLoadCollectionSpec(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "events.wal")
+	spec := DefaultCollectionSpec(filename)
+	spec.Name = "events"
+	spec.Store = StoreSpec{
+		Backend: StoreBackendDisk,
+		Wrappers: []StoreWrapperSpec{
+			{Type: StoreWrapperSnappy},
+			{Type: StoreWrapperAsync},
+		},
+	}
+	spec.Records.Engine = RecordsTurbo
+
+	if err := SaveCollectionSpec(spec); err != nil {
+		t.Fatalf("save spec: %v", err)
+	}
+
+	loaded, ok, err := LoadCollectionSpec(filename)
+	if err != nil {
+		t.Fatalf("load spec: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected persisted spec")
+	}
+	if loaded.Filename != filename {
+		t.Fatalf("filename = %q, want %q", loaded.Filename, filename)
+	}
+	if loaded.Name != spec.Name || loaded.Store.Backend != spec.Store.Backend || loaded.Records.Engine != spec.Records.Engine {
+		t.Fatalf("loaded spec = %#v, want %#v", loaded, spec)
+	}
+	if len(loaded.Store.Wrappers) != 2 || loaded.Store.Wrappers[0].Type != StoreWrapperSnappy || loaded.Store.Wrappers[1].Type != StoreWrapperAsync {
+		t.Fatalf("wrappers = %#v", loaded.Store.Wrappers)
+	}
+}

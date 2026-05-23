@@ -20,5 +20,9 @@ func OpenCollectionCustom(filename, rawStoreName, wrapStoreName, recordsName str
 }
 
 func OpenCollection(filename string) (*Collection, error) {
-	return OpenCollectionSpec(DefaultCollectionSpec(filename))
+	spec, _, err := LoadCollectionSpec(filename)
+	if err != nil {
+		return nil, err
+	}
+	return OpenCollectionSpec(spec)
 }

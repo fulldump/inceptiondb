@@ -26,19 +26,19 @@ func NewService(db *database.Database) *Service {
 var ErrorCollectionAlreadyExists = errors.New("collection already exists")
 
 func (s *Service) CreateCollection(name string) (*collection.Collection, error) {
+	return s.CreateCollectionSpec(name, collection.DefaultCollectionSpec(path.Join(s.db.Config.Dir, name)))
+}
+
+func (s *Service) CreateCollectionSpec(name string, spec collection.CollectionSpec) (*collection.Collection, error) {
 	_, exist := s.collections[name]
 	if exist {
 		return nil, ErrorCollectionAlreadyExists
 	}
 
-	filename := path.Join(s.db.Config.Dir, name)
-
-	collection, err := collection.OpenCollection(filename)
+	collection, err := s.db.CreateCollectionSpec(name, spec)
 	if err != nil {
 		return nil, err
 	}
-
-	s.collections[name] = collection
 
 	return collection, nil
 }
