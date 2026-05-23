@@ -48,6 +48,13 @@ func main() {
 
 	switch strings.ToUpper(c.Test) {
 	case "ALL":
+		TestInsert(c)
+		TestInsertPK(c)
+		TestInsertBtree(c)
+		TestRetrieveBtree(c)
+		TestRetrieveFS(c)
+		TestPatch(c)
+		TestRemove(c)
 	case "INSERT":
 		TestInsert(c)
 	case "INSERTPK":

@@ -27,3 +27,14 @@ go run . --test patch --n 100_000 --workers 16
 ```sh
 go run . --test remove --n 1_000_000 --workers 16 
 ```
+
+## Run all benchmark scenarios
+
+```sh
+go run . --test all --n 1_000_000 --workers 16
+```
+
+This runs insert, insert with PK, insert with BTree, BTree retrieval,
+full-scan retrieval, patch and remove scenarios. Each scenario starts the
+service when no `--base` URL is provided and registers cleanup for temporary
+data.
