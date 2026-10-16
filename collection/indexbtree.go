@@ -22,7 +22,16 @@ func (b *IndexBtree) RemoveRow(r *Row) error {
 	json.Unmarshal(r.Payload, &data)
 
 	for _, field := range b.Options.Fields {
-		values = append(values, data[field])
+		field = strings.TrimPrefix(field, "-")
+		value, exists := data[field]
+		if !exists {
+			if b.Options.Sparse {
+				// The row was never added to this index: nothing to remove.
+				return nil
+			}
+			return fmt.Errorf("field '%s' not defined", field)
+		}
+		values = append(values, value)
 	}
 
 	b.Btree.Delete(&RowOrdered{
