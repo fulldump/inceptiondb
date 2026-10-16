@@ -553,4 +553,41 @@ func TestInsert1M_concurrent(t *testing.T) {
 
 }
 
+// TestCollection_PatchRemove_SparseBtree_MissingField reproduces a panic in
+// IndexBtree.RemoveRow: patching or removing a row that misses the indexed
+// field of a sparse btree index must be a no-op, never a panic.
+func TestCollection_PatchRemove_SparseBtree_MissingField(t *testing.T) {
+	Environment(func(filename string) {
+
+		// Setup
+		c, _ := OpenCollection(filename)
+		defer c.Close()
+
+		err := c.Index("by year", &IndexBTreeOptions{
+			Fields: []string{"year"},
+			Sparse: true,
+		})
+		AssertNil(err)
+
+		// Indexed row: keeps the btree non-empty.
+		_, err = c.Insert(map[string]interface{}{"name": "Fulanez", "year": 1985})
+		AssertNil(err)
+
+		// Non-indexed row: misses the indexed field.
+		row, err := c.Insert(map[string]interface{}{"name": "Menganez"})
+		AssertNil(err)
+
+		// Run: patching a row that is not in the index must not panic.
+		err = c.Patch(row, map[string]interface{}{"name": "Zutanez"})
+		AssertNil(err)
+
+		// Run: removing it must not panic either.
+		err = c.Remove(row)
+		AssertNil(err)
+
+		// Check
+		AssertEqual(len(c.Rows), 1)
+	})
+}
+
 // TODO: test concurrent delete

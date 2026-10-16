@@ -170,6 +170,68 @@ func TestIndexBtree_AddRow_Conflict(t *testing.T) {
 }
 
 // TODO: remove this:
+func TestIndexBtree_RemoveRow_SparseMissingField(t *testing.T) {
+
+	index := NewIndexBTree(&IndexBTreeOptions{
+		Fields: []string{"year"},
+		Sparse: true,
+	})
+
+	// A row with the field keeps the index non-empty.
+	err := index.AddRow(&Row{
+		Payload: json.RawMessage(`{"name":"Fulanez", "year": 1985}`),
+	})
+	biff.AssertNil(err)
+
+	// Removing a row that misses the indexed field should be a no-op,
+	// never a panic.
+	err = index.RemoveRow(&Row{
+		Payload: json.RawMessage(`{"name":"Menganez"}`),
+	})
+	biff.AssertNil(err)
+
+	expectedPayloads := []string{
+		`{"name":"Fulanez", "year": 1985}`,
+	}
+	obtainedPayloads := []string{}
+	index.Traverse([]byte(`{}`), func(row *Row) bool {
+		obtainedPayloads = append(obtainedPayloads, string(row.Payload))
+		return true
+	})
+	biff.AssertEqual(obtainedPayloads, expectedPayloads)
+}
+
+func TestIndexBtree_RemoveRow_SparseCompositeMissingField(t *testing.T) {
+
+	index := NewIndexBTree(&IndexBTreeOptions{
+		Fields: []string{"year", "name"},
+		Sparse: true,
+	})
+
+	// A full row keeps the index non-empty.
+	err := index.AddRow(&Row{
+		Payload: json.RawMessage(`{"year": 1985, "name": "Fulanez"}`),
+	})
+	biff.AssertNil(err)
+
+	// Removing a row that misses one of the indexed fields should be a
+	// no-op, never a panic.
+	err = index.RemoveRow(&Row{
+		Payload: json.RawMessage(`{"year": 1985}`),
+	})
+	biff.AssertNil(err)
+
+	expectedPayloads := []string{
+		`{"year": 1985, "name": "Fulanez"}`,
+	}
+	obtainedPayloads := []string{}
+	index.Traverse([]byte(`{}`), func(row *Row) bool {
+		obtainedPayloads = append(obtainedPayloads, string(row.Payload))
+		return true
+	})
+	biff.AssertEqual(obtainedPayloads, expectedPayloads)
+}
+
 func TestRRRR(t *testing.T) {
 
 	fields := []string{"random"}
