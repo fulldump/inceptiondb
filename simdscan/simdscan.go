@@ -412,10 +412,11 @@ func findValueEnd(data []byte, start int) int {
 	inString := false
 
 	for i < n {
-		// SIMD fast path: skip chunks with no structural chars
+		// SIMD fast path: skip chunks with no structural chars and no quotes
+		// (a skipped quote would desync inString)
 		if !inString && simdAvailable && i+32 <= n {
-			_, _, s := classify32(&data[i])
-			if s == 0 {
+			q, _, s := classify32(&data[i])
+			if s == 0 && q == 0 {
 				i += 32
 				continue
 			}

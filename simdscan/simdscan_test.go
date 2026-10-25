@@ -1,8 +1,10 @@
 package simdscan
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/buger/jsonparser"
@@ -121,6 +123,43 @@ func TestGetField_LargeValue(t *testing.T) {
 	}
 	if string(val) != "found" {
 		t.Errorf("val = %q, want %q", string(val), "found")
+	}
+}
+
+// Regression: the SIMD fast path of findValueEnd skipped 32-byte chunks
+// containing quotes, losing track of strings inside nested values. Any
+// string of 31+ bytes (e.g. a UUID) nested before the target field broke it.
+func TestGetField_LongStringInNestedValue(t *testing.T) {
+	templates := []string{
+		`{"a":{"k":"%s"},"id":"x"}`,
+		`{"a":["%s"],"id":"x"}`,
+		`{"a":[{"k":"%s"}],"id":"x"}`,
+		`{"a":{"b":{"k":"%s"}},"id":"x"}`,
+		`{"a":{"k":"%s","q":"x\"y"},"id":"x"}`,
+		`{"a":["%s","%s"],"b":{"k":"%s"},"id":"x"}`,
+	}
+
+	for _, tpl := range templates {
+		for n := 0; n <= 300; n++ {
+			s := string(bytes.Repeat([]byte("a"), n))
+			data := []byte(strings.ReplaceAll(tpl, "%s", s))
+
+			val, typ, err := GetField(data, "id")
+			if err != nil {
+				t.Fatalf("GetField(%s) with %d-byte string: unexpected error: %v", tpl, n, err)
+			}
+			if typ != TypeString || string(val) != "x" {
+				t.Fatalf("GetField(%s) with %d-byte string: got %q (type %d), want \"x\"", tpl, n, val, typ)
+			}
+
+			obj, err := ScanObject(data)
+			if err != nil {
+				t.Fatalf("ScanObject(%s) with %d-byte string: unexpected error: %v", tpl, n, err)
+			}
+			if v, _ := obj.Get("id"); string(v) != "x" {
+				t.Fatalf("ScanObject(%s) with %d-byte string: id = %q, want \"x\"", tpl, n, v)
+			}
+		}
 	}
 }
 
