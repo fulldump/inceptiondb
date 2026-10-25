@@ -9,6 +9,7 @@ import (
 
 	"github.com/fulldump/inceptiondb/collection/stores"
 	"github.com/fulldump/inceptiondb/simdscan"
+	"github.com/go-json-experiment/json/jsontext"
 	"github.com/valyala/fastjson"
 )
 
@@ -37,8 +38,13 @@ func CompilePatch(patch interface{}) (*PatchPlan, error) {
 
 	plan := &PatchPlan{Patch: patch}
 	if raw, ok := patch.(json.RawMessage); ok {
-		if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || trimmed[0] != '{' {
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) == 0 || trimmed[0] != '{' {
 			return nil, ErrPatchNotObject
+		}
+		// Duplicate names are rejected, like in inserts
+		if _, err := jsontext.NewDecoder(bytes.NewReader(trimmed)).ReadValue(); err != nil {
+			return nil, err
 		}
 		decoded, err := decodeRawPatch(raw)
 		if err != nil {

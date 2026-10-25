@@ -132,6 +132,17 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 			biff.AssertEqual(fmt.Sprint(resp.BodyJson().(JSON)["total"]), "0")
 		})
 
+		a.Alternative("Insert - duplicate names", func(a *biff.A) {
+			for _, doc := range []string{`{"k":1,"k":2}`, `{"a":{"k":1,"k":2}}`} {
+				resp := apiRequest("POST", "/collections/my-collection:insert").
+					WithBodyString(doc).Do()
+				biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
+			}
+
+			resp := apiRequest("GET", "/collections/my-collection").Do()
+			biff.AssertEqual(fmt.Sprint(resp.BodyJson().(JSON)["total"]), "0")
+		})
+
 		a.Alternative("Insert many", func(a *biff.A) {
 
 			myDocuments := []JSON{
@@ -338,6 +349,18 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 							"filter": JSON{"id": "1"},
 							"patch":  patch,
 						}).Do()
+					biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
+				}
+
+				resp := apiRequest("POST", "/collections/my-collection:find").
+					WithBodyJson(JSON{"filter": JSON{"id": "1"}}).Do()
+				biff.AssertEqualJson(resp.BodyJson(), myDocuments[0])
+			})
+
+			a.Alternative("Patch - duplicate names", func(a *biff.A) {
+				for _, patch := range []string{`{"n":1,"n":2}`, `{"a":{"n":1,"n":2}}`} {
+					resp := apiRequest("POST", "/collections/my-collection:patch").
+						WithBodyString(`{"filter":{"id":"1"},"patch":` + patch + `}`).Do()
 					biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
 				}
 

@@ -77,7 +77,8 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// ALT 1
-	jsonReader := jsontext.NewDecoder(r.Body, jsontext.AllowDuplicateNames(true))
+	// Rejects duplicate names (RFC 7493): which value counts would be undefined
+	jsonReader := jsontext.NewDecoder(r.Body)
 
 	for i := 0; true; i++ {
 		if pending > 0 && (pending >= maxPendingAcks || len(bytes.TrimSpace(jsonReader.UnreadBuffer())) == 0) {

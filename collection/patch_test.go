@@ -130,3 +130,14 @@ func TestPatchRejectsNonObject(t *testing.T) {
 		t.Fatalf("document after reopen = %s, want %s", data, want)
 	}
 }
+
+func TestPatchRejectsDuplicateNames(t *testing.T) {
+	for _, patch := range []string{`{"a":1,"a":2}`, `{"a":{"b":1,"b":2}}`, `{"a":[{"b":1,"b":2}]}`} {
+		if _, err := CompilePatch(json.RawMessage(patch)); err == nil {
+			t.Errorf("patch %s: want an error", patch)
+		}
+	}
+	if _, err := CompilePatch(json.RawMessage(`{"a":{"b":1},"b":{"b":2}}`)); err != nil {
+		t.Errorf("same name in different objects: %v", err)
+	}
+}
