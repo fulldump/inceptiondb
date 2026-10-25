@@ -28,6 +28,9 @@ func TestInsertBtree(c Config) {
 
 		conf := configuration.Default()
 		conf.Dir = dir
+		if httpAddr != "" {
+			conf.HttpAddr = httpAddr
+		}
 		conf.HttpAddr = "127.0.0.1:8082"
 		c.Base = "http://" + conf.HttpAddr
 

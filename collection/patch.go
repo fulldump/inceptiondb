@@ -14,6 +14,10 @@ import (
 type PatchPlan struct {
 	Patch    interface{}
 	topLevel map[string]patchField
+
+	raw         []rawPatchField // see compileRaw
+	rawEligible bool
+	rawExtra    int // bytes the raw path may add to a document
 }
 
 type patchField struct {
@@ -36,6 +40,7 @@ func CompilePatch(patch interface{}) (*PatchPlan, error) {
 		if err := plan.compileTopLevelRaw(raw); err != nil {
 			return nil, err
 		}
+		plan.compileRaw(json.RawMessage(bytes.TrimSpace(raw)))
 		return plan, nil
 	}
 
@@ -52,6 +57,7 @@ func CompilePatch(patch interface{}) (*PatchPlan, error) {
 			}
 			plan.topLevel[k] = patchField{raw: raw}
 		}
+		plan.compileRaw(patchMap)
 	}
 
 	return plan, nil
@@ -89,17 +95,18 @@ func (p *PatchPlan) compileTopLevelRaw(raw json.RawMessage) error {
 }
 
 func (c *Collection) Patch(id int64, patch interface{}, wait bool) error {
-	if err := c.PatchDeferred(id, patch); err != nil {
+	if _, err := c.PatchDeferred(id, patch); err != nil {
 		return err
 	}
 	return c.Commit(wait)
 }
 
-// PatchDeferred patches without waiting for durability, see Commit.
-func (c *Collection) PatchDeferred(id int64, patch interface{}) error { // nolint:gocyclo
+// PatchDeferred patches without waiting for durability, see Commit. It
+// returns the document after the patch.
+func (c *Collection) PatchDeferred(id int64, patch interface{}) ([]byte, error) { // nolint:gocyclo
 	plan, err := CompilePatch(patch)
 	if err != nil {
-		return fmt.Errorf("compile patch: %w", err)
+		return nil, fmt.Errorf("compile patch: %w", err)
 	}
 
 	mu := c.stripe(id)
@@ -107,32 +114,48 @@ func (c *Collection) PatchDeferred(id int64, patch interface{}) error { // nolin
 	defer mu.Unlock()
 
 	if c.closed {
-		return ErrCollectionClosed
+		return nil, ErrCollectionClosed
 	}
 
 	rec := c.records.Get(id)
 	if !rec.Active {
-		return fmt.Errorf("row %d does not exist", id)
+		return nil, fmt.Errorf("row %d does not exist", id)
+	}
+
+	if plan.rawEligible {
+		if patched, changed, ok := plan.applyRaw(rec.Data); ok {
+			if !changed {
+				return rec.Data, nil
+			}
+			if err := c.replaceLocked(id, rec.Data, patched); err != nil {
+				return nil, err
+			}
+			return patched, nil
+		}
 	}
 
 	if changed, ok := patchPlanChangesTopLevel(rec.Data, plan); ok && !changed {
-		return nil
+		return rec.Data, nil
 	}
 
 	var p fastjson.Parser
 	v, err := p.ParseBytes(rec.Data)
 	if err != nil {
-		return fmt.Errorf("decode row payload: %w", err)
+		return nil, fmt.Errorf("decode row payload: %w", err)
 	}
 
 	var arena fastjson.Arena
 	merged, changed := fastjsonMergePatch(&arena, v, plan.Patch)
 
 	if !changed {
-		return nil
+		return rec.Data, nil
 	}
 
-	return c.replaceLocked(id, rec.Data, merged.MarshalTo(nil))
+	patched := merged.MarshalTo(nil)
+	if err := c.replaceLocked(id, rec.Data, patched); err != nil {
+		return nil, err
+	}
+	return patched, nil
 }
 
 // replaceLocked swaps the payload of an active record. The caller holds the

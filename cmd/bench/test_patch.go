@@ -30,6 +30,9 @@ func TestPatch(c Config) {
 
 		conf := configuration.Default()
 		conf.Dir = dir
+		if httpAddr != "" {
+			conf.HttpAddr = httpAddr
+		}
 		c.Base = "http://" + conf.HttpAddr
 
 		start, stop = bootstrap.Bootstrap(conf)

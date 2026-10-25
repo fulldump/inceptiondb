@@ -121,38 +121,60 @@ func (s *recordsUltraShard[T]) set(lid int64, val T) {
 	}
 }
 
+// recordsUltraTraverseBatch is how many slots traverse copies per lock.
+// Copying a batch and calling f outside the lock keeps writers (which need
+// the exclusive lock) from queueing behind every reader on every slot.
+const recordsUltraTraverseBatch = 128
+
 func (s *recordsUltraShard[T]) traverse(f func(lid int64, val T) bool) bool {
 	s.mutex.RLock()
 	maxLid := s.localID
 	s.mutex.RUnlock()
 
-	for lid := int64(0); lid < maxLid; lid++ {
-		// Skip lid=0 on shard 0 because global ID 0 is reserved (means "no ID")
-		if lid == 0 && s.shardIndex == 0 {
-			continue
-		}
+	type entry struct {
+		lid int64
+		val T
+	}
+	var batch [recordsUltraTraverseBatch]entry
 
+	// Skip lid=0 on shard 0 because global ID 0 is reserved (means "no ID")
+	for lid := int64(1); lid < maxLid; {
+		n := 0
 		s.mutex.RLock()
-		var slot *ultraSlot[T]
-		segIdx := lid >> recordsUltraSegmentShift
-		if segIdx < int64(len(s.segments)) {
-			slot = &s.segments[segIdx][lid&recordsUltraSegmentMask]
-		}
-		var val T
-		var active bool
-		if slot != nil {
-			val = slot.val
-			active = slot.active
+		for ; lid < maxLid && n < len(batch); lid++ {
+			segIdx := lid >> recordsUltraSegmentShift
+			if segIdx >= int64(len(s.segments)) {
+				lid = maxLid
+				break
+			}
+			slot := &s.segments[segIdx][lid&recordsUltraSegmentMask]
+			if slot.active {
+				batch[n] = entry{lid: lid, val: slot.val}
+				n++
+			}
 		}
 		s.mutex.RUnlock()
 
-		if active {
-			if !f(lid, val) {
+		for i := 0; i < n; i++ {
+			if !f(batch[i].lid, batch[i].val) {
 				return false
 			}
 		}
 	}
 	return true
+}
+
+// A picker stays on its shard for recordsUltraPickerRun inserts (locality, no
+// contention between cores) and then moves recordsUltraPickerStride shards
+// ahead (odd, so it visits all of them). Without moving, a single insert
+// stream would put the whole collection in one shard and serialize every
+// later read and write on its lock.
+const recordsUltraPickerRun = 64
+const recordsUltraPickerStride = 211
+
+type recordsUltraPicker struct {
+	idx int
+	n   int
 }
 
 type RecordsUltra[T any] struct {
@@ -169,17 +191,21 @@ func NewRecordsUltra[T any]() *RecordsUltra[T] {
 	var pickerCounter atomic.Uint32
 	r.picker.New = func() any {
 		idx := int(pickerCounter.Add(1)-1) & recordsUltraShardMask
-		return &idx
+		return &recordsUltraPicker{idx: idx}
 	}
 
 	return r
 }
 
 func (r *RecordsUltra[T]) Insert(val T) int64 {
-	idxPtr := r.picker.Get().(*int)
-	idx := *idxPtr
-	id := r.shards[idx].insert(val)
-	r.picker.Put(idxPtr)
+	p := r.picker.Get().(*recordsUltraPicker)
+	id := r.shards[p.idx].insert(val)
+	p.n++
+	if p.n == recordsUltraPickerRun {
+		p.n = 0
+		p.idx = (p.idx + recordsUltraPickerStride) & recordsUltraShardMask
+	}
+	r.picker.Put(p)
 	return id
 }
 

@@ -17,6 +17,7 @@ type Config struct {
 	Workers    int    `usage:"number of workers"`
 	Durability string `usage:"collection durability: relaxed | strong"`
 	Dir        string `usage:"parent directory for the data of the embedded server (default: system temp dir)"`
+	Addr       string `usage:"HTTP address of the embedded server (default: 127.0.0.1:8080)"`
 }
 
 var cleanups []func()
@@ -49,6 +50,7 @@ func main() {
 	goconfig.Read(&c)
 	durability = c.Durability
 	tempBase = c.Dir
+	httpAddr = c.Addr
 
 	switch strings.ToUpper(c.Test) {
 	case "ALL":

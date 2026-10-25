@@ -36,6 +36,9 @@ var durability string
 // a tmpfs: use a directory on a real disk to measure durability.
 var tempBase string
 
+// httpAddr overrides the address of the embedded server.
+var httpAddr string
+
 func TempDir() (string, func()) {
 	dir, err := os.MkdirTemp(tempBase, "inceptiondb_bench_*")
 	if err != nil {
@@ -113,6 +116,9 @@ func CreateServer(c *Config) (start, stop func()) {
 
 	conf := configuration.Default()
 	conf.Dir = dir
+	if httpAddr != "" {
+		conf.HttpAddr = httpAddr
+	}
 	c.Base = "http://" + conf.HttpAddr
 
 	return bootstrap.Bootstrap(conf)

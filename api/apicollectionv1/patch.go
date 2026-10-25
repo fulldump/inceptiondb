@@ -63,16 +63,11 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	var result error
 	traverse(requestBody, col, func(id int64, payload []byte) bool {
 
-		err := col.PatchDeferred(id, plan)
+		updated, err := col.PatchDeferred(id, plan)
 		if err != nil {
 			// TODO: handle err??
 			// return err
 			return true // todo: OR return false?
-		}
-
-		updated, ok := col.Get(id)
-		if !ok {
-			return false
 		}
 
 		if !durable {

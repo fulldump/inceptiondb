@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/SierraSoftworks/connor"
-	"github.com/buger/jsonparser"
 
 	"github.com/fulldump/inceptiondb/collection"
 	"github.com/fulldump/inceptiondb/utils"
@@ -50,6 +49,11 @@ func traverse(requestBody []byte, col *collection.Collection, f func(id int64, p
 		}
 	}
 
+	var simpleFilter equalityFilter
+	if hasFilter && isSimple {
+		simpleFilter = compileEqualityFilter(options.Filter)
+	}
+
 	skip := options.Skip
 	limit := options.Limit
 	iterator := func(id int64, payload []byte) bool {
@@ -60,59 +64,7 @@ func traverse(requestBody []byte, col *collection.Collection, f func(id int64, p
 		if hasFilter {
 			// Fast path for simple equality queries
 			if isSimple {
-				match := true
-				for k, expected := range options.Filter {
-					val, dataType, _, err := jsonparser.Get(payload, k)
-					if err != nil {
-						if expected != nil {
-							match = false
-							break
-						}
-						continue
-					}
-
-					switch exp := expected.(type) {
-					case string:
-						if dataType != jsonparser.String {
-							match = false
-							break
-						}
-						parsedStr, err := jsonparser.ParseString(val)
-						if err != nil || parsedStr != exp {
-							match = false
-						}
-					case float64:
-						if dataType != jsonparser.Number {
-							match = false
-							break
-						}
-						parsedNum, err := jsonparser.ParseFloat(val)
-						if err != nil || parsedNum != exp {
-							match = false
-						}
-					case bool:
-						if dataType != jsonparser.Boolean {
-							match = false
-							break
-						}
-						parsedBool, err := jsonparser.ParseBoolean(val)
-						if err != nil || parsedBool != exp {
-							match = false
-						}
-					case nil:
-						if dataType != jsonparser.Null {
-							match = false
-						}
-					default:
-						match = false
-					}
-
-					if !match {
-						break
-					}
-				}
-
-				if !match {
+				if !simpleFilter.match(payload) {
 					return true
 				}
 				goto evaluate

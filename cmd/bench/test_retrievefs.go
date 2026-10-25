@@ -26,6 +26,9 @@ func TestRetrieveFS(c Config) {
 
 		conf := configuration.Default()
 		conf.Dir = dir
+		if httpAddr != "" {
+			conf.HttpAddr = httpAddr
+		}
 		conf.HttpAddr = "127.0.0.1:8084"
 		c.Base = "http://" + conf.HttpAddr
 
