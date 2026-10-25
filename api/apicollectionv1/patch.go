@@ -1,14 +1,14 @@
 package apicollectionv1
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 
-	"github.com/SierraSoftworks/connor"
 	"github.com/fulldump/box"
-
 	"github.com/fulldump/inceptiondb/collection"
 )
 
@@ -28,45 +28,67 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 	patch := struct {
 		Filter map[string]interface{}
-		Patch  interface{}
+		Patch  json.RawMessage
 	}{}
 	json.Unmarshal(requestBody, &patch) // TODO: handle err
 
-	e := json.NewEncoder(w)
+	plan, err := collection.CompilePatch(patch.Patch)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return err
+	}
 
-	traverse(requestBody, col, func(row *collection.Row) bool {
+	wb := bufio.NewWriterSize(w, 64*1024)
+	defer wb.Flush()
 
-		row.PatchMutex.Lock()
-		defer row.PatchMutex.Unlock()
-
-		hasFilter := patch.Filter != nil && len(patch.Filter) > 0
-		if hasFilter {
-
-			rowData := map[string]interface{}{}
-			json.Unmarshal(row.Payload, &rowData) // todo: handle error here?
-
-			match, err := connor.Match(patch.Filter, rowData)
-			if err != nil {
-				// todo: handle error?
-				// return fmt.Errorf("match: %w", err)
-				return false
-			}
-			if !match {
-				return false
-			}
+	// With durable writes, patched documents are only written back once
+	// they are fsynced, see insert.
+	waitParam := r.URL.Query().Get("wait") == "true"
+	durable := waitParam || col.Durability() == collection.DurabilityStrong
+	acks := &bytes.Buffer{}
+	pending := 0
+	commit := func() error {
+		if pending == 0 {
+			return nil
 		}
+		if err := col.Commit(waitParam); err != nil {
+			return err
+		}
+		wb.Write(acks.Bytes())
+		acks.Reset()
+		pending = 0
+		return nil
+	}
 
-		err := col.Patch(row, patch.Patch)
+	var result error
+	traverse(requestBody, col, func(id int64, payload []byte) bool {
+
+		updated, err := col.PatchDeferred(id, plan)
 		if err != nil {
 			// TODO: handle err??
 			// return err
 			return true // todo: OR return false?
 		}
 
-		e.Encode(row.Payload) // todo: handle err?
+		if !durable {
+			wb.Write(updated)
+			wb.Write([]byte("\n"))
+			return true
+		}
 
+		acks.Write(updated)
+		acks.WriteByte('\n')
+		pending++
+		if pending >= maxPendingAcks {
+			if result = commit(); result != nil {
+				return false
+			}
+		}
 		return true
 	})
 
-	return nil
+	if result != nil {
+		return result
+	}
+	return commit()
 }

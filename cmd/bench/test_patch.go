@@ -30,6 +30,9 @@ func TestPatch(c Config) {
 
 		conf := configuration.Default()
 		conf.Dir = dir
+		if httpAddr != "" {
+			conf.HttpAddr = httpAddr
+		}
 		c.Base = "http://" + conf.HttpAddr
 
 		start, stop = bootstrap.Bootstrap(conf)
@@ -118,7 +121,10 @@ func TestPatch(c Config) {
 	stop() // Stop the server
 
 	t1 := time.Now()
-	collection.OpenCollection(path.Join(dataDir, collectionName))
+	col, err := collection.OpenCollection(path.Join(dataDir, collectionName))
+	if err == nil {
+		_ = col.Close()
+	}
 	tookOpen := time.Since(t1)
 	fmt.Println("open took:", tookOpen)
 	fmt.Printf("Throughput Open: %.2f rows/sec\n", float64(c.N)/tookOpen.Seconds())

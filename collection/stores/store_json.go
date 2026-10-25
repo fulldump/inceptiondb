@@ -1,0 +1,172 @@
+package stores
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"sync"
+	"sync/atomic"
+)
+
+var storeJsonBufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
+type StoreJson struct {
+	file   *os.File
+	writer *bufio.Writer
+	mu     sync.Mutex
+	closed atomic.Bool
+}
+
+func NewStoreJson(path string) (*StoreJson, error) {
+	f, err := openWAL(path)
+	if err != nil {
+		return nil, err
+	}
+	s := &StoreJson{
+		file:   f,
+		writer: bufio.NewWriterSize(f, 4*1024*1024), // 4MB buffer for good throughput
+	}
+
+	return s, nil
+}
+
+func (s *StoreJson) Append(op uint8, id int64, data []byte, sync bool) error {
+	if s.closed.Load() {
+		return fmt.Errorf("StoreJson closed")
+	}
+
+	buf := storeJsonBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+
+	buf.WriteString(`{"op":`)
+
+	// Use stack-allocated byte array for formatting
+	var numBuf [32]byte
+	buf.Write(strconv.AppendUint(numBuf[:0], uint64(op), 10))
+
+	buf.WriteString(`,"id":`)
+	buf.Write(strconv.AppendInt(numBuf[:0], id, 10))
+
+	if len(data) > 0 {
+		buf.WriteString(`,"data":`)
+		buf.Write(data)
+	}
+
+	buf.WriteString("}\n")
+
+	finalData := buf.Bytes()
+
+	// Minimal critical section to write to our buffer
+	s.mu.Lock()
+	_, err := s.writer.Write(finalData)
+	if err == nil && sync {
+		if err = s.writer.Flush(); err == nil {
+			err = s.file.Sync()
+		}
+	}
+	s.mu.Unlock()
+
+	storeJsonBufferPool.Put(buf)
+
+	return err
+}
+
+func (s *StoreJson) Flush() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed.Load() {
+		return fmt.Errorf("StoreJson closed")
+	}
+	return s.writer.Flush()
+}
+
+func (s *StoreJson) Sync() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed.Load() {
+		return fmt.Errorf("StoreJson closed")
+	}
+	if err := s.writer.Flush(); err != nil {
+		return err
+	}
+	return s.file.Sync()
+}
+
+func (s *StoreJson) Close() error {
+	if s.closed.Swap(true) {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.writer.Flush(); err != nil {
+		return err
+	}
+	if err := s.file.Sync(); err != nil {
+		return err
+	}
+	return s.file.Close()
+}
+
+func (s *StoreJson) Replay(fn func(op uint8, id int64, data []byte) error) error {
+	f, err := os.Open(s.file.Name())
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	reader := bufio.NewReaderSize(f, 1024*1024)
+
+	type LogLine struct {
+		Op   uint8           `json:"op"`
+		ID   int64           `json:"id"`
+		Data json.RawMessage `json:"data,omitempty"`
+	}
+
+	var offset int64
+	for {
+		line, err := reader.ReadBytes('\n')
+		if errors.Is(err, io.EOF) {
+			if len(bytes.TrimSpace(line)) > 0 {
+				// Last line without newline: a write cut by a crash
+				return truncateTail(s.file, offset, offset+int64(len(line)), "line cut")
+			}
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		lineOffset := offset
+		offset += int64(len(line))
+
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+
+		var parsedLog LogLine
+		if err := json.Unmarshal(line, &parsedLog); err != nil {
+			return fmt.Errorf("StoreJson Replay JSON error at offset %d: %w", lineOffset, err)
+		}
+
+		// Important: If data was extracted, we pass the raw bytes. If not, we pass nil
+		var finalData []byte
+		if len(parsedLog.Data) > 0 {
+			finalData = []byte(parsedLog.Data)
+		}
+
+		if err := fn(parsedLog.Op, parsedLog.ID, finalData); err != nil {
+			return err
+		}
+	}
+}

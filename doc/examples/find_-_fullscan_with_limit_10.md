@@ -22,7 +22,7 @@ Host: example.com
 
 HTTP/1.1 200 OK
 Content-Length: 82
-Content-Type: text/plain; charset=utf-8
+Content-Type: application/json
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {"id":"1","name":"Alfonso"}

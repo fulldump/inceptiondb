@@ -7,8 +7,6 @@ import (
 	"net/http"
 
 	"github.com/fulldump/box"
-
-	"github.com/fulldump/inceptiondb/collection"
 )
 
 func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -33,8 +31,9 @@ func find(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		return err // todo: handle/wrap this properly
 	}
 
-	return traverse(requestBody, col, func(row *collection.Row) bool {
-		w.Write(row.Payload)
+	return traverse(requestBody, col, func(id int64, payload []byte) bool {
+		_ = id
+		w.Write(payload)
 		w.Write([]byte("\n"))
 		return true
 	})

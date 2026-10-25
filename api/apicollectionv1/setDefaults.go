@@ -31,7 +31,7 @@ func setDefaults(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 		return err // todo: handle/wrap this properly
 	}
 
-	defaults := col.Defaults
+	defaults := col.Defaults()
 
 	err = json.NewDecoder(r.Body).Decode(&defaults)
 	if err != nil {
@@ -53,7 +53,7 @@ func setDefaults(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	err = json.NewEncoder(w).Encode(col.Defaults)
+	err = json.NewEncoder(w).Encode(col.Defaults())
 	if err != nil {
 		return err // todo: handle/wrap this properly
 	}

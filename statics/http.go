@@ -7,6 +7,7 @@ import (
 )
 
 // Serve static files
+//
 //go:embed www/*
 var www embed.FS
 

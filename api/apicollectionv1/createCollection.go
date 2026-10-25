@@ -4,12 +4,16 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/fulldump/inceptiondb/collection"
 	"github.com/fulldump/inceptiondb/service"
 )
 
 type createCollectionRequest struct {
-	Name     string         `json:"name"`
-	Defaults map[string]any `json:"defaults"`
+	Name       string                 `json:"name"`
+	Defaults   map[string]any         `json:"defaults"`
+	Durability string                 `json:"durability"`
+	Storage    collection.StoreSpec   `json:"storage"`
+	Records    collection.RecordsSpec `json:"records"`
 }
 
 func newCollectionDefaults() map[string]any {
@@ -22,7 +26,18 @@ func createCollection(ctx context.Context, w http.ResponseWriter, input *createC
 
 	s := GetServicer(ctx)
 
-	collection, err := s.CreateCollection(input.Name)
+	if err := collection.ValidateDurability(input.Durability); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return nil, err
+	}
+
+	spec := collection.CollectionSpec{
+		Name:       input.Name,
+		Durability: input.Durability,
+		Store:      input.Storage,
+		Records:    input.Records,
+	}
+	col, err := s.CreateCollectionSpec(input.Name, spec)
 	if err == service.ErrorCollectionAlreadyExists {
 		w.WriteHeader(http.StatusConflict)
 		return nil, err // todo: return custom error, with detailed description
@@ -35,12 +50,16 @@ func createCollection(ctx context.Context, w http.ResponseWriter, input *createC
 	if input.Defaults == nil {
 		input.Defaults = newCollectionDefaults()
 	}
-	collection.SetDefaults(input.Defaults)
+	if err := col.SetDefaults(input.Defaults); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return nil, err
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	return &CollectionResponse{
-		Name:     input.Name,
-		Total:    len(collection.Rows),
-		Defaults: collection.Defaults,
+		Name:       input.Name,
+		Total:      int(col.Count()),
+		Defaults:   col.Defaults(),
+		Durability: col.Durability(),
 	}, nil
 }

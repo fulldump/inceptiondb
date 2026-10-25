@@ -34,11 +34,11 @@ Host: example.com
 
 HTTP/1.1 200 OK
 Content-Length: 86
-Content-Type: text/plain; charset=utf-8
+Content-Type: application/json
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
-{"country":"es","id":"1","name":"Alfonso"}
-{"country":"es","id":"3","name":"Alfonso"}
+{"id":"1","name":"Alfonso","country":"es"}
+{"id":"3","name":"Alfonso","country":"es"}
 
 ```
 

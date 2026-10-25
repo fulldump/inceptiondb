@@ -20,7 +20,7 @@ func newTestCollection(t *testing.T) *collection.Collection {
 	}
 
 	t.Cleanup(func() {
-		col.Drop()
+		//		col.Drop() // TODO: drop collection!
 	})
 
 	return col
@@ -34,18 +34,18 @@ func TestFindRowByID_UsesIndex(t *testing.T) {
 		t.Fatalf("create index: %v", err)
 	}
 
-	if _, err := col.Insert(map[string]any{"id": "doc-1", "name": "Alice"}); err != nil {
+	if _, err := col.InsertMap(map[string]any{"id": "doc-1", "name": "Alice"}, false); err != nil {
 		t.Fatalf("insert document: %v", err)
 	}
 
-	row, source, err := findRowByID(col, "doc-1")
+	payload, source, err := findRowByID(col, "doc-1")
 	if err != nil {
 		t.Fatalf("findRowByID: %v", err)
 	}
-	if row == nil {
-		t.Fatalf("expected row, got nil")
+	if payload == nil {
+		t.Fatalf("expected payload, got nil")
 	}
-	if got := string(row.Payload); !strings.Contains(got, "doc-1") {
+	if got := string(payload); !strings.Contains(got, "doc-1") {
 		t.Fatalf("unexpected payload: %s", got)
 	}
 	if source == nil {
@@ -60,18 +60,18 @@ func TestFindRowByID_Fullscan(t *testing.T) {
 
 	col := newTestCollection(t)
 
-	if _, err := col.Insert(map[string]any{"id": "doc-2", "name": "Bob"}); err != nil {
+	if _, err := col.InsertMap(map[string]any{"id": "doc-2", "name": "Bob"}, false); err != nil {
 		t.Fatalf("insert document: %v", err)
 	}
 
-	row, source, err := findRowByID(col, "doc-2")
+	payload, source, err := findRowByID(col, "doc-2")
 	if err != nil {
 		t.Fatalf("findRowByID: %v", err)
 	}
-	if row == nil {
-		t.Fatalf("expected row, got nil")
+	if payload == nil {
+		t.Fatalf("expected payload, got nil")
 	}
-	if got := string(row.Payload); !strings.Contains(got, "doc-2") {
+	if got := string(payload); !strings.Contains(got, "doc-2") {
 		t.Fatalf("unexpected payload: %s", got)
 	}
 	if source == nil || source.Type != "fullscan" {
@@ -83,18 +83,69 @@ func TestFindRowByID_NotFound(t *testing.T) {
 
 	col := newTestCollection(t)
 
-	if _, err := col.Insert(map[string]any{"id": "doc-3"}); err != nil {
+	if _, err := col.InsertMap(map[string]any{"id": "doc-3"}, false); err != nil {
 		t.Fatalf("insert document: %v", err)
 	}
 
-	row, source, err := findRowByID(col, "missing")
+	payload, source, err := findRowByID(col, "missing")
 	if err != nil {
 		t.Fatalf("findRowByID: %v", err)
 	}
-	if row != nil {
-		t.Fatalf("expected nil row, got %+v", row)
+	if payload != nil {
+		t.Fatalf("expected nil payload, got %+v", payload)
 	}
 	if source != nil {
 		t.Fatalf("expected nil source, got %+v", source)
+	}
+}
+
+func TestFindRowByID_UsesPKIndex(t *testing.T) {
+
+	col := newTestCollection(t)
+
+	if err := col.Index("pk", &collection.IndexPKOptions{Paths: [][]string{{"id"}}}); err != nil {
+		t.Fatalf("create index: %v", err)
+	}
+	if _, err := col.InsertMap(map[string]any{"id": "doc-4"}, false); err != nil {
+		t.Fatalf("insert document: %v", err)
+	}
+
+	payload, source, err := findRowByID(col, "doc-4")
+	if err != nil {
+		t.Fatalf("findRowByID: %v", err)
+	}
+	if !strings.Contains(string(payload), "doc-4") {
+		t.Fatalf("unexpected payload: %s", payload)
+	}
+	if source == nil || source.Type != "index" || source.Name != "pk" {
+		t.Fatalf("unexpected source: %+v", source)
+	}
+
+	payload, source, err = findRowByID(col, "missing")
+	if err != nil || payload != nil || source != nil {
+		t.Fatalf("missing document: payload %s, source %+v, err %v", payload, source, err)
+	}
+}
+
+func TestFindRowByID_OtherIndexUsesFullscan(t *testing.T) {
+
+	col := newTestCollection(t)
+
+	if err := col.Index("by-name", &collection.IndexMapOptions{Field: "name"}); err != nil {
+		t.Fatalf("create index: %v", err)
+	}
+	if _, err := col.Insert([]byte(`{"id":7,"name":"x"}`), false); err != nil {
+		t.Fatalf("insert document: %v", err)
+	}
+
+	payload, source, err := findRowByID(col, "7")
+	if err != nil {
+		t.Fatalf("findRowByID: %v", err)
+	}
+	if string(payload) != `{"id":7,"name":"x"}` {
+		t.Fatalf("unexpected payload: %s", payload)
+	}
+	if source == nil || source.Type != "fullscan" {
+		t.Fatalf("expected fullscan source, got %+v", source)
 	}
 }

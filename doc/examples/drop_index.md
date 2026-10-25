@@ -21,6 +21,7 @@ Host: example.com
 }
 
 HTTP/1.1 204 No Content
+Content-Type: application/json
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 

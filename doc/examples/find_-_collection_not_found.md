@@ -18,7 +18,7 @@ Host: example.com
 
 HTTP/1.1 500 Internal Server Error
 Content-Length: 78
-Content-Type: text/plain; charset=utf-8
+Content-Type: application/json
 Date: Mon, 15 Aug 2022 02:08:13 GMT
 
 {
