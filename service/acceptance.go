@@ -311,6 +311,21 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 			})
 
+			a.Alternative("Patch - not an object", func(a *biff.A) {
+				for _, patch := range []interface{}{"str", []int{1}, 5, nil} {
+					resp := apiRequest("POST", "/collections/my-collection:patch").
+						WithBodyJson(JSON{
+							"filter": JSON{"id": "1"},
+							"patch":  patch,
+						}).Do()
+					biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
+				}
+
+				resp := apiRequest("POST", "/collections/my-collection:find").
+					WithBodyJson(JSON{"filter": JSON{"id": "1"}}).Do()
+				biff.AssertEqualJson(resp.BodyJson(), myDocuments[0])
+			})
+
 		})
 
 		a.Alternative("Create index - map", func(a *biff.A) {
