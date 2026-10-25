@@ -5,11 +5,10 @@ import (
 	"os"
 
 	"github.com/fulldump/box"
-
-	"github.com/fulldump/inceptiondb/utils"
 )
 
-// This is experimental
+// size reports estimated sizes in bytes. It is O(1): it reads counters
+// instead of walking the data.
 func size(ctx context.Context) (interface{}, error) {
 
 	s := GetServicer(ctx)
@@ -21,7 +20,7 @@ func size(ctx context.Context) (interface{}, error) {
 
 	result := map[string]interface{}{}
 
-	result["memory"] = utils.SizeOf(col)
+	result["memory"] = col.MemorySize()
 
 	// Disk
 	info, err := os.Stat(col.Filepath())
@@ -31,7 +30,7 @@ func size(ctx context.Context) (interface{}, error) {
 
 	// Indexes
 	for name, index := range col.ListIndexes() {
-		result["index."+name] = utils.SizeOf(index)
+		result["index."+name] = index.Size()
 	}
 
 	return result, nil

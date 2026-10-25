@@ -13,6 +13,10 @@ been predefined using SetDefaults, those values are automatically added to the d
 inserted into the collection. This process is seamless and ensures that every new document adheres to 
 a defined structure and contains all necessary information.
 
+A field set to `null` counts as not provided, so it gets its default value too: inserting
+`{"id": null}` with the default `"id": "uuid()"` stores a generated id. Any other value is kept,
+also `false`, `0` and `""`.
+
 ## Example usage
 
 Consider a scenario where you are adding a new user record to a collection but only provide the user's
@@ -101,15 +105,15 @@ like creation timestamps, log entries, etc.
 January 1, 1970, 00:00:00 UTC)
 
 ### 3. `auto()`
-**Description**: Implements an automatic row counter that increments with each insert, starting from 
-the first insertion. This function is beneficial for maintaining a sequential order or count of the
-documents added to the collection.
+**Description**: Generates a number that grows with each insert, also across restarts: a document
+inserted later always gets a greater number. The numbers are not consecutive, there can be gaps
+(e.g. after a failed insert or a restart).
 
-**Example Usage**: Useful for auto-increment fields, such as a serial number, order number, or any
-scenario where a simple, incrementing counter is needed.
+**Example Usage**: Useful to keep the insertion order, such as a serial number, an order number, or
+any scenario where an increasing counter is needed.
 
-**Output Example**: `"serial_number": 1023` (where 1023 is the current count of documents inserted 
-since the first one)
+**Output Example**: `"serial_number": 1023` (greater than the number of any document inserted
+before)
 
 ### Implementation Considerations
 
@@ -119,8 +123,7 @@ When integrating generative functions with `SetDefaults`, consider the following
 
 **Temporal Precision**: unixnano() provides high-precision timestamps, useful for time-sensitive data.
 
-**Sequential Integrity**: auto() ensures a consistent, incremental sequence, beneficial for ordering or 
-numbering entries.
+**Sequential Integrity**: auto() numbers always grow, beneficial for ordering or numbering entries.
 
 Ensure that the chosen generative function aligns with the field's purpose and the overall data model's 
 requirements. Proper configuration of `SetDefaults` with these functions enhances data integrity, 

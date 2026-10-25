@@ -13,8 +13,9 @@ import (
 const indexPKNumShards = 256
 
 type pkShard struct {
-	mu sync.RWMutex
-	m  map[string]int64
+	mu       sync.RWMutex
+	m        map[string]int64
+	keyBytes int64 // guarded by mu
 }
 
 type IndexPK struct {
@@ -93,6 +94,9 @@ func (idx *IndexPK) Add(id int64, data []byte) error {
 		return fmt.Errorf("duplicate primary key: %s", key)
 	}
 
+	if _, exists := shard.m[key]; !exists {
+		shard.keyBytes += int64(len(key))
+	}
 	shard.m[key] = id
 	return nil
 }
@@ -112,6 +116,7 @@ func (idx *IndexPK) Remove(id int64, data []byte) error {
 	// Never remove a key owned by another document
 	if existing, exists := shard.m[key]; exists && existing == id {
 		delete(shard.m, key)
+		shard.keyBytes -= int64(len(key))
 	}
 	return nil
 }
@@ -159,4 +164,15 @@ func (idx *IndexPK) GetOptions() interface{} {
 
 func (idx *IndexPK) IsUnique() bool {
 	return true
+}
+
+// Size is O(shards), a constant.
+func (idx *IndexPK) Size() int64 {
+	var size int64
+	for _, shard := range idx.shards {
+		shard.mu.RLock()
+		size += int64(len(shard.m))*indexEntryOverhead + shard.keyBytes
+		shard.mu.RUnlock()
+	}
+	return size
 }

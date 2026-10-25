@@ -177,6 +177,7 @@ func (c *Collection) replaceLocked(id int64, oldPayload, newPayload []byte) erro
 		Data:   newPayload,
 		Active: true,
 	})
+	c.stripe(id).bytes.Add(int64(len(newPayload) - len(oldPayload)))
 
 	if hasAsync {
 		c.asyncIndexOp(stores.OpUpdate, id, append([]byte(nil), newPayload...), append([]byte(nil), oldPayload...))

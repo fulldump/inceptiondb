@@ -121,6 +121,17 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		})
 
+		a.Alternative("Insert - not an object", func(a *biff.A) {
+			for _, doc := range []string{`[1,2]`, `"str"`, `5`, `null`} {
+				resp := apiRequest("POST", "/collections/my-collection:insert").
+					WithBodyString(doc).Do()
+				biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
+			}
+
+			resp := apiRequest("GET", "/collections/my-collection").Do()
+			biff.AssertEqual(fmt.Sprint(resp.BodyJson().(JSON)["total"]), "0")
+		})
+
 		a.Alternative("Insert many", func(a *biff.A) {
 
 			myDocuments := []JSON{
@@ -206,8 +217,17 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 					Save(resp, "Size - experimental", `
 						EXPERIMENTAL!!!
 
-						This will probably be removed, it is extremely inefficient.
+						Estimated sizes in bytes: ´memory´ for the documents, ´disk´ for the
+						file and ´index.<name>´ for every index. It costs O(1): it reads
+						counters that every write keeps up to date.
 					`)
+
+					biff.AssertEqual(resp.StatusCode, http.StatusOK)
+					body := resp.BodyJson().(JSON)
+					memory, _ := body["memory"].(json.Number).Int64()
+					biff.AssertTrue(memory > 0)
+					index, _ := body["index.my-index"].(json.Number).Int64()
+					biff.AssertTrue(index > 0)
 				})
 
 			})
@@ -724,6 +744,23 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 			})
 
+			a.Alternative("Insert with defaults - null field", func(a *biff.A) {
+				resp := apiRequest("POST", "/collections/my-collection:insert").
+					WithBodyString(`{"id":null,"name":"fulanez","street":null}`).Do()
+				biff.AssertEqual(resp.StatusCode, http.StatusCreated)
+				id, _ := resp.BodyJson().(JSON)["id"].(string)
+				biff.AssertNotEqual(id, "")
+				expectedBody := JSON{
+					"id":       id,
+					"c":        1,
+					"n":        1,
+					"name":     "fulanez",
+					"street":   "",
+					"verified": false,
+				}
+				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
+			})
+
 			a.Alternative("Insert with defaults - new field", func(a *biff.A) {
 				resp := apiRequest("POST", "/collections/my-collection:insert").
 					WithBodyJson(JSON{
@@ -765,6 +802,10 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				been predefined using SetDefaults, those values are automatically added to the document before it is 
 				inserted into the collection. This process is seamless and ensures that every new document adheres to 
 				a defined structure and contains all necessary information.
+
+				A field set to ´null´ counts as not provided, so it gets its default value too: inserting
+				´{"id": null}´ with the default ´"id": "uuid()"´ stores a generated id. Any other value is kept,
+				also ´false´, ´0´ and ´""´.
 
 				## Example usage
 
@@ -854,15 +895,15 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				January 1, 1970, 00:00:00 UTC)
 				
 				### 3. ´auto()´
-				**Description**: Implements an automatic row counter that increments with each insert, starting from 
-				the first insertion. This function is beneficial for maintaining a sequential order or count of the
-				documents added to the collection.
+				**Description**: Generates a number that grows with each insert, also across restarts: a document
+				inserted later always gets a greater number. The numbers are not consecutive, there can be gaps
+				(e.g. after a failed insert or a restart).
 				
-				**Example Usage**: Useful for auto-increment fields, such as a serial number, order number, or any
-				scenario where a simple, incrementing counter is needed.
+				**Example Usage**: Useful to keep the insertion order, such as a serial number, an order number, or
+				any scenario where an increasing counter is needed.
 				
-				**Output Example**: ´"serial_number": 1023´ (where 1023 is the current count of documents inserted 
-				since the first one)
+				**Output Example**: ´"serial_number": 1023´ (greater than the number of any document inserted
+				before)
 				
 				### Implementation Considerations
 
@@ -872,8 +913,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 				**Temporal Precision**: unixnano() provides high-precision timestamps, useful for time-sensitive data.
 
-				**Sequential Integrity**: auto() ensures a consistent, incremental sequence, beneficial for ordering or 
-				numbering entries.
+				**Sequential Integrity**: auto() numbers always grow, beneficial for ordering or numbering entries.
 
 				Ensure that the chosen generative function aligns with the field's purpose and the overall data model's 
 				requirements. Proper configuration of ´SetDefaults´ with these functions enhances data integrity, 

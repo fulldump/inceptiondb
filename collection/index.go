@@ -41,7 +41,13 @@ type Index interface {
 	GetType() string
 	GetOptions() interface{}
 	IsUnique() bool
+	// Size estimates the memory taken by the index, in O(1)
+	Size() int64
 }
+
+// indexEntryOverhead is a rough estimate of what an entry costs in a Go
+// container besides its key: headers, pointers and buckets.
+const indexEntryOverhead = 48
 
 // --- IndexMap ---
 
@@ -49,6 +55,8 @@ type IndexMap struct {
 	Entries map[string]*IndexMapEntry
 	RWmutex *sync.RWMutex
 	Options *IndexMapOptions
+
+	keyBytes int64 // guarded by RWmutex
 }
 
 type IndexMapEntry struct {
@@ -110,6 +118,7 @@ func (i *IndexMap) removeKeys(id int64, keys []string) {
 	for _, k := range keys {
 		if entry, ok := i.Entries[k]; ok && entry.ID == id {
 			delete(i.Entries, k)
+			i.keyBytes -= int64(len(k))
 		}
 	}
 }
@@ -144,6 +153,9 @@ func (i *IndexMap) Add(id int64, data []byte) error {
 		return err
 	}
 	for _, k := range keys {
+		if _, exists := i.Entries[k]; !exists {
+			i.keyBytes += int64(len(k))
+		}
 		i.Entries[k] = &IndexMapEntry{ID: id}
 	}
 
@@ -195,6 +207,12 @@ func (i *IndexMap) IsUnique() bool {
 	return true
 }
 
+func (i *IndexMap) Size() int64 {
+	i.RWmutex.RLock()
+	defer i.RWmutex.RUnlock()
+	return int64(len(i.Entries))*indexEntryOverhead + i.keyBytes
+}
+
 // --- IndexBtree ---
 
 type IndexBTreeOptions struct {
@@ -206,6 +224,7 @@ type IndexBTreeOptions struct {
 type IndexBtree struct {
 	Btree   *btree.BTreeG[*RowOrdered]
 	RWmutex *sync.RWMutex
+	bytes   int64 // guarded by RWmutex
 	Options *IndexBTreeOptions
 }
 
@@ -362,7 +381,23 @@ func (b *IndexBtree) removeLocked(id int64, values []interface{}) {
 			return
 		}
 	}
-	b.Btree.Delete(item)
+	if deleted, ok := b.Btree.Delete(item); ok {
+		b.bytes -= rowOrderedSize(deleted)
+	}
+}
+
+// rowOrderedSize estimates the memory of a btree entry.
+func rowOrderedSize(r *RowOrdered) int64 {
+	size := int64(indexEntryOverhead)
+	for _, v := range r.Values {
+		size += 16 // interface header
+		if s, ok := v.(string); ok {
+			size += int64(len(s))
+		} else {
+			size += 8
+		}
+	}
+	return size
 }
 
 func (b *IndexBtree) Remove(id int64, data []byte) error {
@@ -397,7 +432,10 @@ func (b *IndexBtree) Add(id int64, data []byte) error {
 			return fmt.Errorf("key already exists for unique btree index")
 		}
 	}
-	b.Btree.ReplaceOrInsert(item)
+	if old, replaced := b.Btree.ReplaceOrInsert(item); replaced {
+		b.bytes -= rowOrderedSize(old)
+	}
+	b.bytes += rowOrderedSize(item)
 
 	return nil
 }
@@ -546,13 +584,24 @@ func (b *IndexBtree) IsUnique() bool {
 	return b.Options.Unique
 }
 
+func (b *IndexBtree) Size() int64 {
+	b.RWmutex.RLock()
+	defer b.RWmutex.RUnlock()
+	return b.bytes
+}
+
 // --- IndexFTS ---
 
 type IndexFTS struct {
 	Index   map[string]map[int64]struct{}
 	RWmutex *sync.RWMutex
 	Options *IndexFTSOptions
+
+	bytes int64 // guarded by RWmutex
 }
+
+// indexFTSPostingSize estimates the memory of an id in the set of a token.
+const indexFTSPostingSize = 16
 
 type IndexFTSOptions struct {
 	Field string `json:"field"`
@@ -587,10 +636,16 @@ func (i *IndexFTS) Add(id int64, data []byte) error {
 	defer i.RWmutex.Unlock()
 
 	for _, token := range tokens {
-		if _, ok := i.Index[token]; !ok {
-			i.Index[token] = map[int64]struct{}{}
+		rows, ok := i.Index[token]
+		if !ok {
+			rows = map[int64]struct{}{}
+			i.Index[token] = rows
+			i.bytes += int64(len(token)) + indexEntryOverhead
 		}
-		i.Index[token][id] = struct{}{}
+		if _, ok := rows[id]; !ok {
+			rows[id] = struct{}{}
+			i.bytes += indexFTSPostingSize
+		}
 	}
 
 	return nil
@@ -657,9 +712,13 @@ func (i *IndexFTS) Remove(id int64, data []byte) error {
 
 	for _, token := range tokens {
 		if rows, ok := i.Index[token]; ok {
-			delete(rows, id)
+			if _, ok := rows[id]; ok {
+				delete(rows, id)
+				i.bytes -= indexFTSPostingSize
+			}
 			if len(rows) == 0 {
 				delete(i.Index, token)
+				i.bytes -= int64(len(token)) + indexEntryOverhead
 			}
 		}
 	}
@@ -677,4 +736,10 @@ func (i *IndexFTS) GetOptions() interface{} {
 
 func (i *IndexFTS) IsUnique() bool {
 	return false
+}
+
+func (i *IndexFTS) Size() int64 {
+	i.RWmutex.RLock()
+	defer i.RWmutex.RUnlock()
+	return i.bytes
 }

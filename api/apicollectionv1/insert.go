@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -109,7 +110,11 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			if commitErr := commit(); commitErr != nil {
 				return commitErr
 			}
-			writeHeader(http.StatusConflict)
+			if errors.Is(err, collectionpkg.ErrDocumentNotObject) {
+				writeHeader(http.StatusBadRequest)
+			} else {
+				writeHeader(http.StatusConflict)
+			}
 			return err
 		}
 

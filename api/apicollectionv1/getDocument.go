@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/fulldump/box"
@@ -66,6 +67,8 @@ func getDocument(ctx context.Context) (*documentLookupResponse, error) {
 	}, nil
 }
 
+// findRowByID looks the document up in an index on "id" and falls back to a
+// full scan when there is none (e.g. the user dropped it).
 func findRowByID(col *collection.Collection, documentID string) ([]byte, *documentLookupSource, error) {
 
 	var found []byte
@@ -73,6 +76,17 @@ func findRowByID(col *collection.Collection, documentID string) ([]byte, *docume
 	normalizedID := strings.TrimSpace(documentID)
 	if normalizedID == "" {
 		return nil, nil, nil
+	}
+
+	if name, options, ok := idIndex(col, normalizedID); ok {
+		err := col.TraverseIndex(name, options, func(id int64, payload []byte) bool {
+			found = payload
+			return false
+		})
+		if err != nil || found == nil {
+			return nil, nil, err
+		}
+		return found, &documentLookupSource{Type: "index", Name: name}, nil
 	}
 
 	rows := col.Scan()
@@ -97,6 +111,33 @@ func findRowByID(col *collection.Collection, documentID string) ([]byte, *docume
 	}
 
 	return found, &documentLookupSource{Type: "fullscan"}, nil
+}
+
+// idIndex returns an index on "id" (pk or map) and the traverse options to
+// look up id. A sparse map only skips documents without id, so it is valid too.
+func idIndex(col *collection.Collection, id string) (string, []byte, bool) {
+	indexes := col.ListIndexes()
+	names := make([]string, 0, len(indexes))
+	for name := range indexes {
+		names = append(names, name)
+	}
+	sort.Strings(names) // stable choice when there are several
+
+	for _, name := range names {
+		switch index := indexes[name].(type) {
+		case *collection.IndexPK:
+			paths := index.GetOptions().(*collection.IndexPKOptions).Paths
+			if len(paths) == 1 && len(paths[0]) == 1 && paths[0][0] == "id" {
+				return name, []byte(id), true
+			}
+		case *collection.IndexMap:
+			if index.Options.Field == "id" {
+				options, _ := json.Marshal(collection.IndexMapTraverse{Value: id})
+				return name, options, true
+			}
+		}
+	}
+	return "", nil, false
 }
 
 func normalizeDocumentID(value interface{}) string {

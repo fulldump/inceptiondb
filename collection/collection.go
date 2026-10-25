@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/fulldump/inceptiondb/collection/records"
 	"github.com/fulldump/inceptiondb/collection/stores"
@@ -31,10 +34,15 @@ type stripeLock struct {
 	// count of active records whose id maps to this stripe. A single shared
 	// counter would bounce its cache line between cores on every write.
 	count atomic.Int64
-	_     [48]byte // padding to prevent false sharing between stripes
+	// bytes is the payload size of those records
+	bytes atomic.Int64
+	_     [40]byte // padding to prevent false sharing between stripes
 }
 
 var ErrCollectionClosed = errors.New("collection closed")
+
+// ErrDocumentNotObject rejects a document that is not a JSON object.
+var ErrDocumentNotObject = errors.New("document must be a JSON object")
 
 type Collection struct {
 	name       string
@@ -228,6 +236,23 @@ func (c *Collection) Count() int64 {
 	return count
 }
 
+// DataSize returns the size in bytes of the documents.
+func (c *Collection) DataSize() int64 {
+	var size int64
+	for i := range c.locks {
+		size += c.locks[i].bytes.Load()
+	}
+	return size
+}
+
+// recordOverhead estimates the memory a record takes besides its payload.
+const recordOverhead = int64(unsafe.Sizeof(Record{})) + 8 // + slot flag and padding
+
+// MemorySize estimates the memory taken by the documents.
+func (c *Collection) MemorySize() int64 {
+	return c.DataSize() + c.Count()*recordOverhead
+}
+
 func (c *Collection) MaxID() int64 {
 	if ul, ok := c.records.(*records.RecordsUltra[Record]); ok {
 		return ul.MaxID()
@@ -314,6 +339,7 @@ func (c *Collection) InsertDeferred(jsonData []byte) (int64, error) {
 
 	c.records.Set(id, Record{Data: jsonData, Active: true})
 	mu.count.Add(1)
+	mu.bytes.Add(int64(len(jsonData)))
 
 	if hasAsync {
 		c.asyncIndexOp(stores.OpInsert, id, append([]byte(nil), jsonData...), nil)
@@ -358,6 +384,7 @@ func (c *Collection) DeleteDeferred(id int64) error {
 	// Liberar memoria para el GC y marcar como inactivo
 	c.records.Delete(id)
 	mu.count.Add(-1)
+	mu.bytes.Add(-int64(len(rec.Data)))
 
 	return nil
 }
@@ -372,6 +399,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 	c.defaults.Store(&emptyDefaults)
 	for i := range c.locks {
 		c.locks[i].count.Store(0)
+		c.locks[i].bytes.Store(0)
 	}
 
 	var localMaxID int64 = 0
@@ -398,6 +426,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 			if !wasActive {
 				c.stripe(id).count.Add(1)
 			}
+			c.stripe(id).bytes.Add(int64(len(data) - len(rec.Data)))
 
 			indexInsertFull(*c.indexes.Load(), id, data)
 
@@ -406,6 +435,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 			if rec.Active {
 				indexRemoveFull(*c.indexes.Load(), id, rec.Data)
 				c.stripe(id).count.Add(-1)
+				c.stripe(id).bytes.Add(-int64(len(rec.Data)))
 				c.records.Delete(id)
 			}
 
@@ -464,6 +494,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 	})
 
 	c.autoID.Store(c.Count())
+	c.restoreAutoID()
 
 	if err != nil {
 		return fmt.Errorf("error recuperando datos: %v", err)
@@ -710,7 +741,39 @@ func (c *Collection) SetDefaults(defaults map[string]any) error {
 		return err
 	}
 	c.defaults.Store(&defaults)
+	c.restoreAutoID()
 	return nil
+}
+
+// restoreAutoID makes auto() continue after the largest number already in
+// its fields: Count() falls behind it once documents are deleted. auto() only
+// has to grow, gaps are fine.
+func (c *Collection) restoreAutoID() {
+	var fields []string
+	for k, v := range c.Defaults() {
+		if v == "auto()" {
+			fields = append(fields, k)
+		}
+	}
+	if len(fields) == 0 {
+		return
+	}
+
+	maxAuto := c.autoID.Load()
+	c.records.Traverse(func(id int64, rec Record) bool {
+		for _, k := range fields {
+			val, t, err := simdscan.GetField(rec.Data, k)
+			if err != nil || t != simdscan.TypeNumber {
+				continue
+			}
+			n, err := strconv.ParseFloat(string(val), 64)
+			if err == nil && n > float64(maxAuto) && n < math.MaxInt64 {
+				maxAuto = int64(n)
+			}
+		}
+		return true
+	})
+	c.autoID.Store(maxAuto)
 }
 
 func (c *Collection) InsertMap(item map[string]any, wait bool) (int64, error) {
@@ -765,6 +828,10 @@ func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
 
 // InsertJSONDeferred inserts without waiting for durability, see Commit.
 func (c *Collection) InsertJSONDeferred(payload []byte) (int64, error) {
+	if trimmed := bytes.TrimSpace(payload); len(trimmed) == 0 || trimmed[0] != '{' {
+		return 0, ErrDocumentNotObject
+	}
+
 	defsPtr := c.defaults.Load()
 	var defs map[string]any
 	if defsPtr != nil {
@@ -780,8 +847,9 @@ func (c *Collection) InsertJSONDeferred(payload []byte) (int64, error) {
 	var item map[string]any
 
 	for k, v := range defs {
-		_, _, err := simdscan.GetField(payload, k)
-		if err == nil {
+		// A null field counts as not set, like in InsertMapDeferred
+		_, t, err := simdscan.GetField(payload, k)
+		if err == nil && t != simdscan.TypeNull {
 			continue
 		}
 
