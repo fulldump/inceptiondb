@@ -14,7 +14,9 @@ Operations are strongly consistent (atomic) at document level and eventually con
 
 It can be used stand-alone or embedded into your golang project.
 
-Interact with an HTTP API (see [examples here](./doc/examples)).
+Interact with an HTTP API (see [examples here](./doc/examples)) or with the built-in web console.
+
+![The web console browsing a collection with a filter](doc/screenshots/documents.png)
 
 ## Motivation
 
@@ -90,17 +92,45 @@ There are some features planned for the future: replication, trigger http events
 
 ## Getting started
 
-Just clone the repo, execute `make run` (golang is required) and open (http://127.0.0.1:8080/)[http://127.0.0.1:8080/].
+Just clone the repo, execute `make run` (golang is required) and open [http://127.0.0.1:8080/](http://127.0.0.1:8080/). The web console is served by InceptionDB itself, there is nothing else to install.
 
-![image](https://user-images.githubusercontent.com/2371070/193629843-a8f6e66b-a97d-48e4-9c0b-33478eeb909c.png)
+![Overview of the collections in the server](doc/screenshots/overview.png)
 
-Choose a good name:
+Create a collection with a good name and choose its durability:
 
-![image](https://user-images.githubusercontent.com/2371070/193629504-f3a9a3b7-fc3e-43a4-ad78-ec9e042873c7.png)
+![New collection dialog with the durability choice](doc/screenshots/new-collection.png)
 
-And insert your first JSON:
+Insert your first JSON documents, or import them from a CSV or JSONL file with a preview before anything is written:
 
-![image](https://user-images.githubusercontent.com/2371070/193629672-45cb4871-8321-43b8-8667-01e02f9445dd.png)
+![Import CSV drawer with a preview of the documents](doc/screenshots/import-csv.png)
+
+Query with the filter builder or raw JSON, and speed it up with an index (map, B-Tree ranges or full text):
+
+![Full text search over a products collection](doc/screenshots/full-text-search.png)
+
+Open any document to inspect it, edit it (as a merge patch), copy it or delete it:
+
+![Document drawer](doc/screenshots/document.png)
+
+Indexes are created and dropped from their own tab, with the memory each one uses:
+
+![Indexes tab](doc/screenshots/indexes.png)
+
+### Every click is an API call you can copy
+
+Everything the console does is a plain HTTP request. The dots on the right edge light up with each one; open any of them to get the exact request as HTTP, JavaScript, Go, Python, PHP or cURL, ready to paste into your code:
+
+![Request log with a JavaScript snippet](doc/screenshots/api-calls.png)
+
+### Light theme and mobile
+
+The console follows the light or dark preference of the system and works on small screens:
+
+<p align="center">
+<img src="doc/screenshots/light-theme.png" alt="Light theme with a document open" width="68%">
+&nbsp;
+<img src="doc/screenshots/mobile.png" alt="The console on a phone" width="20%">
+</p>
 
 
 
