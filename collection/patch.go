@@ -3,6 +3,7 @@ package collection
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -10,6 +11,10 @@ import (
 	"github.com/fulldump/inceptiondb/simdscan"
 	"github.com/valyala/fastjson"
 )
+
+// ErrPatchNotObject rejects a patch that is not a JSON object. As a merge
+// patch (RFC 7386) it would replace the whole document with that value.
+var ErrPatchNotObject = errors.New("patch must be a JSON object")
 
 type PatchPlan struct {
 	Patch    interface{}
@@ -32,6 +37,9 @@ func CompilePatch(patch interface{}) (*PatchPlan, error) {
 
 	plan := &PatchPlan{Patch: patch}
 	if raw, ok := patch.(json.RawMessage); ok {
+		if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || trimmed[0] != '{' {
+			return nil, ErrPatchNotObject
+		}
 		decoded, err := decodeRawPatch(raw)
 		if err != nil {
 			return nil, err
@@ -58,9 +66,15 @@ func CompilePatch(patch interface{}) (*PatchPlan, error) {
 			plan.topLevel[k] = patchField{raw: raw}
 		}
 		plan.compileRaw(patchMap)
+		return plan, nil
 	}
 
-	return plan, nil
+	// Any other Go value (a struct, a string...) is checked by its JSON form
+	raw, err := json.Marshal(patch)
+	if err != nil {
+		return nil, fmt.Errorf("marshal patch: %w", err)
+	}
+	return CompilePatch(json.RawMessage(raw))
 }
 
 func decodeRawPatch(raw json.RawMessage) (interface{}, error) {

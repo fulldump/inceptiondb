@@ -76,7 +76,7 @@ func TestRawPatchCases(t *testing.T) {
 }
 
 func TestRawPatchFallback(t *testing.T) {
-	for _, patch := range []string{`{"a":{"b":1}}`, `{"a\"b":1}`, `{"a":1,"a":2}`, `[1]`, `5`} {
+	for _, patch := range []string{`{"a":{"b":1}}`, `{"a\"b":1}`, `{"a":1,"a":2}`} {
 		plan, err := CompilePatch(json.RawMessage(patch))
 		if err != nil {
 			t.Fatal(err)

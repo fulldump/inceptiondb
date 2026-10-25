@@ -2,6 +2,7 @@ package collection
 
 import (
 	"encoding/json"
+	"errors"
 	"path"
 	"testing"
 
@@ -68,5 +69,64 @@ func TestPatchCompiledRawMessage(t *testing.T) {
 
 	if err := col.Patch(id, plan, true); err != nil {
 		t.Fatalf("second patch: %v", err)
+	}
+}
+
+func TestPatchRejectsNonObject(t *testing.T) {
+	filename := path.Join(t.TempDir(), "patch.wal")
+	col, err := OpenCollection(filename)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	original := `{"id":"1","name":"Alice"}`
+	id, err := col.Insert([]byte(original), true)
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	patches := []interface{}{
+		json.RawMessage(`"str"`),
+		json.RawMessage(` [1,2]`),
+		json.RawMessage(`5`),
+		json.RawMessage(`true`),
+		json.RawMessage(`null`),
+		json.RawMessage(``),
+		"str",
+		[]interface{}{1},
+		nil,
+	}
+	for _, patch := range patches {
+		if err := col.Patch(id, patch, true); !errors.Is(err, ErrPatchNotObject) {
+			t.Errorf("patch %#v: err = %v, want ErrPatchNotObject", patch, err)
+		}
+		if _, err := CompilePatch(patch); !errors.Is(err, ErrPatchNotObject) {
+			t.Errorf("compile %#v: err = %v, want ErrPatchNotObject", patch, err)
+		}
+	}
+
+	// A Go value that marshals to an object is still a valid patch
+	if err := col.Patch(id, struct {
+		Age int `json:"age"`
+	}{30}, true); err != nil {
+		t.Fatalf("struct patch: %v", err)
+	}
+	want := `{"id":"1","name":"Alice","age":30}`
+
+	if data, _ := col.Get(id); string(data) != want {
+		t.Fatalf("document = %s, want %s", data, want)
+	}
+
+	// Nothing reached the journal
+	if err := col.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	col, err = OpenCollection(filename)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer col.Close()
+	if data, _ := col.Get(id); string(data) != want {
+		t.Fatalf("document after reopen = %s, want %s", data, want)
 	}
 }
