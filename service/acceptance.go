@@ -25,10 +25,11 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		biff.AssertEqual(resp.StatusCode, http.StatusCreated)
 		expectedBody := JSON{
-			"name":     "my-collection",
-			"total":    0,
-			"indexes":  0,
-			"defaults": map[string]any{"id": "uuid()"},
+			"name":       "my-collection",
+			"total":      0,
+			"indexes":    0,
+			"defaults":   map[string]any{"id": "uuid()"},
+			"durability": "relaxed",
 		}
 		zzz := biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 		if !zzz {
@@ -41,10 +42,11 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 			biff.AssertEqual(resp.StatusCode, http.StatusOK)
 			expectedBody := JSON{
-				"name":     "my-collection",
-				"total":    0,
-				"indexes":  0,
-				"defaults": map[string]any{"id": "uuid()"},
+				"name":       "my-collection",
+				"total":      0,
+				"indexes":    0,
+				"defaults":   map[string]any{"id": "uuid()"},
+				"durability": "relaxed",
 			}
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 		})
@@ -56,10 +58,11 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 			biff.AssertEqual(resp.StatusCode, http.StatusOK)
 			expectedBody := []JSON{
 				{
-					"name":     "my-collection",
-					"total":    0,
-					"indexes":  0,
-					"defaults": map[string]any{"id": "uuid()"},
+					"name":       "my-collection",
+					"total":      0,
+					"indexes":    0,
+					"defaults":   map[string]any{"id": "uuid()"},
+					"durability": "relaxed",
 				},
 			}
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
@@ -935,6 +938,54 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		})
 
+	})
+
+	a.Alternative("Create collection with strong durability", func(a *biff.A) {
+		resp := apiRequest("POST", "/collections").
+			WithBodyJson(JSON{
+				"name":       "my-collection",
+				"durability": "strong",
+			}).Do()
+		Save(resp, "Create collection - strong durability", `
+Writes are acknowledged only after they are fsynced to disk, so an
+acknowledged write survives a process crash or a power loss. Bulk operations
+group many documents in a single fsync. The default durability is `+"`relaxed`"+`:
+writes are acknowledged once applied in memory and queued for the journal.
+`)
+
+		biff.AssertEqual(resp.StatusCode, http.StatusCreated)
+		biff.AssertEqual(resp.BodyJson().(JSON)["durability"], "strong")
+
+		a.Alternative("Insert, patch and remove", func(a *biff.A) {
+			resp := apiRequest("POST", "/collections/my-collection:insert").
+				WithBodyString(`{"id":"1","n":1}` + "\n" + `{"id":"2","n":2}` + "\n").Do()
+			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
+			biff.AssertEqual(resp.BodyString(), `{"id":"1","n":1}`+"\n"+`{"id":"2","n":2}`+"\n")
+
+			resp = apiRequest("POST", "/collections/my-collection:patch").
+				WithBodyJson(JSON{"filter": JSON{"id": "1"}, "patch": JSON{"n": 10}}).Do()
+			biff.AssertEqual(resp.StatusCode, http.StatusOK)
+			biff.AssertEqual(resp.BodyString(), `{"id":"1","n":10}`+"\n")
+
+			resp = apiRequest("POST", "/collections/my-collection:remove").
+				WithBodyJson(JSON{"filter": JSON{"id": "2"}}).Do()
+			biff.AssertEqual(resp.StatusCode, http.StatusOK)
+			biff.AssertEqual(resp.BodyString(), `{"id":"2","n":2}`+"\n")
+
+			resp = apiRequest("POST", "/collections/my-collection:find").
+				WithBodyJson(JSON{"limit": 10}).Do()
+			biff.AssertEqual(resp.BodyString(), `{"id":"1","n":10}`+"\n")
+		})
+	})
+
+	a.Alternative("Create collection with unknown durability", func(a *biff.A) {
+		resp := apiRequest("POST", "/collections").
+			WithBodyJson(JSON{
+				"name":       "my-collection",
+				"durability": "eventually",
+			}).Do()
+
+		biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
 	})
 
 	// todo review this alternative

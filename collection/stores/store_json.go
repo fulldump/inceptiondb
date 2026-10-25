@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"sync"
@@ -25,7 +27,7 @@ type StoreJson struct {
 }
 
 func NewStoreJson(path string) (*StoreJson, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	f, err := openWAL(path)
 	if err != nil {
 		return nil, err
 	}
@@ -66,18 +68,14 @@ func (s *StoreJson) Append(op uint8, id int64, data []byte, sync bool) error {
 	// Minimal critical section to write to our buffer
 	s.mu.Lock()
 	_, err := s.writer.Write(finalData)
+	if err == nil && sync {
+		if err = s.writer.Flush(); err == nil {
+			err = s.file.Sync()
+		}
+	}
 	s.mu.Unlock()
 
 	storeJsonBufferPool.Put(buf)
-
-	if sync {
-		if err := s.writer.Flush(); err != nil {
-			return err
-		}
-		if err := s.file.Sync(); err != nil {
-			return err
-		}
-	}
 
 	return err
 }
@@ -127,10 +125,7 @@ func (s *StoreJson) Replay(fn func(op uint8, id int64, data []byte) error) error
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	// Some JSON payloads might be huge, allocate a 64MB buffer for reading long lines max
-	buf := make([]byte, 1024*1024)
-	scanner.Buffer(buf, 64*1024*1024)
+	reader := bufio.NewReaderSize(f, 1024*1024)
 
 	type LogLine struct {
 		Op   uint8           `json:"op"`
@@ -138,15 +133,30 @@ func (s *StoreJson) Replay(fn func(op uint8, id int64, data []byte) error) error
 		Data json.RawMessage `json:"data,omitempty"`
 	}
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
+	var offset int64
+	for {
+		line, err := reader.ReadBytes('\n')
+		if errors.Is(err, io.EOF) {
+			if len(bytes.TrimSpace(line)) > 0 {
+				// Last line without newline: a write cut by a crash
+				return truncateTail(s.file, offset, offset+int64(len(line)), "line cut")
+			}
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		lineOffset := offset
+		offset += int64(len(line))
+
+		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue
 		}
 
 		var parsedLog LogLine
 		if err := json.Unmarshal(line, &parsedLog); err != nil {
-			return fmt.Errorf("StoreJson Replay JSON error: %w (line ID: maybe %v)", err, line[:10]) // Provide partial line for debug
+			return fmt.Errorf("StoreJson Replay JSON error at offset %d: %w", lineOffset, err)
 		}
 
 		// Important: If data was extracted, we pass the raw bytes. If not, we pass nil
@@ -159,10 +169,4 @@ func (s *StoreJson) Replay(fn func(op uint8, id int64, data []byte) error) error
 			return err
 		}
 	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	return nil
 }

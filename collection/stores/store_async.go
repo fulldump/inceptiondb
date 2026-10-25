@@ -7,14 +7,17 @@ import (
 )
 
 type asyncReq struct {
-	op   uint8
-	id   int64
-	data []byte
-	sync bool
-	done chan error
+	op      uint8
+	id      int64
+	data    []byte
+	sync    bool
+	barrier bool // no payload: only waits for everything enqueued before it
+	done    chan error
 }
 
 const numStoreShards = 16
+
+var ErrStoreClosed = errors.New("store closed")
 
 type storeAsyncShard struct {
 	_    [64]byte // padding to prevent false sharing between shards
@@ -24,21 +27,27 @@ type storeAsyncShard struct {
 }
 
 // StoreAsync is a wrapper that implements a sharded buffered queue and Group Commit pattern.
-// Each producer goroutine appends to its own shard (round-robin), eliminating mutex contention.
-// The worker sweeps all shards, drains them, and writes to disk in batches.
+// Producers append to the shard of the record id, so operations on the same id
+// keep their order in the WAL. The worker sweeps all shards, drains them, and
+// writes to disk in batches.
+//
+// The first write or sync error is sticky: every later operation fails with
+// it, because after a failed fsync the state of the file is unknown.
 type StoreAsync struct {
 	store  Store
 	shards [numStoreShards]storeAsyncShard
 	wakeup chan struct{} // buffered(1) coalescing signal
+	stop   chan struct{}
 	closed atomic.Bool
+	failed atomic.Pointer[error]
 	done   chan struct{}
-	picker atomic.Uint32
 }
 
 func NewStoreAsync(store Store) *StoreAsync {
 	s := &StoreAsync{
 		store:  store,
 		wakeup: make(chan struct{}, 1),
+		stop:   make(chan struct{}),
 		done:   make(chan struct{}),
 	}
 	for i := range s.shards {
@@ -48,113 +57,106 @@ func NewStoreAsync(store Store) *StoreAsync {
 	return s
 }
 
-// sweep collects all pending requests from all shards into batch.
+func (s *StoreAsync) err() error {
+	if err := s.failed.Load(); err != nil {
+		return *err
+	}
+	return nil
+}
+
+func (s *StoreAsync) fail(err error) {
+	s.failed.CompareAndSwap(nil, &err)
+}
+
+// sweep collects all pending requests from all shards into batch. Shards are
+// read in order, so a barrier enqueued in shard 0 is only collected together
+// with (or after) every request enqueued before it in any shard.
 func (s *StoreAsync) sweep(batch []asyncReq) []asyncReq {
 	for i := range s.shards {
 		sh := &s.shards[i]
 		sh.mu.Lock()
 		batch = append(batch, sh.reqs...)
+		clear(sh.reqs) // drop payload references for the GC
 		sh.reqs = sh.reqs[:0]
 		sh.mu.Unlock()
 	}
 	return batch
 }
 
+func (s *StoreAsync) process(batch []asyncReq) {
+	err := s.err()
+	needsSync := false
+	if err == nil {
+		for _, r := range batch {
+			if r.sync {
+				needsSync = true
+			}
+			if r.barrier {
+				continue
+			}
+			if appendErr := s.store.Append(r.op, r.id, r.data, false); appendErr != nil {
+				err = appendErr
+				break
+			}
+		}
+	}
+
+	if err == nil {
+		if needsSync {
+			err = s.store.Sync()
+		} else {
+			err = s.store.Flush()
+		}
+	}
+	if err != nil {
+		s.fail(err)
+		err = s.err()
+	}
+
+	for _, r := range batch {
+		if r.done != nil {
+			r.done <- err
+		}
+	}
+}
+
 func (s *StoreAsync) worker() {
+	defer close(s.done)
+
 	var batch []asyncReq
-
 	for {
-		// Sweep all shards for pending work
 		batch = s.sweep(batch)
-
 		if len(batch) > 0 {
-			// Process the batch
-			needsSync := false
-			var err error
-			for _, r := range batch {
-				if appendErr := s.store.Append(r.op, r.id, r.data, false); appendErr != nil && err == nil {
-					err = appendErr
-				}
-				if r.sync {
-					needsSync = true
-				}
-			}
-
-			if err == nil {
-				if needsSync {
-					err = s.store.Sync()
-				} else {
-					err = s.store.Flush()
-				}
-			}
-
-			for _, r := range batch {
-				if r.done != nil {
-					r.done <- err
-				}
-			}
-
+			s.process(batch)
+			clear(batch)
 			batch = batch[:0]
 			// Loop immediately to check for more data without blocking
 			continue
 		}
 
-		// No data found. Check if we should exit.
-		if s.closed.Load() {
-			break
-		}
-
-		// Block until a producer signals or channel closes
-		_, ok := <-s.wakeup
-		if !ok {
-			break
+		select {
+		case <-s.wakeup:
+		case <-s.stop:
+			// Close has fenced every shard: this sweep sees the last requests
+			batch = s.sweep(batch)
+			if len(batch) > 0 {
+				s.process(batch)
+			}
+			return
 		}
 	}
-
-	// Final drain: sweep any remaining data added after last check
-	batch = s.sweep(batch)
-	if len(batch) > 0 {
-		var err error
-		for _, r := range batch {
-			if appendErr := s.store.Append(r.op, r.id, r.data, false); appendErr != nil && err == nil {
-				err = appendErr
-			}
-		}
-		if err == nil {
-			err = s.store.Flush()
-		}
-		for _, r := range batch {
-			if r.done != nil {
-				r.done <- err
-			}
-		}
-	}
-
-	close(s.done)
 }
 
-// Append pushes the operation to a shard. If sync is true, it blocks until physically persisted.
-func (s *StoreAsync) Append(op uint8, id int64, data []byte, fsync bool) error {
-	if s.closed.Load() {
-		return errors.New("store closed")
-	}
-
-	var done chan error
-	if fsync {
-		done = make(chan error, 1)
-	}
-
-	// Pick a shard via round-robin (fast atomic, zero contention on data path)
-	idx := s.picker.Add(1) & (numStoreShards - 1)
-	sh := &s.shards[idx]
+func (s *StoreAsync) enqueue(shard uint32, r asyncReq) error {
+	sh := &s.shards[shard&(numStoreShards-1)]
 	sh.mu.Lock()
-	sh.reqs = append(sh.reqs, asyncReq{
-		op:   op,
-		id:   id,
-		data: data,
-		sync: fsync,
-		done: done,
-	})
+	// Checked under the shard lock: Close fences every shard after setting
+	// closed, so a request is either rejected here or drained by the worker.
+	if s.closed.Load() {
+		sh.mu.Unlock()
+		return ErrStoreClosed
+	}
+	sh.reqs = append(sh.reqs, r)
 	sh.mu.Unlock()
 
 	// Non-blocking coalescing signal to worker.
@@ -163,6 +165,31 @@ func (s *StoreAsync) Append(op uint8, id int64, data []byte, fsync bool) error {
 	case s.wakeup <- struct{}{}:
 	default:
 	}
+	return nil
+}
+
+// Append pushes the operation to the shard of id. If fsync is true, it blocks
+// until physically persisted.
+func (s *StoreAsync) Append(op uint8, id int64, data []byte, fsync bool) error {
+	if err := s.err(); err != nil {
+		return err
+	}
+
+	var done chan error
+	if fsync {
+		done = make(chan error, 1)
+	}
+
+	err := s.enqueue(uint32(id), asyncReq{
+		op:   op,
+		id:   id,
+		data: data,
+		sync: fsync,
+		done: done,
+	})
+	if err != nil {
+		return err
+	}
 
 	if fsync {
 		return <-done
@@ -170,16 +197,42 @@ func (s *StoreAsync) Append(op uint8, id int64, data []byte, fsync bool) error {
 	return nil
 }
 
-func (s *StoreAsync) Flush() error { return s.store.Flush() }
+// barrier waits until every request enqueued before it has been written, and
+// fsynced when fsync is true.
+func (s *StoreAsync) barrier(fsync bool) error {
+	if err := s.err(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	// Shard 0 is the first one swept, see sweep
+	if err := s.enqueue(0, asyncReq{barrier: true, sync: fsync, done: done}); err != nil {
+		return err
+	}
+	return <-done
+}
 
-func (s *StoreAsync) Sync() error { return s.store.Sync() }
+func (s *StoreAsync) Flush() error { return s.barrier(false) }
+
+func (s *StoreAsync) Sync() error { return s.barrier(true) }
 
 // Close triggers a shutdown of the worker and waits for it to drain before closing the underlying store.
 func (s *StoreAsync) Close() error {
-	s.closed.Store(true)
-	close(s.wakeup)
+	if s.closed.Swap(true) {
+		return nil
+	}
+	// Fence: after this, no Append can enqueue (see enqueue)
+	for i := range s.shards {
+		s.shards[i].mu.Lock()
+		s.shards[i].mu.Unlock()
+	}
+	close(s.stop)
 	<-s.done
-	return s.store.Close()
+
+	closeErr := s.store.Close()
+	if err := s.err(); err != nil {
+		return err
+	}
+	return closeErr
 }
 
 func (s *StoreAsync) Replay(fn func(op uint8, id int64, data []byte) error) error {

@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
-	"fmt"
-	"io"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -26,10 +24,11 @@ type StoreCrazy struct {
 	writer *bufio.Writer
 	mu     sync.Mutex
 	closed atomic.Bool
+	failed error // sticky: set when a write or fsync fails, guarded by mu
 }
 
 func NewStoreCrazy(path string) (*StoreCrazy, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	f, err := openWAL(path)
 	if err != nil {
 		return nil, err
 	}
@@ -61,20 +60,18 @@ func (s *StoreCrazy) Append(op uint8, id int64, data []byte, sync bool) error {
 	buf = append(buf, data...)
 
 	s.mu.Lock()
-	_, err := s.writer.Write(buf)
+	err := s.failed
+	if err == nil {
+		if _, err = s.writer.Write(buf); err != nil {
+			s.failed = err
+		} else if sync {
+			err = s.syncLocked()
+		}
+	}
 	s.mu.Unlock()
 
 	*bufPtr = buf
 	storeCrazyBufferPool.Put(bufPtr)
-
-	if sync {
-		if err := s.writer.Flush(); err != nil {
-			return err
-		}
-		if err := s.file.Sync(); err != nil {
-			return err
-		}
-	}
 
 	return err
 }
@@ -85,7 +82,14 @@ func (s *StoreCrazy) Flush() error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.writer.Flush()
+	if s.failed != nil {
+		return s.failed
+	}
+	if err := s.writer.Flush(); err != nil {
+		s.failed = err
+		return err
+	}
+	return nil
 }
 
 func (s *StoreCrazy) Sync() error {
@@ -94,11 +98,25 @@ func (s *StoreCrazy) Sync() error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.syncLocked()
+}
 
+// syncLocked flushes the buffer and fsyncs the file. After a failure the
+// store refuses every write: the kernel may have dropped the dirty pages, so
+// a later successful fsync would not mean the data is on disk.
+func (s *StoreCrazy) syncLocked() error {
+	if s.failed != nil {
+		return s.failed
+	}
 	if err := s.writer.Flush(); err != nil {
+		s.failed = err
 		return err
 	}
-	return s.file.Sync()
+	if err := s.file.Sync(); err != nil {
+		s.failed = err
+		return err
+	}
+	return nil
 }
 
 func (s *StoreCrazy) Close() error {
@@ -109,55 +127,13 @@ func (s *StoreCrazy) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.writer.Flush(); err != nil {
-		return err
+	err := s.syncLocked()
+	if closeErr := s.file.Close(); err == nil {
+		err = closeErr
 	}
-	if err := s.file.Sync(); err != nil {
-		return err
-	}
-	return s.file.Close()
+	return err
 }
 
 func (s *StoreCrazy) Replay(fn func(op uint8, id int64, data []byte) error) error {
-	f, err := os.Open(s.file.Name())
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	reader := bufio.NewReaderSize(f, 4*1024*1024)
-	header := make([]byte, 13)
-
-	for {
-		_, err := io.ReadFull(reader, header)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if errors.Is(err, io.ErrUnexpectedEOF) {
-				return fmt.Errorf("WAL crazy header abruptly cut")
-			}
-			return err
-		}
-
-		op := header[0]
-		id := int64(binary.LittleEndian.Uint64(header[1:9]))
-		length := binary.LittleEndian.Uint32(header[9:13])
-
-		var data []byte
-		if length > 0 {
-			data = make([]byte, length)
-			_, err = io.ReadFull(reader, data)
-			if err != nil {
-				return fmt.Errorf("WAL crazy payload cut at ID %d: %v", id, err)
-			}
-			// No CRC verification step.
-		}
-
-		if err := fn(op, id, data); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return replayWAL(s.file, walFormat{headerSize: 13, crc: false}, fn)
 }

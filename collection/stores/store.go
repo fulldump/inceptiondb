@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"hash/crc32"
-	"io"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -44,10 +42,11 @@ type StoreDisk struct {
 	writer *bufio.Writer
 	mu     sync.Mutex
 	closed atomic.Bool
+	failed error // sticky: set when a write or fsync fails, guarded by mu
 }
 
 func NewStoreDisk(path string) (*StoreDisk, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	f, err := openWAL(path)
 	if err != nil {
 		return nil, err
 	}
@@ -83,20 +82,18 @@ func (s *StoreDisk) Append(op uint8, id int64, data []byte, sync bool) error {
 
 	// Escribir header y luego el payload de una (Single Write)
 	s.mu.Lock()
-	_, err := s.writer.Write(buf)
+	err := s.failed
+	if err == nil {
+		if _, err = s.writer.Write(buf); err != nil {
+			s.failed = err
+		} else if sync {
+			err = s.syncLocked()
+		}
+	}
 	s.mu.Unlock()
 
 	*bufPtr = buf
 	storeDiskBufferPool.Put(bufPtr)
-
-	if sync {
-		if err := s.writer.Flush(); err != nil {
-			return err
-		}
-		if err := s.file.Sync(); err != nil {
-			return err
-		}
-	}
 
 	return err
 }
@@ -108,7 +105,14 @@ func (s *StoreDisk) Flush() error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.writer.Flush()
+	if s.failed != nil {
+		return s.failed
+	}
+	if err := s.writer.Flush(); err != nil {
+		s.failed = err
+		return err
+	}
+	return nil
 }
 
 // Sync asegura que los datos pasen del Sistema Operativo al disco físico (fsync)
@@ -118,13 +122,25 @@ func (s *StoreDisk) Sync() error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.syncLocked()
+}
 
-	// 1. Primero vaciamos el buffer de Go
+// syncLocked flushes the buffer and fsyncs the file. After a failure the
+// store refuses every write: the kernel may have dropped the dirty pages, so
+// a later successful fsync would not mean the data is on disk.
+func (s *StoreDisk) syncLocked() error {
+	if s.failed != nil {
+		return s.failed
+	}
 	if err := s.writer.Flush(); err != nil {
+		s.failed = err
 		return err
 	}
-	// 2. Obligamos al disco duro a escribir físicamente
-	return s.file.Sync()
+	if err := s.file.Sync(); err != nil {
+		s.failed = err
+		return err
+	}
+	return nil
 }
 
 // Close cierra el Journal de forma segura
@@ -136,72 +152,17 @@ func (s *StoreDisk) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Vaciamos todo antes de cerrar
-	if err := s.writer.Flush(); err != nil {
-		return err
+	err := s.syncLocked()
+	if closeErr := s.file.Close(); err == nil {
+		err = closeErr
 	}
-	if err := s.file.Sync(); err != nil {
-		return err
-	}
-	return s.file.Close()
+	return err
 }
 
 // Replay lee el WAL de principio a fin y ejecuta la función fn por cada registro.
 // Si encuentra un registro corrupto, se detiene y avisa.
 func (s *StoreDisk) Replay(fn func(op uint8, id int64, data []byte) error) error {
-	// Abrimos el archivo en modo solo lectura para la recuperación
-	f, err := os.Open(s.file.Name())
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	reader := bufio.NewReaderSize(f, 1024*1024) // Buffer de 1MB para lectura rápida
-	header := make([]byte, 17)
-
-	for {
-		// 1. Leer el Header (17 bytes)
-		_, err := io.ReadFull(reader, header)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break // Fin del archivo, recuperación terminada con éxito
-			}
-			if errors.Is(err, io.ErrUnexpectedEOF) {
-				// El archivo se cortó a la mitad de un header (ej. corte de luz)
-				return fmt.Errorf("WAL header cortado de forma abrupta")
-			}
-			return err
-		}
-
-		op := header[0]
-		id := int64(binary.LittleEndian.Uint64(header[1:9]))
-		length := binary.LittleEndian.Uint32(header[9:13])
-		expectedCRC := binary.LittleEndian.Uint32(header[13:17])
-
-		// 2. Leer el Payload (el JSON)
-		var data []byte
-		if length > 0 {
-			data = make([]byte, length)
-			_, err = io.ReadFull(reader, data)
-			if err != nil {
-				return fmt.Errorf("WAL payload cortado en ID %d: %v", id, err)
-			}
-
-			// 3. Validar la integridad con CRC32
-			actualCRC := crc32.Checksum(data, crcTable)
-			if actualCRC != expectedCRC {
-				// ¡Peligro! Corrupción detectada
-				return fmt.Errorf("corrupción de datos en ID %d: CRC esperado %x, obtenido %x", id, expectedCRC, actualCRC)
-			}
-		}
-
-		// 4. Procesar el registro en la memoria
-		if err := fn(op, id, data); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return replayWAL(s.file, walFormat{headerSize: 17, crc: true}, fn)
 }
 
 /*

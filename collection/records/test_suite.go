@@ -44,6 +44,33 @@ func RunRecordsSuite(t *testing.T, newRecords func() Records[int]) {
 		}
 	})
 
+	// Recovery replays deletes and then re-sets the same id. The freed id must
+	// not be handed out again while it holds a live value.
+	t.Run("set_after_delete_is_not_reused", func(t *testing.T) {
+		r := newRecords()
+
+		const n = 1000
+		ids := make([]int64, 0, n)
+		for i := 0; i < n; i++ {
+			ids = append(ids, r.Insert(i+1))
+		}
+		for _, id := range ids {
+			r.Delete(id)
+			r.Delete(id)
+		}
+		for i, id := range ids {
+			r.Set(id, i+1)
+		}
+		for i := 0; i < n; i++ {
+			r.Insert(n + i + 1)
+		}
+		for i, id := range ids {
+			if got := r.Get(id); got != i+1 {
+				t.Fatalf("Get(%d) = %d, want %d (live value overwritten)", id, got, i+1)
+			}
+		}
+	})
+
 	t.Run("ids_are_unique_and_monotonic_sequentially", func(t *testing.T) {
 		t.Skip("it is not a requirement")
 		r := newRecords()

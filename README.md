@@ -43,6 +43,27 @@ InceptionDB stores all the data in memory and also a copy on disk in the form of
 
 When the service starts, the journal is read and applied to recreate the last valid state in memory. From that point on, it is ready to continue operation. One lateral effect is that you can recover the state of the whole database in any point in the past.
 
+### Durability
+
+Durability is configured per collection when it is created:
+
+```sh
+curl -X POST "http://localhost:8080/v1/collections" -d '{"name":"orders","durability":"strong"}'
+```
+
+| Durability | A write is acknowledged when | On process crash or power loss |
+| --- | --- | --- |
+| `relaxed` (default) | it is applied in memory and queued for the journal | the most recent acknowledged writes can be lost |
+| `strong` | it is fsynced to disk | acknowledged writes are not lost (as long as the disk honors fsync) |
+
+A single request can also ask for strong durability with `?wait=true`.
+
+Strong durability uses group commit: concurrent writes share the same fsync, and bulk inserts, patches and removes acknowledge documents in batches (one fsync per batch). In strong mode a document line in the response means that document is on disk.
+
+Writes become visible to readers when they are applied in memory, which can happen before the fsync completes. If the fsync fails, the collection refuses every further write until it is reopened, because the content of the file is no longer known.
+
+On startup, a record cut at the end of the journal (a crash in the middle of a write) is discarded and the file is truncated to the last complete record. Corruption in the middle of the journal stops the collection from opening instead of silently dropping the records after it.
+
 Supported indexes:
 * `Map` index, options:
   * `field` key to be indexed

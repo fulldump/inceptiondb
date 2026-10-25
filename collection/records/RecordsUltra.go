@@ -36,15 +36,25 @@ func newRecordsUltraShard[T any](shardIndex int) *recordsUltraShard[T] {
 	}
 }
 
+// popFree returns a reusable local id, or 0 when there is none. Entries whose
+// slot became active again through set (WAL replay) are stale and skipped.
+func (s *recordsUltraShard[T]) popFree() int64 {
+	for n := len(s.freeList); n > 0; n = len(s.freeList) {
+		lid := s.freeList[n-1]
+		s.freeList = s.freeList[:n-1]
+		if !s.segments[lid>>recordsUltraSegmentShift][lid&recordsUltraSegmentMask].active {
+			return lid
+		}
+	}
+	return 0
+}
+
 func (s *recordsUltraShard[T]) insert(val T) int64 {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	var lid int64
-	if n := len(s.freeList); n > 0 {
-		lid = s.freeList[n-1]
-		s.freeList = s.freeList[:n-1]
-	} else {
+	lid := s.popFree()
+	if lid == 0 {
 		lid = s.localID
 		s.localID++
 

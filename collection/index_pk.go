@@ -89,7 +89,7 @@ func (idx *IndexPK) Add(id int64, data []byte) error {
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
-	if _, exists := shard.m[key]; exists {
+	if existing, exists := shard.m[key]; exists && existing != id {
 		return fmt.Errorf("duplicate primary key: %s", key)
 	}
 
@@ -109,8 +109,24 @@ func (idx *IndexPK) Remove(id int64, data []byte) error {
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
-	delete(shard.m, key)
+	// Never remove a key owned by another document
+	if existing, exists := shard.m[key]; exists && existing == id {
+		delete(shard.m, key)
+	}
 	return nil
+}
+
+// Release removes the key of oldData owned by id when newData uses a
+// different key.
+func (idx *IndexPK) Release(id int64, oldData, newData []byte) {
+	oldKey, err := idx.extractPK(oldData)
+	if err != nil {
+		return
+	}
+	if newKey, err := idx.extractPK(newData); err == nil && newKey == oldKey {
+		return
+	}
+	idx.Remove(id, oldData)
 }
 
 func (idx *IndexPK) Traverse(optionsData []byte, f func(id int64, data []byte) bool) {

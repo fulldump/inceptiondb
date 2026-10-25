@@ -3,6 +3,7 @@ package collection
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -20,17 +21,33 @@ type Record struct {
 	Active bool   // true si tiene datos, false si es un hueco
 }
 
+// collectionLockStripes is the number of write locks. Writes to the same id
+// share a stripe, so their order in memory and in the WAL is the same.
+const collectionLockStripesBits = 10
+const collectionLockStripes = 1 << collectionLockStripesBits
+
+type stripeLock struct {
+	sync.Mutex
+	// count of active records whose id maps to this stripe. A single shared
+	// counter would bounce its cache line between cores on every write.
+	count atomic.Int64
+	_     [48]byte // padding to prevent false sharing between stripes
+}
+
+var ErrCollectionClosed = errors.New("collection closed")
+
 type Collection struct {
 	name       string
 	filepath   atomic.Pointer[string]
 	store      stores.Store
 	records    records.Records[Record]
 	newRecords func() records.Records[Record]
-	count      atomic.Int64
 	autoID     atomic.Int64
 	indexes    atomic.Pointer[map[string]Index]
 	defaults   atomic.Pointer[map[string]any]
-	writerMu   sync.Mutex
+	locks      [collectionLockStripes]stripeLock
+	closed     bool // guarded by every stripe: readable holding any, writable holding all
+	durability string
 	idxReqs    chan asyncIndexReq
 	idxDone    chan struct{}
 }
@@ -112,9 +129,57 @@ func (c *Collection) indexWorker() {
 }
 
 func (c *Collection) SyncIndexes() {
+	mu := c.stripe(0)
+	mu.Lock()
+	if c.closed {
+		mu.Unlock()
+		return
+	}
 	done := make(chan struct{})
 	c.idxReqs <- asyncIndexReq{done: done}
+	mu.Unlock()
 	<-done
+}
+
+// stripe returns the write lock that serializes operations on id. The id is
+// hashed (Fibonacci hashing) because consecutive ids of the same records
+// shard are often written concurrently and must not share a stripe.
+func (c *Collection) stripe(id int64) *stripeLock {
+	return &c.locks[(uint64(id)*0x9E3779B97F4A7C15)>>(64-collectionLockStripesBits)]
+}
+
+// lockAll blocks every writer. Used by schema changes and Close.
+func (c *Collection) lockAll() {
+	for i := range c.locks {
+		c.locks[i].Lock()
+	}
+}
+
+func (c *Collection) unlockAll() {
+	for i := range c.locks {
+		c.locks[i].Unlock()
+	}
+}
+
+// SetDurability sets how writes are acknowledged, see DurabilityStrong.
+func (c *Collection) SetDurability(durability string) {
+	c.durability = durability
+}
+
+func (c *Collection) Durability() string {
+	if c.durability == "" {
+		return DurabilityRelaxed
+	}
+	return c.durability
+}
+
+// Commit waits until every write previously made by the caller is durable
+// (fsync) when wait is true or the collection has strong durability.
+func (c *Collection) Commit(wait bool) error {
+	if !wait && c.durability != DurabilityStrong {
+		return nil
+	}
+	return c.store.Sync()
 }
 
 func (c *Collection) asyncIndexOp(op uint8, id int64, data []byte, oldData []byte) {
@@ -139,6 +204,14 @@ func (c *Collection) Filepath() string {
 }
 
 func (c *Collection) Close() error {
+	c.lockAll()
+	wasClosed := c.closed
+	c.closed = true
+	c.unlockAll()
+	if wasClosed {
+		return nil
+	}
+
 	if c.idxReqs != nil {
 		close(c.idxReqs)
 		<-c.idxDone
@@ -150,7 +223,11 @@ func (c *Collection) Close() error {
 }
 
 func (c *Collection) Count() int64 {
-	return c.count.Load()
+	var count int64
+	for i := range c.locks {
+		count += c.locks[i].count.Load()
+	}
+	return count
 }
 
 func (c *Collection) MaxID() int64 {
@@ -202,31 +279,43 @@ func (c *Collection) Get(id int64) ([]byte, bool) {
 }
 
 func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
-	// 1. Insertar en memoria (optimista)
-	rec := Record{
-		Data:   jsonData,
-		Active: true,
+	id, err := c.InsertDeferred(jsonData)
+	if err != nil {
+		return 0, err
 	}
-	id := c.records.Insert(rec)
-	c.count.Add(1)
+	return id, c.Commit(wait)
+}
+
+// InsertDeferred inserts without waiting for durability, see Commit.
+func (c *Collection) InsertDeferred(jsonData []byte) (int64, error) {
+	// Reserve the id. The record stays invisible until it is in the journal,
+	// so nobody can patch or delete it before its insert is logged.
+	id := c.records.Insert(Record{Data: jsonData})
+
+	mu := c.stripe(id)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if c.closed {
+		c.records.Delete(id)
+		return 0, ErrCollectionClosed
+	}
 
 	indexes := *c.indexes.Load()
 	hasAsync, err := indexInsertSync(indexes, id, jsonData)
 	if err != nil {
 		c.records.Delete(id)
-		c.count.Add(-1)
 		return 0, err
 	}
 
-	// 2. Escribir en el Journal
-	if err := c.store.Append(stores.OpInsert, id, jsonData, wait); err != nil {
-		// Rollback si falla el journal
-		indexes := *c.indexes.Load()
+	if err := c.store.Append(stores.OpInsert, id, jsonData, false); err != nil {
 		indexRemoveSync(indexes, id, jsonData)
 		c.records.Delete(id)
-		c.count.Add(-1)
-		return 0, fmt.Errorf("journal write failed: %v", err)
+		return 0, fmt.Errorf("journal write failed: %w", err)
 	}
+
+	c.records.Set(id, Record{Data: jsonData, Active: true})
+	mu.count.Add(1)
 
 	if hasAsync {
 		c.asyncIndexOp(stores.OpInsert, id, append([]byte(nil), jsonData...), nil)
@@ -236,32 +325,41 @@ func (c *Collection) Insert(jsonData []byte, wait bool) (int64, error) {
 }
 
 func (c *Collection) Delete(id int64, wait bool) error {
-	// Verificar si existe antes de persistir (opcional)
+	if err := c.DeleteDeferred(id); err != nil {
+		return err
+	}
+	return c.Commit(wait)
+}
+
+// DeleteDeferred deletes without waiting for durability, see Commit.
+func (c *Collection) DeleteDeferred(id int64) error {
+	mu := c.stripe(id)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if c.closed {
+		return ErrCollectionClosed
+	}
+
 	rec := c.records.Get(id)
 	if !rec.Active {
 		return nil // Ya está borrado o no existe
 	}
 
+	// Journal first: if it fails, nothing has changed
+	if err := c.store.Append(stores.OpDelete, id, nil, false); err != nil {
+		return fmt.Errorf("journal write failed: %w", err)
+	}
+
 	indexes := *c.indexes.Load()
-	hasAsync, err := indexRemoveSync(indexes, id, rec.Data)
-	if err != nil {
-		return fmt.Errorf("could not free index: %w", err)
-	}
-
-	// Persistir el borrado (payload vacío)
-	if err := c.store.Append(stores.OpDelete, id, nil, wait); err != nil {
-		// Si el log falla, tenemos que deshacer el indexRemove, pero es complejo.
-		// Al menos devolvemos error
-		return err
-	}
-
+	hasAsync, _ := indexRemoveSync(indexes, id, rec.Data)
 	if hasAsync {
 		c.asyncIndexOp(stores.OpDelete, id, nil, append([]byte(nil), rec.Data...))
 	}
 
 	// Liberar memoria para el GC y marcar como inactivo
 	c.records.Delete(id)
-	c.count.Add(-1)
+	mu.count.Add(-1)
 
 	return nil
 }
@@ -274,7 +372,9 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 	c.indexes.Store(&emptyIndexes)
 	var emptyDefaults map[string]any = nil
 	c.defaults.Store(&emptyDefaults)
-	c.count.Store(0)
+	for i := range c.locks {
+		c.locks[i].count.Store(0)
+	}
 
 	var localMaxID int64 = 0
 
@@ -298,7 +398,7 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 				Active: true,
 			})
 			if !wasActive {
-				c.count.Add(1)
+				c.stripe(id).count.Add(1)
 			}
 
 			indexInsertFull(*c.indexes.Load(), id, data)
@@ -307,9 +407,9 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 			rec := c.records.Get(id)
 			if rec.Active {
 				indexRemoveFull(*c.indexes.Load(), id, rec.Data)
-				c.count.Add(-1)
+				c.stripe(id).count.Add(-1)
+				c.records.Delete(id)
 			}
-			c.records.Delete(id)
 
 		case stores.OpCreateIndex:
 			cmd := &CreateIndexCommand{}
@@ -377,8 +477,12 @@ func (c *Collection) Recover() error { // nolint:gocyclo
 }
 
 func (c *Collection) CreateIndex(name string, options interface{}) error {
-	c.writerMu.Lock()
-	defer c.writerMu.Unlock()
+	c.lockAll()
+	defer c.unlockAll()
+
+	if c.closed {
+		return ErrCollectionClosed
+	}
 
 	idxMap := *c.indexes.Load()
 	if _, exists := idxMap[name]; exists {
@@ -404,6 +508,12 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 	default:
 		return fmt.Errorf("unexpected options parameters, it should be [*IndexMapOptions|*IndexBTreeOptions|*IndexFTSOptions|*IndexPKOptions]")
 	}
+
+	// Writers are blocked; apply pending async index operations so none of
+	// them reaches the new index after the backfill.
+	done := make(chan struct{})
+	c.idxReqs <- asyncIndexReq{done: done}
+	<-done
 
 	newIdxMap := make(map[string]Index, len(idxMap)+1)
 	for k, v := range idxMap {
@@ -434,10 +544,15 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 		Options: options,
 	})
 	if err != nil {
+		c.indexes.Store(&idxMap)
 		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.store.Append(stores.OpCreateIndex, 0, payload, true)
+	if err := c.store.Append(stores.OpCreateIndex, 0, payload, true); err != nil {
+		c.indexes.Store(&idxMap)
+		return err
+	}
+	return nil
 }
 
 func (c *Collection) Index(name string, options interface{}) error {
@@ -445,8 +560,12 @@ func (c *Collection) Index(name string, options interface{}) error {
 }
 
 func (c *Collection) DropIndex(name string) error {
-	c.writerMu.Lock()
-	defer c.writerMu.Unlock()
+	c.lockAll()
+	defer c.unlockAll()
+
+	if c.closed {
+		return ErrCollectionClosed
+	}
 
 	idxMap := *c.indexes.Load()
 	if _, exists := idxMap[name]; !exists {
@@ -577,20 +696,35 @@ func (c *Collection) TraverseRange(from, to int, f func(data []byte)) {
 }
 
 func (c *Collection) SetDefaults(defaults map[string]any) error {
-	c.writerMu.Lock()
-	defer c.writerMu.Unlock()
+	c.lockAll()
+	defer c.unlockAll()
 
-	c.defaults.Store(&defaults)
+	if c.closed {
+		return ErrCollectionClosed
+	}
 
 	payload, err := json.Marshal(defaults)
 	if err != nil {
 		return fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.store.Append(stores.OpSetDefaults, 0, payload, true)
+	if err := c.store.Append(stores.OpSetDefaults, 0, payload, true); err != nil {
+		return err
+	}
+	c.defaults.Store(&defaults)
+	return nil
 }
 
 func (c *Collection) InsertMap(item map[string]any, wait bool) (int64, error) {
+	id, err := c.InsertMapDeferred(item)
+	if err != nil {
+		return 0, err
+	}
+	return id, c.Commit(wait)
+}
+
+// InsertMapDeferred inserts without waiting for durability, see Commit.
+func (c *Collection) InsertMapDeferred(item map[string]any) (int64, error) {
 	defsPtr := c.defaults.Load()
 	var defs map[string]any
 	if defsPtr != nil {
@@ -620,10 +754,19 @@ func (c *Collection) InsertMap(item map[string]any, wait bool) (int64, error) {
 		return 0, fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.Insert(payload, wait)
+	return c.InsertDeferred(payload)
 }
 
 func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
+	id, err := c.InsertJSONDeferred(payload)
+	if err != nil {
+		return 0, err
+	}
+	return id, c.Commit(wait)
+}
+
+// InsertJSONDeferred inserts without waiting for durability, see Commit.
+func (c *Collection) InsertJSONDeferred(payload []byte) (int64, error) {
 	defsPtr := c.defaults.Load()
 	var defs map[string]any
 	if defsPtr != nil {
@@ -631,7 +774,7 @@ func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
 	}
 
 	if len(defs) == 0 {
-		return c.Insert(bytes.Clone(payload), wait)
+		return c.InsertDeferred(bytes.Clone(payload))
 	}
 
 	auto := c.autoID.Add(1)
@@ -665,7 +808,7 @@ func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
 	}
 
 	if !changed {
-		return c.Insert(bytes.Clone(payload), wait)
+		return c.InsertDeferred(bytes.Clone(payload))
 	}
 
 	payload, err := json.Marshal(item)
@@ -673,5 +816,5 @@ func (c *Collection) InsertJSON(payload []byte, wait bool) (int64, error) {
 		return 0, fmt.Errorf("json encode payload: %w", err)
 	}
 
-	return c.Insert(payload, wait)
+	return c.InsertDeferred(payload)
 }

@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fulldump/inceptiondb/collection"
+	"github.com/fulldump/inceptiondb/collection/stores"
 )
 
 const (
@@ -25,7 +27,7 @@ type Config struct {
 
 type Database struct {
 	Config      *Config
-	status      string
+	status      atomic.Value // string
 	mu          sync.RWMutex
 	Collections map[string]*collection.Collection
 	exit        chan struct{}
@@ -34,16 +36,16 @@ type Database struct {
 func NewDatabase(config *Config) *Database { // todo: return error?
 	s := &Database{
 		Config:      config,
-		status:      StatusOpening,
 		Collections: map[string]*collection.Collection{},
 		exit:        make(chan struct{}),
 	}
+	s.status.Store(StatusOpening)
 
 	return s
 }
 
 func (db *Database) GetStatus() string {
-	return db.status
+	return db.status.Load().(string)
 }
 
 func (db *Database) CreateCollection(name string) (*collection.Collection, error) {
@@ -92,19 +94,21 @@ func (db *Database) DropCollection(name string) error { // TODO: rename drop?
 		return fmt.Errorf("collection '%s' not found", name)
 	}
 
-	filename := path.Join(db.Config.Dir, name)
+	// Stop writes before removing the files
+	delete(db.Collections, name)
+	if err := col.Close(); err != nil {
+		fmt.Printf("ERROR: close(%s): %s\n", name, err.Error()) // todo: move to logger
+	}
 
-	err := os.Remove(filename)
-	if err != nil {
+	filename := path.Join(db.Config.Dir, name)
+	if err := os.Remove(filename); err != nil {
 		return err // TODO: wrap?
 	}
 	if err := os.Remove(collection.CollectionSpecPath(filename)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
-	delete(db.Collections, name) // TODO: protect section! not threadsafe
-
-	return col.Close()
+	return stores.SyncDir(db.Config.Dir)
 }
 
 func (db *Database) GetCollection(name string) (*collection.Collection, bool) {
@@ -163,13 +167,13 @@ func (db *Database) Load() error {
 	})
 
 	if err != nil {
-		db.status = StatusClosing
+		db.status.Store(StatusClosing)
 		return err
 	}
 
 	fmt.Println("Ready")
 
-	db.status = StatusOperating
+	db.status.Store(StatusOperating)
 
 	return nil
 
@@ -188,7 +192,7 @@ func (db *Database) Stop() error {
 
 	defer close(db.exit)
 
-	db.status = StatusClosing
+	db.status.Store(StatusClosing)
 
 	var lastErr error
 	for name, col := range db.ListCollections() {

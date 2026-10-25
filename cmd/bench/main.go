@@ -11,10 +11,12 @@ import (
 )
 
 type Config struct {
-	Test    string `usage:"name of the test: ALL | INSERT | INSERTPK | INSERTBTREE | RETRIEVEBTREE | RETRIEVEFS | PATCH | REMOVE"`
-	Base    string `usage:"base URL"`
-	N       int64  `usage:"number of documents"`
-	Workers int    `usage:"number of workers"`
+	Test       string `usage:"name of the test: ALL | INSERT | INSERTPK | INSERTBTREE | RETRIEVEBTREE | RETRIEVEFS | PATCH | REMOVE"`
+	Base       string `usage:"base URL"`
+	N          int64  `usage:"number of documents"`
+	Workers    int    `usage:"number of workers"`
+	Durability string `usage:"collection durability: relaxed | strong"`
+	Dir        string `usage:"parent directory for the data of the embedded server (default: system temp dir)"`
 }
 
 var cleanups []func()
@@ -45,6 +47,8 @@ func main() {
 		Workers: 16,
 	}
 	goconfig.Read(&c)
+	durability = c.Durability
+	tempBase = c.Dir
 
 	switch strings.ToUpper(c.Test) {
 	case "ALL":

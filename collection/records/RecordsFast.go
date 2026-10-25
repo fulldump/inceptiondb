@@ -9,6 +9,7 @@ type RecordsFast[T any] struct {
 	recordsLength  int64
 	freeList       []int64
 	freeListLength int64
+	freed          []bool // freed[id] is true while id is deleted and reusable
 	mutex          sync.RWMutex
 }
 
@@ -26,10 +27,14 @@ func (r *RecordsFast[T]) Insert(val T) (id int64) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	// Can reuse id
-	if r.freeListLength > 0 {
+	// Can reuse id; skip entries revived by Set
+	for r.freeListLength > 0 {
 		r.freeListLength--
 		id = r.freeList[r.freeListLength]
+		if !r.freed[id] {
+			continue
+		}
+		r.freed[id] = false
 		r.recods[id] = val
 		return id
 	}
@@ -50,9 +55,16 @@ func (r *RecordsFast[T]) Delete(id int64) {
 	defer r.mutex.Unlock()
 
 	// Check if already deleted
-	if id >= r.recordsLength {
+	if id < 0 || id >= r.recordsLength {
 		return
 	}
+	for int64(len(r.freed)) <= id {
+		r.freed = append(r.freed, false)
+	}
+	if r.freed[id] {
+		return
+	}
+	r.freed[id] = true
 
 	var zero T
 	r.recods[id] = zero
@@ -84,6 +96,9 @@ func (r *RecordsFast[T]) Set(id int64, val T) {
 	}
 
 	r.recods[id] = val
+	if id < int64(len(r.freed)) {
+		r.freed[id] = false
+	}
 	if id >= r.recordsLength {
 		r.recordsLength = id + 1
 	}

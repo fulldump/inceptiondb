@@ -88,16 +88,33 @@ func (p *PatchPlan) compileTopLevelRaw(raw json.RawMessage) error {
 	return nil
 }
 
-func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // nolint:gocyclo
+func (c *Collection) Patch(id int64, patch interface{}, wait bool) error {
+	if err := c.PatchDeferred(id, patch); err != nil {
+		return err
+	}
+	return c.Commit(wait)
+}
+
+// PatchDeferred patches without waiting for durability, see Commit.
+func (c *Collection) PatchDeferred(id int64, patch interface{}) error { // nolint:gocyclo
+	plan, err := CompilePatch(patch)
+	if err != nil {
+		return fmt.Errorf("compile patch: %w", err)
+	}
+
+	mu := c.stripe(id)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if c.closed {
+		return ErrCollectionClosed
+	}
+
 	rec := c.records.Get(id)
 	if !rec.Active {
 		return fmt.Errorf("row %d does not exist", id)
 	}
 
-	plan, err := CompilePatch(patch)
-	if err != nil {
-		return fmt.Errorf("compile patch: %w", err)
-	}
 	if changed, ok := patchPlanChangesTopLevel(rec.Data, plan); ok && !changed {
 		return nil
 	}
@@ -115,34 +132,31 @@ func (c *Collection) Patch(id int64, patch interface{}, wait bool) error { // no
 		return nil
 	}
 
-	newPayload := merged.MarshalTo(nil)
+	return c.replaceLocked(id, rec.Data, merged.MarshalTo(nil))
+}
 
-	// Update record and indexes
+// replaceLocked swaps the payload of an active record. The caller holds the
+// stripe of id. On error the record and its indexes are left unchanged.
+func (c *Collection) replaceLocked(id int64, oldPayload, newPayload []byte) error {
 	idxMap := *c.indexes.Load()
-	hasAsyncRemove, _ := indexRemoveSync(idxMap, id, rec.Data)
+	reserved, hasAsync, err := indexReserveSync(idxMap, id, oldPayload, newPayload)
+	if err != nil {
+		return fmt.Errorf("indexInsert: %w", err)
+	}
 
+	if err := c.store.Append(stores.OpUpdate, id, newPayload, false); err != nil {
+		indexReleaseSync(reserved, id, newPayload, oldPayload)
+		return fmt.Errorf("journal write failed: %w", err)
+	}
+
+	indexReleaseSync(reserved, id, oldPayload, newPayload)
 	c.records.Set(id, Record{
 		Data:   newPayload,
 		Active: true,
 	})
 
-	hasAsyncInsert, err := indexInsertSync(idxMap, id, newPayload)
-
-	if err != nil {
-		// Rollback memoria (no es 100% transaccional pero intentamos revertir)
-		// ...
-		return fmt.Errorf("indexInsert: %w", err)
-	}
-
-	// Persist partial diff logic
-	// Pero en inceptiondb V4 el log es binario y soporta OpUpdate.
-	// Podemos simplemente hacer Append del newPayload.
-	if err := c.store.Append(stores.OpUpdate, id, newPayload, wait); err != nil {
-		return fmt.Errorf("journal write failed: %v", err)
-	}
-
-	if hasAsyncRemove || hasAsyncInsert {
-		c.asyncIndexOp(stores.OpUpdate, id, append([]byte(nil), newPayload...), append([]byte(nil), rec.Data...))
+	if hasAsync {
+		c.asyncIndexOp(stores.OpUpdate, id, append([]byte(nil), newPayload...), append([]byte(nil), oldPayload...))
 	}
 
 	return nil
@@ -184,34 +198,23 @@ func rawPatchValueEqual(current []byte, typ simdscan.Type, expected []byte) bool
 
 // Update acts as a full payload replacement
 func (c *Collection) Update(id int64, data []byte, wait bool) error {
+	mu := c.stripe(id)
+	mu.Lock()
+	if c.closed {
+		mu.Unlock()
+		return ErrCollectionClosed
+	}
 	rec := c.records.Get(id)
 	if !rec.Active {
+		mu.Unlock()
 		return fmt.Errorf("row %d does not exist", id)
 	}
-
-	idxMap := *c.indexes.Load()
-	hasAsyncRemove, _ := indexRemoveSync(idxMap, id, rec.Data)
-
-	c.records.Set(id, Record{
-		Data:   data,
-		Active: true,
-	})
-
-	hasAsyncInsert, err := indexInsertSync(idxMap, id, data)
-
+	err := c.replaceLocked(id, rec.Data, data)
+	mu.Unlock()
 	if err != nil {
-		return fmt.Errorf("indexInsert: %w", err)
+		return err
 	}
-
-	if err := c.store.Append(stores.OpUpdate, id, data, wait); err != nil {
-		return fmt.Errorf("journal write failed: %v", err)
-	}
-
-	if hasAsyncRemove || hasAsyncInsert {
-		c.asyncIndexOp(stores.OpUpdate, id, append([]byte(nil), data...), append([]byte(nil), rec.Data...))
-	}
-
-	return nil
+	return c.Commit(wait)
 }
 
 func fastjsonMergePatch(arena *fastjson.Arena, original *fastjson.Value, patch interface{}) (*fastjson.Value, bool) {

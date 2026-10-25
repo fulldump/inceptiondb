@@ -29,8 +29,15 @@ func Parallel(workers int, f func()) {
 	wg.Wait()
 }
 
+// durability is set on every collection created by the benchmark.
+var durability string
+
+// tempBase is where TempDir creates data directories. Note that /tmp is often
+// a tmpfs: use a directory on a real disk to measure durability.
+var tempBase string
+
 func TempDir() (string, func()) {
-	dir, err := os.MkdirTemp("", "inceptiondb_bench_*")
+	dir, err := os.MkdirTemp(tempBase, "inceptiondb_bench_*")
 	if err != nil {
 		panic("Could not create temp directory: " + err.Error())
 	}
@@ -46,7 +53,7 @@ func CreateCollection(base string) string {
 
 	name := "col-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 
-	payload, _ := json.Marshal(JSON{"name": name})
+	payload, _ := json.Marshal(JSON{"name": name, "durability": durability})
 
 	req, _ := http.NewRequest("POST", base+"/v1/collections", bytes.NewReader(payload))
 	resp, err := http.DefaultClient.Do(req)

@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -40,10 +41,29 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	wb := bufio.NewWriterSize(w, 64*1024)
 	defer wb.Flush()
 
+	// With durable writes, patched documents are only written back once
+	// they are fsynced, see insert.
+	waitParam := r.URL.Query().Get("wait") == "true"
+	durable := waitParam || col.Durability() == collection.DurabilityStrong
+	acks := &bytes.Buffer{}
+	pending := 0
+	commit := func() error {
+		if pending == 0 {
+			return nil
+		}
+		if err := col.Commit(waitParam); err != nil {
+			return err
+		}
+		wb.Write(acks.Bytes())
+		acks.Reset()
+		pending = 0
+		return nil
+	}
+
+	var result error
 	traverse(requestBody, col, func(id int64, payload []byte) bool {
 
-		waitParam := r.URL.Query().Get("wait") == "true"
-		err := col.Patch(id, plan, waitParam)
+		err := col.PatchDeferred(id, plan)
 		if err != nil {
 			// TODO: handle err??
 			// return err
@@ -55,11 +75,25 @@ func patch(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			return false
 		}
 
-		wb.Write(updated)
-		wb.Write([]byte("\n"))
+		if !durable {
+			wb.Write(updated)
+			wb.Write([]byte("\n"))
+			return true
+		}
 
+		acks.Write(updated)
+		acks.WriteByte('\n')
+		pending++
+		if pending >= maxPendingAcks {
+			if result = commit(); result != nil {
+				return false
+			}
+		}
 		return true
 	})
 
-	return nil
+	if result != nil {
+		return result
+	}
+	return commit()
 }

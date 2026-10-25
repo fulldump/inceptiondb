@@ -26,13 +26,21 @@ const (
 	RecordsHyper   = "hyper"
 	RecordsTurbo   = "turbo"
 	RecordsUltra   = "ultra"
+
+	// DurabilityRelaxed acknowledges a write once it is applied in memory and
+	// queued for the WAL. A crash can lose the most recent writes.
+	DurabilityRelaxed = "relaxed"
+	// DurabilityStrong acknowledges a write only after it is fsynced to disk,
+	// so it survives a process crash or a power loss.
+	DurabilityStrong = "strong"
 )
 
 type CollectionSpec struct {
-	Name     string      `json:"name"`
-	Filename string      `json:"-"`
-	Store    StoreSpec   `json:"storage"`
-	Records  RecordsSpec `json:"records"`
+	Name       string      `json:"name"`
+	Filename   string      `json:"-"`
+	Durability string      `json:"durability,omitempty"`
+	Store      StoreSpec   `json:"storage"`
+	Records    RecordsSpec `json:"records"`
 }
 
 type StoreSpec struct {
@@ -87,6 +95,14 @@ var recordsFactories = map[string]RecordsFactory{
 	RecordsUltra:   func() records.Records[Record] { return records.NewRecordsUltra[Record]() },
 }
 
+func ValidateDurability(durability string) error {
+	switch durability {
+	case "", DurabilityRelaxed, DurabilityStrong:
+		return nil
+	}
+	return fmt.Errorf("unknown durability '%s', expected '%s' or '%s'", durability, DurabilityRelaxed, DurabilityStrong)
+}
+
 func DefaultCollectionSpec(filename string) CollectionSpec {
 	return CollectionSpec{
 		Name:     filepath.Base(filename),
@@ -106,7 +122,7 @@ func CollectionSpecPath(filename string) string {
 }
 
 func IsCollectionSpecFile(filename string) bool {
-	return strings.HasSuffix(filename, ".collection.json")
+	return strings.HasSuffix(filename, ".collection.json") || strings.HasSuffix(filename, ".collection.json.tmp")
 }
 
 func SaveCollectionSpec(spec CollectionSpec) error {
@@ -120,7 +136,36 @@ func SaveCollectionSpec(spec CollectionSpec) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(CollectionSpecPath(spec.Filename), data, 0666)
+	return writeFileAtomic(CollectionSpecPath(spec.Filename), data)
+}
+
+// writeFileAtomic replaces filename with data so that after a crash it holds
+// either the old or the new content, never a partial write.
+func writeFileAtomic(filename string, data []byte) error {
+	tmp := filename + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, filename); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return stores.SyncDir(filepath.Dir(filename))
 }
 
 func LoadCollectionSpec(filename string) (CollectionSpec, bool, error) {
@@ -156,6 +201,9 @@ func OpenCollectionSpec(spec CollectionSpec) (*Collection, error) {
 	if spec.Records.Engine == "" {
 		spec.Records.Engine = RecordsUltra
 	}
+	if err := ValidateDurability(spec.Durability); err != nil {
+		return nil, err
+	}
 
 	storeFactory, ok := storeFactories[spec.Store.Backend]
 	if !ok {
@@ -190,6 +238,7 @@ func OpenCollectionSpec(spec CollectionSpec) (*Collection, error) {
 
 	col := NewCollectionConfigured(spec.Name, store, recordsFactory(), recordsFactory)
 	col.SetFilepath(spec.Filename)
+	col.SetDurability(spec.Durability)
 
 	if err := col.Recover(); err != nil {
 		_ = store.Close()

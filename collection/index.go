@@ -3,6 +3,8 @@ package collection
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -67,8 +69,7 @@ func NewIndexMap(options *IndexMapOptions) *IndexMap {
 }
 
 func (i *IndexMap) Remove(id int64, data []byte) error {
-	field := i.Options.Field
-	val, dt, err := simdscan.GetField(data, field)
+	keys, _, err := i.keys(data)
 	if err != nil {
 		return nil
 	}
@@ -76,70 +77,92 @@ func (i *IndexMap) Remove(id int64, data []byte) error {
 	i.RWmutex.Lock()
 	defer i.RWmutex.Unlock()
 
-	switch dt {
-	case simdscan.TypeString:
-		delete(i.Entries, string(val))
-	case simdscan.TypeArray:
-		jsonparser.ArrayEach(data, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
-			if dataType == jsonparser.String {
-				delete(i.Entries, string(value))
-			}
-		}, field)
+	i.removeKeys(id, keys)
+	return nil
+}
+
+// keys returns the index keys of a document. indexed is false when the field
+// is missing.
+func (i *IndexMap) keys(data []byte) (keys []string, indexed bool, err error) {
+	field := i.Options.Field
+	val, dt, err := simdscan.GetField(data, field)
+	if err != nil {
+		return nil, false, nil
 	}
 
+	switch dt {
+	case simdscan.TypeString:
+		return []string{string(val)}, true, nil
+	case simdscan.TypeArray:
+		jsonparser.ArrayEach(data, func(value []byte, adt jsonparser.ValueType, offset int, err error) {
+			if adt == jsonparser.String {
+				keys = append(keys, string(value))
+			}
+		}, field)
+		return keys, true, nil
+	default:
+		return nil, true, fmt.Errorf("type not supported by IndexMap")
+	}
+}
+
+// removeKeys deletes the keys owned by id. Must be called with the lock held.
+func (i *IndexMap) removeKeys(id int64, keys []string) {
+	for _, k := range keys {
+		if entry, ok := i.Entries[k]; ok && entry.ID == id {
+			delete(i.Entries, k)
+		}
+	}
+}
+
+// conflict returns an error if any key is owned by a document other than id.
+// Must be called with the lock held.
+func (i *IndexMap) conflict(id int64, keys []string) error {
+	for _, k := range keys {
+		if entry, ok := i.Entries[k]; ok && entry.ID != id {
+			return fmt.Errorf("index conflict: field '%s' with value '%s'", i.Options.Field, k)
+		}
+	}
 	return nil
 }
 
 func (i *IndexMap) Add(id int64, data []byte) error {
-	field := i.Options.Field
-	val, dt, err := simdscan.GetField(data, field)
+	keys, indexed, err := i.keys(data)
 	if err != nil {
+		return err
+	}
+	if !indexed {
 		if i.Options.Sparse {
 			return nil
 		}
-		return fmt.Errorf("field `%s` is indexed and mandatory", field)
+		return fmt.Errorf("field `%s` is indexed and mandatory", i.Options.Field)
 	}
 
 	i.RWmutex.Lock()
 	defer i.RWmutex.Unlock()
 
-	switch dt {
-	case simdscan.TypeString:
-		k := string(val)
-		if _, exists := i.Entries[k]; exists {
-			return fmt.Errorf("index conflict: field '%s' with value '%s'", field, k)
-		}
+	if err := i.conflict(id, keys); err != nil {
+		return err
+	}
+	for _, k := range keys {
 		i.Entries[k] = &IndexMapEntry{ID: id}
-
-	case simdscan.TypeArray:
-		// First pass: check for conflicts
-		var conflict error
-		jsonparser.ArrayEach(data, func(value []byte, adt jsonparser.ValueType, offset int, err error) {
-			if conflict != nil {
-				return
-			}
-			if adt == jsonparser.String {
-				s := string(value)
-				if _, exists := i.Entries[s]; exists {
-					conflict = fmt.Errorf("index conflict: field '%s' with value '%s'", field, s)
-				}
-			}
-		}, field)
-		if conflict != nil {
-			return conflict
-		}
-		// Second pass: insert all
-		jsonparser.ArrayEach(data, func(value []byte, adt jsonparser.ValueType, offset int, err error) {
-			if adt == jsonparser.String {
-				i.Entries[string(value)] = &IndexMapEntry{ID: id}
-			}
-		}, field)
-
-	default:
-		return fmt.Errorf("type not supported by IndexMap")
 	}
 
 	return nil
+}
+
+// Release removes the keys of oldData owned by id that newData no longer uses.
+func (i *IndexMap) Release(id int64, oldData, newData []byte) {
+	oldKeys, _, _ := i.keys(oldData)
+	newKeys, _, _ := i.keys(newData)
+
+	i.RWmutex.Lock()
+	defer i.RWmutex.Unlock()
+
+	for _, k := range oldKeys {
+		if !slices.Contains(newKeys, k) {
+			i.removeKeys(id, []string{k})
+		}
+	}
 }
 
 type IndexMapTraverse struct {
@@ -301,7 +324,12 @@ func compareTupleValues(options *IndexBTreeOptions, a, b []interface{}) int {
 
 func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 	index := btree.NewG(32, func(a, b *RowOrdered) bool {
-		return compareTupleValues(options, a.Values, b.Values) < 0
+		cmp := compareTupleValues(options, a.Values, b.Values)
+		if cmp != 0 || options.Unique {
+			return cmp < 0
+		}
+		// Non-unique: documents sharing the same key are kept apart by id
+		return a.ID < b.ID
 	})
 
 	return &IndexBtree{
@@ -311,58 +339,84 @@ func NewIndexBTree(options *IndexBTreeOptions) *IndexBtree {
 	}
 }
 
-func (b *IndexBtree) Remove(id int64, data []byte) error {
-	values := make([]interface{}, 0, len(b.Options.Fields))
+// values extracts the indexed tuple. indexed is false when a field is missing.
+func (b *IndexBtree) values(data []byte) (values []interface{}, indexed bool, missing string) {
+	values = make([]interface{}, 0, len(b.Options.Fields))
 	for _, field := range b.Options.Fields {
 		cleanField := strings.TrimPrefix(field, "-")
 		val, dt, err := simdscan.GetField(data, cleanField)
 		if err != nil {
-			continue
+			return nil, false, cleanField
 		}
 		values = append(values, simdToInterface(val, dt))
 	}
+	return values, true, ""
+}
+
+// removeLocked deletes the entry of id. Must be called with the lock held.
+func (b *IndexBtree) removeLocked(id int64, values []interface{}) {
+	item := &RowOrdered{ID: id, Values: values}
+	if b.Options.Unique {
+		// Unique entries are keyed by value only: never remove another document's entry
+		if found, ok := b.Btree.Get(item); !ok || found.ID != id {
+			return
+		}
+	}
+	b.Btree.Delete(item)
+}
+
+func (b *IndexBtree) Remove(id int64, data []byte) error {
+	values, indexed, _ := b.values(data)
+	if !indexed {
+		return nil
+	}
 
 	b.RWmutex.Lock()
-	b.Btree.Delete(&RowOrdered{
-		ID:     id,
-		Values: values,
-	})
+	b.removeLocked(id, values)
 	b.RWmutex.Unlock()
 
 	return nil
 }
 
 func (b *IndexBtree) Add(id int64, data []byte) error {
-	var values []interface{}
-	for _, field := range b.Options.Fields {
-		cleanField := strings.TrimPrefix(field, "-")
-		val, dt, err := simdscan.GetField(data, cleanField)
-		if err != nil {
-			if b.Options.Sparse {
-				return nil
-			}
-			return fmt.Errorf("field '%s' not defined", cleanField)
+	values, indexed, missing := b.values(data)
+	if !indexed {
+		if b.Options.Sparse {
+			return nil
 		}
-		values = append(values, simdToInterface(val, dt))
+		return fmt.Errorf("field '%s' not defined", missing)
 	}
 
+	item := &RowOrdered{ID: id, Values: values}
+
+	b.RWmutex.Lock()
+	defer b.RWmutex.Unlock()
+
 	if b.Options.Unique {
-		b.RWmutex.RLock()
-		if b.Btree.Has(&RowOrdered{Values: values}) {
-			b.RWmutex.RUnlock()
+		if found, ok := b.Btree.Get(item); ok && found.ID != id {
 			return fmt.Errorf("key already exists for unique btree index")
 		}
-		b.RWmutex.RUnlock()
+	}
+	b.Btree.ReplaceOrInsert(item)
+
+	return nil
+}
+
+// Release removes the entry of oldData owned by id when newData uses a
+// different key.
+func (b *IndexBtree) Release(id int64, oldData, newData []byte) {
+	oldValues, oldIndexed, _ := b.values(oldData)
+	if !oldIndexed {
+		return
+	}
+	newValues, newIndexed, _ := b.values(newData)
+	if newIndexed && compareTupleValues(b.Options, oldValues, newValues) == 0 {
+		return
 	}
 
 	b.RWmutex.Lock()
-	b.Btree.ReplaceOrInsert(&RowOrdered{
-		ID:     id,
-		Values: values,
-	})
+	b.removeLocked(id, oldValues)
 	b.RWmutex.Unlock()
-
-	return nil
 }
 
 type IndexBtreeTraverse struct {
@@ -389,7 +443,11 @@ func (b *IndexBtree) buildBound(bound map[string]interface{}, lower bool) *RowOr
 		}
 	}
 
-	return &RowOrdered{Values: values}
+	id := int64(math.MinInt64)
+	if !lower {
+		id = math.MaxInt64
+	}
+	return &RowOrdered{ID: id, Values: values}
 }
 
 func (b *IndexBtree) Traverse(optionsData []byte, f func(id int64, data []byte) bool) {

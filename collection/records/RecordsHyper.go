@@ -36,15 +36,24 @@ func newRecordsHyperShard[T any](shardIndex int) *recordsHyperShard[T] {
 	}
 }
 
+// popFree returns a reusable local id, or 0 when there is none. Entries whose
+// slot became active again through set (WAL replay) are stale and skipped.
+func (s *recordsHyperShard[T]) popFree() int64 {
+	for n := len(s.freeList); n > 0; n = len(s.freeList) {
+		lid := s.freeList[n-1]
+		s.freeList = s.freeList[:n-1]
+		if !s.segments[lid>>recordsHyperSegmentShift][lid&recordsHyperSegmentMask].active {
+			return lid
+		}
+	}
+	return 0
+}
+
 func (s *recordsHyperShard[T]) insert(val T) int64 {
 	s.mutex.Lock()
 
-	var lid int64
-	var freeLen = len(s.freeList)
-	if freeLen > 0 {
-		lid = s.freeList[freeLen-1]
-		s.freeList = s.freeList[:freeLen-1]
-	} else {
+	lid := s.popFree()
+	if lid == 0 {
 		lid = s.localID
 		s.localID++
 
