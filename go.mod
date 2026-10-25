@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/SierraSoftworks/connor v1.0.2
-	github.com/buger/jsonparser v1.1.1
+	github.com/buger/jsonparser v1.1.2
 	github.com/fulldump/apitest v1.3.0
 	github.com/fulldump/biff v1.3.0
 	github.com/fulldump/box v0.7.0
