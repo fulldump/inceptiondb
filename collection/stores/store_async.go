@@ -50,9 +50,8 @@ func NewStoreAsync(store Store) *StoreAsync {
 		stop:   make(chan struct{}),
 		done:   make(chan struct{}),
 	}
-	for i := range s.shards {
-		s.shards[i].reqs = make([]asyncReq, 0, 8192)
-	}
+	// Shard queues start empty and keep the capacity they grow to (sweep
+	// reuses them), so idle collections do not hold 16 preallocated queues.
 	go s.worker()
 	return s
 }

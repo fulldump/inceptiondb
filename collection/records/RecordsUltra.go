@@ -13,6 +13,11 @@ const recordsUltraSegmentShift = 12
 const recordsUltraSegmentSize = 1 << recordsUltraSegmentShift // 4096
 const recordsUltraSegmentMask = recordsUltraSegmentSize - 1
 
+// recordsUltraSegmentMinSize is the first allocation of a segment. Segments
+// double up to recordsUltraSegmentSize as they fill, so empty and small
+// collections do not pay for 512 full segments upfront.
+const recordsUltraSegmentMinSize = 16
+
 type ultraSlot[T any] struct {
 	val    T
 	active bool
@@ -32,8 +37,44 @@ func newRecordsUltraShard[T any](shardIndex int) *recordsUltraShard[T] {
 	return &recordsUltraShard[T]{
 		shardIndex: shardIndex,
 		localID:    1, // start from 1 to guarantee id > 0
-		segments:   [][]ultraSlot[T]{make([]ultraSlot[T], recordsUltraSegmentSize)},
 	}
+}
+
+// slot returns the slot of lid, or nil if it was never allocated. Must be
+// called with the lock held.
+func (s *recordsUltraShard[T]) slot(lid int64) *ultraSlot[T] {
+	segIdx := lid >> recordsUltraSegmentShift
+	if segIdx >= int64(len(s.segments)) {
+		return nil
+	}
+	seg := s.segments[segIdx]
+	off := lid & recordsUltraSegmentMask
+	if off >= int64(len(seg)) {
+		return nil
+	}
+	return &seg[off]
+}
+
+// slotAlloc returns the slot of lid, growing the shard as needed. Must be
+// called with the write lock held.
+func (s *recordsUltraShard[T]) slotAlloc(lid int64) *ultraSlot[T] {
+	segIdx := lid >> recordsUltraSegmentShift
+	for segIdx >= int64(len(s.segments)) {
+		s.segments = append(s.segments, nil)
+	}
+	seg := s.segments[segIdx]
+	off := int(lid & recordsUltraSegmentMask)
+	if off >= len(seg) {
+		size := max(2*len(seg), recordsUltraSegmentMinSize)
+		for size <= off {
+			size *= 2
+		}
+		grown := make([]ultraSlot[T], min(size, recordsUltraSegmentSize))
+		copy(grown, seg)
+		s.segments[segIdx] = grown
+		seg = grown
+	}
+	return &seg[off]
 }
 
 // popFree returns a reusable local id, or 0 when there is none. Entries whose
@@ -42,7 +83,7 @@ func (s *recordsUltraShard[T]) popFree() int64 {
 	for n := len(s.freeList); n > 0; n = len(s.freeList) {
 		lid := s.freeList[n-1]
 		s.freeList = s.freeList[:n-1]
-		if !s.segments[lid>>recordsUltraSegmentShift][lid&recordsUltraSegmentMask].active {
+		if !s.slot(lid).active {
 			return lid
 		}
 	}
@@ -57,15 +98,9 @@ func (s *recordsUltraShard[T]) insert(val T) int64 {
 	if lid == 0 {
 		lid = s.localID
 		s.localID++
-
-		segIdx := lid >> recordsUltraSegmentShift
-		if segIdx >= int64(len(s.segments)) {
-			s.segments = append(s.segments, make([]ultraSlot[T], recordsUltraSegmentSize))
-		}
 	}
 
-	segIdx := lid >> recordsUltraSegmentShift
-	slot := &s.segments[segIdx][lid&recordsUltraSegmentMask]
+	slot := s.slotAlloc(lid)
 	slot.val = val
 	slot.active = true
 
@@ -76,12 +111,8 @@ func (s *recordsUltraShard[T]) get(lid int64) T {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	segIdx := lid >> recordsUltraSegmentShift
-	if segIdx < int64(len(s.segments)) {
-		slot := &s.segments[segIdx][lid&recordsUltraSegmentMask]
-		if slot.active {
-			return slot.val
-		}
+	if slot := s.slot(lid); slot != nil && slot.active {
+		return slot.val
 	}
 	var zero T
 	return zero
@@ -91,15 +122,11 @@ func (s *recordsUltraShard[T]) delete(lid int64) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	segIdx := lid >> recordsUltraSegmentShift
-	if segIdx < int64(len(s.segments)) {
-		slot := &s.segments[segIdx][lid&recordsUltraSegmentMask]
-		if slot.active {
-			slot.active = false
-			var zero T
-			slot.val = zero
-			s.freeList = append(s.freeList, lid)
-		}
+	if slot := s.slot(lid); slot != nil && slot.active {
+		slot.active = false
+		var zero T
+		slot.val = zero
+		s.freeList = append(s.freeList, lid)
 	}
 }
 
@@ -107,12 +134,7 @@ func (s *recordsUltraShard[T]) set(lid int64, val T) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	segIdx := lid >> recordsUltraSegmentShift
-	for segIdx >= int64(len(s.segments)) {
-		s.segments = append(s.segments, make([]ultraSlot[T], recordsUltraSegmentSize))
-	}
-
-	slot := &s.segments[segIdx][lid&recordsUltraSegmentMask]
+	slot := s.slotAlloc(lid)
 	slot.val = val
 	slot.active = true
 
@@ -141,16 +163,26 @@ func (s *recordsUltraShard[T]) traverse(f func(lid int64, val T) bool) bool {
 	for lid := int64(1); lid < maxLid; {
 		n := 0
 		s.mutex.RLock()
-		for ; lid < maxLid && n < len(batch); lid++ {
+		for lid < maxLid && n < len(batch) {
 			segIdx := lid >> recordsUltraSegmentShift
 			if segIdx >= int64(len(s.segments)) {
 				lid = maxLid
 				break
 			}
-			slot := &s.segments[segIdx][lid&recordsUltraSegmentMask]
-			if slot.active {
-				batch[n] = entry{lid: lid, val: slot.val}
-				n++
+			seg := s.segments[segIdx]
+			segStart := segIdx << recordsUltraSegmentShift
+			end := min(maxLid, segStart+int64(len(seg)))
+			for ; lid < end && n < len(batch); lid++ {
+				slot := &seg[lid-segStart]
+				if slot.active {
+					batch[n] = entry{lid: lid, val: slot.val}
+					n++
+				}
+			}
+			if lid >= segStart+int64(len(seg)) {
+				// rest of the segment is not allocated (it is still growing,
+				// or ids are sparse after a WAL replay): go to the next one
+				lid = max(lid, segStart+recordsUltraSegmentSize)
 			}
 		}
 		s.mutex.RUnlock()

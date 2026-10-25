@@ -39,7 +39,7 @@ type Store interface {
 
 type StoreDisk struct {
 	file   *os.File
-	writer *bufio.Writer
+	writer *bufio.Writer // created on the first write, guarded by mu
 	mu     sync.Mutex
 	closed atomic.Bool
 	failed error // sticky: set when a write or fsync fails, guarded by mu
@@ -50,9 +50,10 @@ func NewStoreDisk(path string) (*StoreDisk, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The 1MB write buffer is allocated on the first write: collections that
+	// are only read do not pay for it.
 	s := &StoreDisk{
-		file:   f,
-		writer: bufio.NewWriterSize(f, 1024*1024), // Buffer de 1MB para no castigar el disco
+		file: f,
 	}
 
 	return s, nil
@@ -84,6 +85,9 @@ func (s *StoreDisk) Append(op uint8, id int64, data []byte, sync bool) error {
 	s.mu.Lock()
 	err := s.failed
 	if err == nil {
+		if s.writer == nil {
+			s.writer = bufio.NewWriterSize(s.file, 1024*1024) // Buffer de 1MB para no castigar el disco
+		}
 		if _, err = s.writer.Write(buf); err != nil {
 			s.failed = err
 		} else if sync {
@@ -107,6 +111,9 @@ func (s *StoreDisk) Flush() error {
 	defer s.mu.Unlock()
 	if s.failed != nil {
 		return s.failed
+	}
+	if s.writer == nil {
+		return nil
 	}
 	if err := s.writer.Flush(); err != nil {
 		s.failed = err
@@ -132,9 +139,11 @@ func (s *StoreDisk) syncLocked() error {
 	if s.failed != nil {
 		return s.failed
 	}
-	if err := s.writer.Flush(); err != nil {
-		s.failed = err
-		return err
+	if s.writer != nil {
+		if err := s.writer.Flush(); err != nil {
+			s.failed = err
+			return err
+		}
 	}
 	if err := s.file.Sync(); err != nil {
 		s.failed = err

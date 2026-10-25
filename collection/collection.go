@@ -48,8 +48,7 @@ type Collection struct {
 	locks      [collectionLockStripes]stripeLock
 	closed     bool // guarded by every stripe: readable holding any, writable holding all
 	durability string
-	idxReqs    chan asyncIndexReq
-	idxDone    chan struct{}
+	idxQueue   *indexQueue
 }
 
 type asyncIndexReq struct {
@@ -81,8 +80,7 @@ func NewCollectionConfigured(name string, store stores.Store, rr records.Records
 		store:      store,
 		records:    rr,
 		newRecords: newRecords,
-		idxReqs:    make(chan asyncIndexReq, 1000000),
-		idxDone:    make(chan struct{}),
+		idxQueue:   newIndexQueue(),
 	}
 	emptyPath := ""
 	c.filepath.Store(&emptyPath)
@@ -95,37 +93,38 @@ func NewCollectionConfigured(name string, store stores.Store, rr records.Records
 }
 
 func (c *Collection) indexWorker() {
-	for req := range c.idxReqs {
-		if req.done != nil {
-			close(req.done)
-			continue
-		}
+	c.idxQueue.run(func(batch []asyncIndexReq) {
+		for _, req := range batch {
+			if req.done != nil {
+				close(req.done)
+				continue
+			}
 
-		indexes := *c.indexes.Load()
+			indexes := *c.indexes.Load()
 
-		switch req.op {
-		case stores.OpInsert:
-			for _, idx := range indexes {
-				if !idx.IsUnique() {
-					_ = idx.Add(req.id, req.data)
+			switch req.op {
+			case stores.OpInsert:
+				for _, idx := range indexes {
+					if !idx.IsUnique() {
+						_ = idx.Add(req.id, req.data)
+					}
 				}
-			}
-		case stores.OpDelete:
-			for _, idx := range indexes {
-				if !idx.IsUnique() {
-					_ = idx.Remove(req.id, req.oldData)
+			case stores.OpDelete:
+				for _, idx := range indexes {
+					if !idx.IsUnique() {
+						_ = idx.Remove(req.id, req.oldData)
+					}
 				}
-			}
-		case stores.OpUpdate:
-			for _, idx := range indexes {
-				if !idx.IsUnique() {
-					_ = idx.Remove(req.id, req.oldData)
-					_ = idx.Add(req.id, req.data)
+			case stores.OpUpdate:
+				for _, idx := range indexes {
+					if !idx.IsUnique() {
+						_ = idx.Remove(req.id, req.oldData)
+						_ = idx.Add(req.id, req.data)
+					}
 				}
 			}
 		}
-	}
-	close(c.idxDone)
+	})
 }
 
 func (c *Collection) SyncIndexes() {
@@ -136,7 +135,7 @@ func (c *Collection) SyncIndexes() {
 		return
 	}
 	done := make(chan struct{})
-	c.idxReqs <- asyncIndexReq{done: done}
+	c.idxQueue.push(asyncIndexReq{done: done})
 	mu.Unlock()
 	<-done
 }
@@ -183,12 +182,12 @@ func (c *Collection) Commit(wait bool) error {
 }
 
 func (c *Collection) asyncIndexOp(op uint8, id int64, data []byte, oldData []byte) {
-	c.idxReqs <- asyncIndexReq{
+	c.idxQueue.push(asyncIndexReq{
 		op:      op,
 		id:      id,
 		data:    data,
 		oldData: oldData,
-	}
+	})
 }
 
 func (c *Collection) SetFilepath(filepath string) {
@@ -212,9 +211,8 @@ func (c *Collection) Close() error {
 		return nil
 	}
 
-	if c.idxReqs != nil {
-		close(c.idxReqs)
-		<-c.idxDone
+	if c.idxQueue != nil {
+		c.idxQueue.close()
 	}
 	if c.store == nil {
 		return nil
@@ -512,7 +510,7 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 	// Writers are blocked; apply pending async index operations so none of
 	// them reaches the new index after the backfill.
 	done := make(chan struct{})
-	c.idxReqs <- asyncIndexReq{done: done}
+	c.idxQueue.push(asyncIndexReq{done: done})
 	<-done
 
 	newIdxMap := make(map[string]Index, len(idxMap)+1)
