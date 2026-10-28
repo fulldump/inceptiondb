@@ -13,6 +13,9 @@ import (
 // equalityFilter is a compiled filter of top-level fields compared by
 // equality with a string, number, boolean or null. It is evaluated on the raw
 // JSON without decoding the document.
+//
+// It matches like connor (the general matcher): a field that is an array
+// matches when any of its elements (at any depth) is equal to the value.
 type equalityFilter []equalityCond
 
 type equalityCond struct {
@@ -58,40 +61,68 @@ func (f equalityFilter) match(payload []byte) bool {
 			}
 			return false
 		}
-		if t != c.kind {
+		if !c.equal(val, t) {
 			return false
-		}
-
-		switch c.kind {
-		case simdscan.TypeString:
-			if bytes.IndexByte(val, '\\') < 0 {
-				if string(val) != c.str {
-					return false
-				}
-				continue
-			}
-			s, err := jsonparser.ParseString(val)
-			if err != nil || s != c.str {
-				return false
-			}
-		case simdscan.TypeNumber:
-			if c.intRaw != nil && isPlainInteger(val) {
-				if !bytes.Equal(val, c.intRaw) {
-					return false
-				}
-				continue
-			}
-			n, err := jsonparser.ParseFloat(val)
-			if err != nil || n != c.num {
-				return false
-			}
-		case simdscan.TypeBoolean:
-			if (val[0] == 't') != c.b {
-				return false
-			}
 		}
 	}
 	return true
+}
+
+// equal reports whether a JSON value (val of type t) is equal to the value of
+// the condition, or is an array with an element that is.
+func (c *equalityCond) equal(val []byte, t simdscan.Type) bool {
+	if t == simdscan.TypeArray {
+		return c.anyElement(val)
+	}
+	if t != c.kind {
+		return false
+	}
+
+	switch c.kind {
+	case simdscan.TypeString:
+		if bytes.IndexByte(val, '\\') < 0 {
+			return string(val) == c.str
+		}
+		s, err := jsonparser.ParseString(val)
+		return err == nil && s == c.str
+	case simdscan.TypeNumber:
+		if c.intRaw != nil && isPlainInteger(val) {
+			return bytes.Equal(val, c.intRaw)
+		}
+		n, err := jsonparser.ParseFloat(val)
+		return err == nil && n == c.num
+	case simdscan.TypeBoolean:
+		return (val[0] == 't') == c.b
+	}
+	return true // null
+}
+
+func (c *equalityCond) anyElement(array []byte) bool {
+	found := false
+	jsonparser.ArrayEach(array, func(value []byte, dataType jsonparser.ValueType, _ int, _ error) {
+		if !found {
+			found = c.equal(value, simdscanType(dataType))
+		}
+	})
+	return found
+}
+
+func simdscanType(t jsonparser.ValueType) simdscan.Type {
+	switch t {
+	case jsonparser.String:
+		return simdscan.TypeString
+	case jsonparser.Number:
+		return simdscan.TypeNumber
+	case jsonparser.Boolean:
+		return simdscan.TypeBoolean
+	case jsonparser.Null:
+		return simdscan.TypeNull
+	case jsonparser.Array:
+		return simdscan.TypeArray
+	case jsonparser.Object:
+		return simdscan.TypeObject
+	}
+	return simdscan.TypeNotExist
 }
 
 // isPlainInteger reports whether a JSON number literal has no fraction or
