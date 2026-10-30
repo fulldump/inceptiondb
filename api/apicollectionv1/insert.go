@@ -29,7 +29,7 @@ func insert(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
 	collection, err := s.GetCollection(collectionName)
-	if err == service.ErrorCollectionNotFound {
+	if errors.Is(err, service.ErrorCollectionNotFound) {
 		collection, err = s.CreateCollection(collectionName)
 		if err != nil {
 			return err // todo: handle/wrap this properly

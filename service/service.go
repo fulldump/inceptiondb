@@ -55,8 +55,21 @@ func (s *Service) ListCollections() map[string]*collection.Collection {
 }
 
 func (s *Service) DeleteCollection(name string) error {
+	if _, exists := s.db.GetCollection(name); !exists {
+		return collectionNotFound{name}
+	}
 	return s.db.DropCollection(name)
 }
+
+// collectionNotFound keeps the message that names the collection and matches
+// ErrorCollectionNotFound with errors.Is.
+type collectionNotFound struct{ name string }
+
+func (e collectionNotFound) Error() string {
+	return fmt.Sprintf("collection '%s' not found", e.name)
+}
+
+func (e collectionNotFound) Unwrap() error { return ErrorCollectionNotFound }
 
 var ErrorInsertBadJson = errors.New("insert bad json")
 var ErrorInsertConflict = errors.New("insert conflict")

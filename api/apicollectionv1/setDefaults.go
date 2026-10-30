@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -17,7 +18,7 @@ func setDefaults(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
 	col, err := s.GetCollection(collectionName)
-	if err == service.ErrorCollectionNotFound {
+	if errors.Is(err, service.ErrorCollectionNotFound) {
 		col, err = s.CreateCollection(collectionName)
 		if err != nil {
 			return err // todo: handle/wrap this properly

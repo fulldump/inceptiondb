@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -103,7 +104,7 @@ func traverse(requestBody []byte, col *collection.Collection, f func(id int64, p
 	indexes := col.ListIndexes()
 	index, exists := indexes[*options.Index]
 	if !exists {
-		return fmt.Errorf("index '%s' not found, available indexes %v", *options.Index, utils.GetKeys(indexes))
+		return &unknownIndexError{fmt.Sprintf("index '%s' not found, available indexes %v", *options.Index, utils.GetKeys(indexes))}
 	}
 
 	_ = index
@@ -117,3 +118,13 @@ func traverseFullscan(col *collection.Collection, f func(id int64, payload []byt
 
 	return nil
 }
+
+// ErrUnknownIndex is the error of a query that names an index that does not
+// exist: a mistake of the request, so 400 and not 404.
+var ErrUnknownIndex = errors.New("unknown index")
+
+type unknownIndexError struct{ message string }
+
+func (e *unknownIndexError) Error() string { return e.message }
+
+func (e *unknownIndexError) Unwrap() error { return ErrUnknownIndex }

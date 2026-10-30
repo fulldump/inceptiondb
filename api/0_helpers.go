@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/fulldump/box"
 
 	"github.com/fulldump/inceptiondb/database"
+	"github.com/fulldump/inceptiondb/service"
 )
 
 func getBoxContext(ctx context.Context) *box.C {
@@ -78,6 +81,18 @@ func PrettyErrorInterceptor(next box.H) box.H {
 			return
 		}
 		w := box.GetResponse(ctx)
+		w.Header().Set("Content-Type", "application/json")
+
+		if errors.Is(err, service.ErrorCollectionNotFound) {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message":     err.Error(),
+					"description": "The collection does not exist.",
+				},
+			})
+			return
+		}
 
 		if err == box.ErrResourceNotFound {
 			w.WriteHeader(http.StatusNotFound)
@@ -101,7 +116,7 @@ func PrettyErrorInterceptor(next box.H) box.H {
 			return
 		}
 
-		if _, ok := err.(*json.SyntaxError); ok {
+		if isMalformedJSON(err) {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error": map[string]interface{}{
@@ -121,4 +136,12 @@ func PrettyErrorInterceptor(next box.H) box.H {
 		})
 
 	}
+}
+
+func isMalformedJSON(err error) bool {
+	var syntaxError *json.SyntaxError
+	var typeError *json.UnmarshalTypeError
+	return errors.As(err, &syntaxError) ||
+		errors.As(err, &typeError) ||
+		errors.Is(err, io.ErrUnexpectedEOF)
 }

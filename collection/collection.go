@@ -44,6 +44,35 @@ var ErrCollectionClosed = errors.New("collection closed")
 // ErrDocumentNotObject rejects a document that is not a JSON object.
 var ErrDocumentNotObject = errors.New("document must be a JSON object")
 
+// Errors of the indexes, to check with errors.Is. Their messages say more.
+var (
+	ErrIndexAlreadyExists = errors.New("index already exists")
+	ErrIndexNotFound      = errors.New("index not found")
+	ErrIndexType          = errors.New("unknown index type")
+	ErrIndexData          = errors.New("existing data does not meet the index")
+)
+
+// kindError has its own message and matches its kind and its cause with
+// errors.Is.
+type kindError struct {
+	kind    error
+	cause   error
+	message string
+}
+
+func (e *kindError) Error() string { return e.message }
+
+func (e *kindError) Unwrap() []error {
+	if e.cause == nil {
+		return []error{e.kind}
+	}
+	return []error{e.kind, e.cause}
+}
+
+func newKindError(kind, cause error, format string, a ...any) error {
+	return &kindError{kind: kind, cause: cause, message: fmt.Sprintf(format, a...)}
+}
+
 type Collection struct {
 	name       string
 	filepath   atomic.Pointer[string]
@@ -515,7 +544,7 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 
 	idxMap := *c.indexes.Load()
 	if _, exists := idxMap[name]; exists {
-		return fmt.Errorf("index '%s' already exists", name)
+		return newKindError(ErrIndexAlreadyExists, nil, "index '%s' already exists", name)
 	}
 
 	var index Index
@@ -535,7 +564,7 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 		typeStr = "pk"
 		index = NewIndexPK(value)
 	default:
-		return fmt.Errorf("unexpected options parameters, it should be [*IndexMapOptions|*IndexBTreeOptions|*IndexFTSOptions|*IndexPKOptions]")
+		return newKindError(ErrIndexType, nil, "unexpected options parameters, it should be [*IndexMapOptions|*IndexBTreeOptions|*IndexFTSOptions|*IndexPKOptions]")
 	}
 
 	// Writers are blocked; apply pending async index operations so none of
@@ -562,7 +591,7 @@ func (c *Collection) CreateIndex(name string, options interface{}) error {
 			// En caso de error, podríamos hacer rollback borbrando el index de c.indexes.
 			// Pero por ahora, devolvemos el error y lo removemos.
 			c.indexes.Store(&idxMap)
-			return fmt.Errorf("error indexing existing data: %w", err)
+			return newKindError(ErrIndexData, err, "error indexing existing data: %s", err)
 		}
 	}
 
@@ -598,7 +627,7 @@ func (c *Collection) DropIndex(name string) error {
 
 	idxMap := *c.indexes.Load()
 	if _, exists := idxMap[name]; !exists {
-		return fmt.Errorf("dropIndex: index '%s' not found", name)
+		return newKindError(ErrIndexNotFound, nil, "dropIndex: index '%s' not found", name)
 	}
 
 	newIdxMap := make(map[string]Index, len(idxMap))
@@ -623,7 +652,7 @@ func (c *Collection) TraverseIndex(name string, options []byte, f func(id int64,
 	idxMap := *c.indexes.Load()
 	index, exists := idxMap[name]
 	if !exists {
-		return fmt.Errorf("index '%s' not found", name)
+		return newKindError(ErrIndexNotFound, nil, "index '%s' not found", name)
 	}
 
 	index.Traverse(options, func(id int64, data []byte) bool {

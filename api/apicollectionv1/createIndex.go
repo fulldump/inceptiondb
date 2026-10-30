@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,13 +36,14 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 	}
 	err = json.Unmarshal(requestBody, &input)
 	if err != nil {
+		box.GetResponse(ctx).WriteHeader(http.StatusBadRequest)
 		return nil, err
 	}
 
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
 	col, err := s.GetCollection(collectionName)
-	if err == service.ErrorCollectionNotFound {
+	if errors.Is(err, service.ErrorCollectionNotFound) {
 		col, err = s.CreateCollection(collectionName)
 		if err != nil {
 			return nil, err // todo: handle/wrap this properly
@@ -67,16 +69,25 @@ func createIndex(ctx context.Context, r *http.Request) (*listIndexesItem, error)
 	case "pk":
 		options = &collection.IndexPKOptions{}
 	default:
+		box.GetResponse(ctx).WriteHeader(http.StatusBadRequest)
 		return nil, fmt.Errorf("unexpected type '%s' instead of [map|btree|fts|pk]", input.Type)
 	}
 
 	err = json.Unmarshal(requestBody, &options)
 	if err != nil {
+		box.GetResponse(ctx).WriteHeader(http.StatusBadRequest)
 		return nil, err
 	}
 
 	err = col.Index(input.Name, options)
-	if err != nil {
+	switch {
+	case errors.Is(err, collection.ErrIndexAlreadyExists):
+		box.GetResponse(ctx).WriteHeader(http.StatusConflict)
+		return nil, err
+	case errors.Is(err, collection.ErrIndexData):
+		box.GetResponse(ctx).WriteHeader(http.StatusUnprocessableEntity)
+		return nil, err
+	case err != nil:
 		return nil, err
 	}
 
