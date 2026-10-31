@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -19,7 +20,7 @@ func dropIndex(ctx context.Context, w http.ResponseWriter, input *dropIndexReque
 	s := GetServicer(ctx)
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
 	col, err := s.GetCollection(collectionName)
-	if err == service.ErrorCollectionNotFound {
+	if errors.Is(err, service.ErrorCollectionNotFound) {
 		col, err = s.CreateCollection(collectionName)
 		if err != nil {
 			return err // todo: handle/wrap this properly
@@ -36,7 +37,7 @@ func dropIndex(ctx context.Context, w http.ResponseWriter, input *dropIndexReque
 	indexes := col.ListIndexes()
 	_, exists := indexes[input.Name]
 	if !exists {
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusNotFound)
 		return fmt.Errorf("index '%s' not found", input.Name)
 	}
 

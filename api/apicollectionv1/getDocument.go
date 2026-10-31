@@ -3,6 +3,7 @@ package apicollectionv1
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -40,7 +41,7 @@ func getDocument(ctx context.Context) (*documentLookupResponse, error) {
 
 	col, err := s.GetCollection(collectionName)
 	if err != nil {
-		if err == service.ErrorCollectionNotFound {
+		if errors.Is(err, service.ErrorCollectionNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 		return nil, err

@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/fulldump/box"
@@ -16,7 +17,7 @@ func getCollection(ctx context.Context) (*CollectionResponse, error) {
 	collectionName := box.GetUrlParameter(ctx, "collectionName")
 
 	collection, err := s.GetCollection(collectionName)
-	if err == service.ErrorCollectionNotFound {
+	if errors.Is(err, service.ErrorCollectionNotFound) {
 		box.GetResponse(ctx).WriteHeader(http.StatusNotFound)
 		// todo: wrap error
 		return nil, err

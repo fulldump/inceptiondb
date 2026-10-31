@@ -379,6 +379,24 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 			biff.AssertEqual(resp.StatusCode, http.StatusCreated)
 			biff.AssertEqualJson(resp.BodyJson(), expectedBody)
 
+			a.Alternative("Create index - already exists", func(a *biff.A) {
+				resp := apiRequest("POST", "/collections/my-collection:createIndex").
+					WithBodyJson(JSON{"name": "my-index", "type": "map", "field": "name"}).Do()
+
+				errorMessage := resp.BodyJson().(JSON)["error"].(JSON)["message"].(string)
+				biff.AssertEqual(errorMessage, "index 'my-index' already exists")
+				biff.AssertEqual(resp.StatusCode, http.StatusConflict)
+			})
+
+			a.Alternative("Drop index - not found", func(a *biff.A) {
+				resp := apiRequest("POST", "/collections/my-collection:dropIndex").
+					WithBodyJson(JSON{"name": "invented"}).Do()
+
+				errorMessage := resp.BodyJson().(JSON)["error"].(JSON)["message"].(string)
+				biff.AssertEqual(errorMessage, "index 'invented' not found")
+				biff.AssertEqual(resp.StatusCode, http.StatusNotFound)
+			})
+
 			a.Alternative("Drop index", func(a *biff.A) {
 
 				resp := apiRequest("POST", "/collections/my-collection:dropIndex").
@@ -490,7 +508,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 				}
 
 				biff.AssertEqualJson(resp.BodyJson(), expectedBody)
-				biff.AssertEqual(resp.StatusCode, 500) // todo: should be 400
+				biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
 			})
 
 		})
@@ -734,6 +752,43 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 		})
 
+		a.Alternative("Create collection - already exists", func(a *biff.A) {
+			resp := apiRequest("POST", "/collections").
+				WithBodyJson(JSON{"name": "my-collection"}).Do()
+
+			biff.AssertEqual(resp.StatusCode, http.StatusConflict)
+		})
+
+		a.Alternative("Create index - unknown type", func(a *biff.A) {
+			resp := apiRequest("POST", "/collections/my-collection:createIndex").
+				WithBodyJson(JSON{"name": "my-index", "type": "zzz", "field": "id"}).Do()
+
+			errorMessage := resp.BodyJson().(JSON)["error"].(JSON)["message"].(string)
+			biff.AssertEqual(errorMessage, "unexpected type 'zzz' instead of [map|btree|fts|pk]")
+			biff.AssertEqual(resp.StatusCode, http.StatusBadRequest)
+		})
+
+		a.Alternative("Create index - existing data without the field", func(a *biff.A) {
+			apiRequest("POST", "/collections/my-collection:insert").
+				WithBodyJson(JSON{"id": "1", "name": "no email"}).Do()
+
+			resp := apiRequest("POST", "/collections/my-collection:createIndex").
+				WithBodyJson(JSON{"name": "by-email", "type": "map", "field": "email"}).Do()
+
+			errorMessage := resp.BodyJson().(JSON)["error"].(JSON)["message"].(string)
+			biff.AssertEqual(errorMessage, "error indexing existing data: field `email` is indexed and mandatory")
+			biff.AssertEqual(resp.StatusCode, http.StatusUnprocessableEntity)
+
+			resp = apiRequest("POST", "/collections/my-collection:listIndexes").Do()
+			biff.AssertEqualJson(resp.BodyJson(), []JSON{})
+		})
+
+		a.Alternative("Drop collection - not found", func(a *biff.A) {
+			resp := apiRequest("POST", "/collections/your-collection:dropCollection").Do()
+
+			biff.AssertEqual(resp.StatusCode, http.StatusNotFound)
+		})
+
 		a.Alternative("Find with collection not found", func(a *biff.A) {
 
 			resp := apiRequest("POST", "/collections/your-collection:find").
@@ -743,7 +798,7 @@ func Acceptance(a *biff.A, apiRequest func(method, path string) *apitest.Request
 
 			errorMessage := resp.BodyJson().(JSON)["error"].(JSON)["message"].(string)
 			biff.AssertEqual(errorMessage, "collection not found")
-			biff.AssertEqual(resp.StatusCode, http.StatusInternalServerError) // todo: it should return 404
+			biff.AssertEqual(resp.StatusCode, http.StatusNotFound)
 		})
 
 		a.Alternative("Set defaults", func(a *biff.A) {
@@ -1075,7 +1130,7 @@ writes are acknowledged once applied in memory and queued for the journal.
 				"field": "id",
 			}).Do()
 
-		biff.AssertEqual(resp.StatusCode, http.StatusInternalServerError)
+		biff.AssertEqual(resp.StatusCode, http.StatusBadRequest) // "type" is missing
 	})
 
 }

@@ -2,6 +2,7 @@ package apicollectionv1
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/fulldump/inceptiondb/collection"
@@ -38,7 +39,7 @@ func createCollection(ctx context.Context, w http.ResponseWriter, input *createC
 		Records:    input.Records,
 	}
 	col, err := s.CreateCollectionSpec(input.Name, spec)
-	if err == service.ErrorCollectionAlreadyExists {
+	if errors.Is(err, service.ErrorCollectionAlreadyExists) {
 		w.WriteHeader(http.StatusConflict)
 		return nil, err // todo: return custom error, with detailed description
 	}
